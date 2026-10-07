@@ -1,7 +1,0 @@
-16:43:49 **** Incremental Build of configuration Debug for project BWM427_Inclinometer ****
-make -j12 all 
-arm-none-eabi-size   BWM427_Inclinometer.elf 
-   text	   data	    bss	    dec	    hex	filename
-  67788	    556	   6596	  74940	  124bc	BWM427_Inclinometer.elf
-Finished building: default.size.stdout
- 

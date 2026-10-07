@@ -1,7 +1,0 @@
-1774029530079	Delete resource 'BWM427_Inclinometer/Core/Src/usb_device.c'
-1774029531168	Delete resource 'BWM427_Inclinometer/Core/Src/usb_device.h'
-1774029532001	Delete resource 'BWM427_Inclinometer/Core/Src/usbd_cdc_if.h'
-1774029532740	Delete resource 'BWM427_Inclinometer/Core/Src/usbd_cdc_if.c'
-1774030728149	Delete resource 'BWM427_Inclinometer/Drivers/CMSIS/Device/ST/STM32F4xx/Source/Templates/system_stm32f4xx.c'
-1774087234099	Delete resource 'BWM427_Inclinometer/Drivers/CMSIS/Device/ST/STM32F4xx/Source/Templates/system_stm32f4xx.c'
-1774108624568	Delete resource 'BWM427_Inclinometer/Drivers/CMSIS/Device/ST/STM32F4xx/Source/Templates/system_stm32f4xx.c'

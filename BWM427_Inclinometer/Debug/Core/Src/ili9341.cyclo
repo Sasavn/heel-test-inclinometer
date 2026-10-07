@@ -1,9 +1,0 @@
-ili9341.c:11:13:ILI9341_SendCommand	1
-ili9341.c:19:13:ILI9341_SendData	1
-ili9341.c:27:6:ILI9341_Init	1
-ili9341.c:61:6:ILI9341_SetRotation	2
-ili9341.c:71:13:ILI9341_SetAddressWindow	1
-ili9341.c:89:6:ILI9341_DrawPixel	1
-ili9341.c:99:6:ILI9341_FillScreen	3
-ili9341.c:123:6:ILI9341_WriteChar	6
-ili9341.c:163:6:ILI9341_WriteString	2

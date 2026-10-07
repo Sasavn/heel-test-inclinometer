@@ -1,2 +1,14 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Пакетные файлы Windows — всегда с CRLF (cmd.exe ошибается в переходах по
+# меткам в файлах с LF), shell-скрипты — всегда с LF (иначе sh спотыкается о \r
+# при core.autocrlf=true)
+*.cmd text eol=crlf
+*.bat text eol=crlf
+*.sh  text eol=lf
+
+# Двоичные файлы
+*.png binary
+*.ttf binary
+*.pdf binary
