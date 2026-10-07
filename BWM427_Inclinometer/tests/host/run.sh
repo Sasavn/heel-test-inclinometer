@@ -16,7 +16,13 @@ mkdir -p "$OUT"
 	-lm -o "$OUT/host_tests.exe"
 "$OUT/host_tests.exe"
 # Команды USB для программы на ПК (usb_cli_ext.c): своя имитация FatFs с чтением
-"$CC" -std=gnu11 -O1 -g -Wall -Wextra -Wno-unused-parameter 	-D__USE_MINGW_ANSI_STDIO=1 	-include tests/host/stub/ff_integer_host.h 	-Itests/host/stub -Itests/host -ICore/Inc -IFATFS/Target 	-IMiddlewares/Third_Party/FatFs/src 	tests/host/test_cli_ext.c Core/Src/usb_cli_ext.c 	-o "$OUT/cli_ext_tests.exe"
+"$CC" -std=gnu11 -O1 -g -Wall -Wextra -Wno-unused-parameter \
+	-D__USE_MINGW_ANSI_STDIO=1 \
+	-include tests/host/stub/ff_integer_host.h \
+	-Itests/host/stub -Itests/host -ICore/Inc -IFATFS/Target \
+	-IMiddlewares/Third_Party/FatFs/src \
+	tests/host/test_cli_ext.c Core/Src/usb_cli_ext.c \
+	-o "$OUT/cli_ext_tests.exe"
 "$OUT/cli_ext_tests.exe"
 
 # Все символы строк интерфейса есть в шрифтах (иначе — пустые прямоугольники)

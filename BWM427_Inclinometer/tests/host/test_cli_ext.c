@@ -1047,6 +1047,18 @@ static void test_get(void) {
 	CHECK(r.e_crc == usb_cli_ext_crc32(0, data, size));
 	free(r.data);
 
+	// Хост закрыл / открыл порт посреди передачи — прервана молча, файл закрыт
+	tx_reset();
+	CHECK(run("get 2026-10-07_M007_D2.CSV"));
+	pump(2, 1);
+	uint32_t cap1 = s_cap_len;
+	usb_cli_ext_abort();
+	CHECK(s_open_files == 0 && s_cap_len == cap1);
+	pump(3, 1);
+	CHECK(s_cap_len == cap1); // больше ничего не выдаётся
+	usb_cli_ext_abort();      // повторно — без последствий
+	CHECK(s_open_files == 0);
+
 	// Новая команда files отменяет передачу (файл закрыт)
 	tx_reset();
 	CHECK(run("get 2026-10-07_M007_D2.CSV"));

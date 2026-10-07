@@ -1,0 +1,75 @@
+{
+    "version": 6,
+    "configurePresets": [
+        {
+            "name": "default",
+            "displayName": "Windows 7+ (тулсет v143, статический один .exe) — из VsDevCmd -vcvars_ver=14.44, см. build-win7.cmd",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build-win7",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+                "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}/triplets",
+                "VCPKG_TARGET_TRIPLET": "x64-windows-static-v143",
+                "KRENOMER_WIN7": "ON"
+            },
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Windows"
+            }
+        },
+        {
+            "name": "win7-x86",
+            "displayName": "Windows 7+ 32-битная (тулсет v143, x86) — из VsDevCmd -arch=x86 -vcvars_ver=14.44, см. build-win7.cmd x86",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build-win7-x86",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+                "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}/triplets",
+                "VCPKG_TARGET_TRIPLET": "x86-windows-static-v143",
+                "KRENOMER_WIN7": "ON"
+            },
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Windows"
+            }
+        },
+        {
+            "name": "win10",
+            "displayName": "Только Windows 10+ (любой тулсет, без проверки Windows 7)",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+                "VCPKG_TARGET_TRIPLET": "x64-windows-static",
+                "KRENOMER_WIN7": "OFF"
+            },
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Windows"
+            }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "default",
+            "configurePreset": "default",
+            "configuration": "Release"
+        },
+        {
+            "name": "win7-x86",
+            "configurePreset": "win7-x86",
+            "configuration": "Release"
+        },
+        {
+            "name": "win10",
+            "configurePreset": "win10",
+            "configuration": "Release"
+        }
+    ]
+}

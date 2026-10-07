@@ -1,0 +1,37 @@
+{
+    "name": "krenomer",
+    "version-string": "1.0.0",
+    "builtin-baseline": "e9fb26e469f324790a6ffb1fc70793b05e834556",
+    "dependencies": [
+        {
+            "name": "cserialport",
+            "version>=": "4.3.3"
+        },
+        {
+            "name": "freetype",
+            "version>=": "2.13.3"
+        },
+        {
+            "name": "imgui",
+            "version>=": "1.91.7",
+            "features": [
+                "freetype",
+                "glfw-binding",
+                "opengl2-binding",
+                "opengl3-binding"
+            ]
+        },
+        {
+            "name": "implot",
+            "version>=": "0.16"
+        },
+        {
+            "name": "glfw3",
+            "version>=": "3.4#1"
+        },
+        {
+            "name": "opengl",
+            "version>=": "2022-12-04#3"
+        }
+    ]
+}

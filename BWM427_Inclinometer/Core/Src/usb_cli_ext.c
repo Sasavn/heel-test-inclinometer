@@ -692,6 +692,10 @@ static void xf_get_step(uint32_t now) {
 	}
 }
 
+void usb_cli_ext_abort(void) {
+	xf_close();
+}
+
 void usb_cli_ext_task(uint32_t now) {
 	if (s_xf_mode == XF_IDLE) {
 		return;

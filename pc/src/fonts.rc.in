@@ -1,0 +1,5 @@
+#pragma code_page(65001)
+// Шрифты интерфейса — RCDATA (номера — ui/Fonts.hpp). Пути подставляет CMake (configure_file).
+101 RCDATA "@KRENOMER_FONT_REGULAR@"
+102 RCDATA "@KRENOMER_FONT_BOLD@"
+103 RCDATA "@KRENOMER_FONT_MONO@"
