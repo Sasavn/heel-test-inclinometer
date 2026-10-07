@@ -117,7 +117,10 @@ static bool same(const settings_t *a, const settings_t *b) {
 	return a->log_freq_hz == b->log_freq_hz && a->bus_gap_ms == b->bus_gap_ms
 			&& a->theme == b->theme
 			&& memcmp(&a->ema_alpha, &b->ema_alpha, sizeof(a->ema_alpha)) == 0
-			&& memcmp(&a->bat_alarm_v, &b->bat_alarm_v, sizeof(a->bat_alarm_v)) == 0;
+			&& memcmp(&a->bat_alarm_v, &b->bat_alarm_v, sizeof(a->bat_alarm_v)) == 0
+			&& a->roll_window_s == b->roll_window_s && a->roll_rate_hz == b->roll_rate_hz
+			&& a->roll_calm_cdeg == b->roll_calm_cdeg
+			&& a->roll_hyst_cdeg == b->roll_hyst_cdeg;
 }
 
 bool settings_load(settings_t *out) {
@@ -149,6 +152,10 @@ bool settings_load(settings_t *out) {
 	s_last.bus_gap_ms = best.bus_gap_ms;
 	s_last.theme = best.theme;
 	s_last.bat_alarm_v = best.bat_alarm_v; // старая запись: 0xFFFFFFFF = NaN
+	s_last.roll_window_s = best.roll_window_s;   // старая запись: 0xFF...
+	s_last.roll_rate_hz = best.roll_rate_hz;
+	s_last.roll_calm_cdeg = best.roll_calm_cdeg;
+	s_last.roll_hyst_cdeg = best.roll_hyst_cdeg;
 	s_have_last = true;
 	s_info.loaded = true;
 	s_info.seq = best.seq;
@@ -170,6 +177,10 @@ bool settings_store(const settings_t *s) {
 	r.theme = s->theme;
 	r.ema_alpha = s->ema_alpha;
 	r.bat_alarm_v = s->bat_alarm_v;
+	r.roll_window_s = s->roll_window_s;
+	r.roll_rate_hz = s->roll_rate_hz;
+	r.roll_calm_cdeg = s->roll_calm_cdeg;
+	r.roll_hyst_cdeg = s->roll_hyst_cdeg;
 	r.crc = settings_crc32(&r, REC_CRC_LEN);
 	uint32_t words[SETTINGS_REC_WORDS];
 	memcpy(words, &r, sizeof(words));

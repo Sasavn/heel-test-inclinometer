@@ -1,5 +1,6 @@
 /*
- * ui_internal.h — общее для файлов интерфейса (ui.c, ui_main.c, ui_settings.c).
+ * ui_internal.h — общее для файлов интерфейса (ui.c, ui_main.c, ui_settings.c,
+ * ui_sd.c, ui_help.c).
  */
 #ifndef UI_INTERNAL_H_
 #define UI_INTERNAL_H_
@@ -26,6 +27,17 @@
 
 // Сколько мс после битого ответа датчика показывать «дубль адреса?»
 #define UI_GARBLED_HINT_MS  3000
+
+// Вид меню «Настройки» (ui_settings.c), выбирается здесь одной правкой:
+//   UI_MENU_LIST  — один прокручиваемый список всех пунктов;
+//   UI_MENU_TILES — плитки разделов (Датчики, Качка, Питание, SD-карта,
+//                   Прибор, Назад) -> короткие подменю без прокрутки.
+// Экраны даты и времени, адреса датчика, карты памяти и справки — общие.
+#define UI_MENU_LIST        1
+#define UI_MENU_TILES       2
+#ifndef UI_MENU_STYLE
+#define UI_MENU_STYLE       UI_MENU_LIST
+#endif
 
 // --- Общая геометрия ---
 #define UI_BAR_H            28      // заголовок экранов меню
@@ -69,7 +81,7 @@ typedef enum {
 // --- Шрифты (Core/Src/ui/fonts, генерация: tools/ui_sim/fonts/gen_fonts.py) ---
 #define UI_FONT_SMALL       (&ui_font_14)
 #define UI_FONT_MID         (&ui_font_20)
-#define UI_FONT_NUM         (&ui_font_num)   // Bold 36, только цифры и знаки
+#define UI_FONT_NUM         (&ui_font_num)   // Bold 30, только цифры и знаки
 
 // --- Символы (UTF-8) ---
 #define UI_MINUS            "\xE2\x88\x92"   // U+2212 «минус» (той же ширины, что '+')
@@ -79,6 +91,7 @@ typedef enum {
 #define UI_ELLIPSIS         "\xE2\x80\xA6"   // U+2026 «…»
 #define UI_ARROW            "\xE2\x86\x92"   // U+2192 «→»
 #define UI_DEG              "\xC2\xB0"       // U+00B0 «°»
+#define UI_MIDDOT           "\xC2\xB7"       // U+00B7 «·»
 
 // --- Общие объекты ---
 extern lv_indev_t *ui_indev;
@@ -90,6 +103,11 @@ void ui_theme_sync(void);
 
 // --- Помощники (ui.c) ---
 lv_obj_t* ui_screen_create(void);
+// Временный экран: удаляется (вместе с группой g) при уходе с него. Модуль
+// обнуляет свои указатели в обработчике LV_EVENT_DELETE экрана
+lv_obj_t* ui_screen_create_temp(lv_group_t *g);
+// Экран создан и с него ещё не ушли (временный после ухода удаляется не сразу)
+bool ui_screen_alive(const lv_obj_t *scr);
 // Залитый прямоугольник (полосы, разделители, точки)
 lv_obj_t* ui_box_create(lv_obj_t *parent, int32_t x, int32_t y, int32_t w, int32_t h,
 		ui_col_t color);
@@ -105,6 +123,11 @@ lv_obj_t* ui_button_create(lv_obj_t *parent, lv_group_t *g, int32_t x, int32_t y
 lv_obj_t* ui_bar_create(lv_obj_t *scr, int32_t h);
 // Заголовок экрана (полоса сверху): значок и текст
 lv_obj_t* ui_title_create(lv_obj_t *scr, const char *icon, const char *text);
+// Кнопка действия: текст шрифтом 20 по центру, короткое нажатие -> cb
+lv_obj_t* ui_action_button_create(lv_obj_t *parent, lv_group_t *g, int32_t x, int32_t y,
+		int32_t w, int32_t h, const char *text, lv_event_cb_t cb);
+// Прокручиваемая по вертикали область с полосой прокрутки справа (без фона)
+lv_obj_t* ui_scroll_create(lv_obj_t *parent, int32_t x, int32_t y, int32_t w, int32_t h);
 // Поле, редактируемое энкодером: короткое нажатие — вход/выход из
 // редактирования, вращение в режиме редактирования вызывает cb(шаг ±1)
 typedef void (*ui_step_cb_t)(int32_t step);
@@ -124,6 +147,8 @@ int32_t ui_text_width(const char *text, const lv_font_t *font);
 
 // Перейти на экран scr, энкодер — в группу g (фокус на первом элементе)
 void ui_show(lv_obj_t *scr, lv_group_t *g);
+// ... фокус — где был (возврат на экран, с которого ушли)
+void ui_show_back(lv_obj_t *scr, lv_group_t *g);
 
 // Форматирование без printf с плавающей точкой
 void ui_fmt_angle(char *buf, size_t n, float deg);          // "+1.23°", "−0.05°"
@@ -136,7 +161,13 @@ void ui_main_update(uint32_t now);
 void ui_main_toast(const char *text, ui_col_t color);
 
 void ui_settings_create(void);
-void ui_menu_show(void);
+void ui_menu_show(void);            // меню с начала (с главного экрана)
+void ui_menu_back(void);            // в меню (подменю), откуда ушли, фокус — где был
 void ui_settings_update(uint32_t now);
+
+void ui_sd_show(void);              // ui_sd.c: карта памяти (временный экран)
+void ui_sd_update(void);            // ~10 Гц, пока экран открыт
+
+void ui_help_show(void);            // ui_help.c: справка (временный экран)
 
 #endif /* UI_INTERNAL_H_ */

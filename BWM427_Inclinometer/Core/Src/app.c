@@ -48,9 +48,16 @@ extern I2C_HandleTypeDef hi2c1;
 // --- Тревога АКБ ---
 #define APP_BAT_LOW_READINGS 3      // подряд средних ниже порога (~1 с) — тревога
 
-// --- Стабильность (по Y первого отвечающего датчика) ---
-#define APP_STAB_WINDOW      10     // отсчётов в окне
-#define APP_STAB_SPAN_DEG    1.5f   // размах меньше — "стабильно"
+// --- Качка: размах по каждой оси каждого датчика за последние 20 с ---
+// Окно задано по времени, а не числом отсчётов: период бортовой качки судна
+// 5–20 с, и окно должно вмещать хотя бы один период при любой частоте опроса.
+// В окно идёт не больше 5 отсчётов в секунду (прореживание по времени): при
+// опросе 10 Гц — каждый второй, при 1 Гц — каждый. Буфер на 305 отсчётов
+// (наибольшее окно 60 с по 5 Гц + запас на дрожание моментов опроса).
+// Окно, частота отсчётов, порог и гистерезис — настройки (g_app.roll_*), по
+// умолчанию 20 с, 5 Гц, 1,5°, 0,2°. Буфер рассчитан на наибольшее окно.
+#define APP_STAB_SAMPLE_TOL_MS 20u  // допуск: при 10 Гц отсчёты идут через 100 ± единицы мс
+#define APP_STAB_N           (APP_ROLL_WIN_MAX_S * APP_ROLL_RATE_MAX_HZ + 5u) // 305
 
 // --- Тумблер записи (PA3, 0 = запись) ---
 #define APP_SW_DEBOUNCE_MS   50
@@ -107,9 +114,16 @@ static bool s_rate_valid;
 static uint32_t s_rate_last_ms;
 static float s_rate_dt_ms;
 
-// Стабильность
-static float s_stab[APP_STAB_WINDOW];
-static uint8_t s_stab_n, s_stab_i;
+// Качка: по кольцевому буферу на датчик — углы X, Y (сотые градуса, int16)
+// и время отсчёта: 305 * 8 = 2440 байт на датчик, 4880 байт на два
+typedef struct {
+	int16_t v[2][APP_STAB_N]; // [0] = X, [1] = Y, сотые градуса
+	uint32_t t[APP_STAB_N];
+	uint16_t n, i;            // отсчётов в буфере, место следующего
+	bool used;                // в буфере есть отсчёты (due_ms действителен)
+	uint32_t due_ms;          // когда брать следующий отсчёт в окно
+} roll_buf_t;
+static roll_buf_t s_roll[APP_SENSOR_COUNT];
 
 // Сервисная команда
 static svc_step_t s_svc_step;
@@ -686,46 +700,142 @@ static bool sensor_apply(uint8_t i, const bwm427_xfer_t *x) {
 	return false;
 }
 
-// Окно стабильности по Y первого отвечающего датчика (в порядке g_app.sensor:
-// обычно Д2, если его нет — Д3). Берётся filt_y (до вычитания нуля): размах от
-// нуля не зависит, а SET ZERO не даёт ложного скачка.
-static void stability_update(const bool fresh[APP_SENSOR_COUNT]) {
-	uint8_t ref = APP_STAB_NONE;
-	for (uint8_t i = 0; i < APP_SENSOR_COUNT; i++) {
-		if (g_app.sensor[i].status == SENSOR_OK) {
-			ref = i;
-			break;
-		}
+// Сбросить качку датчика i (пропал или ещё не отвечал)
+static void roll_reset(uint8_t i) {
+	app_sensor_t *s = &g_app.sensor[i];
+	s_roll[i].n = 0;
+	s_roll[i].i = 0;
+	s_roll[i].used = false;
+	s->roll_x = s->roll_y = 0.0f;
+	s->calm_x = s->calm_y = false;
+	s->roll_fill_s = 0;
+}
+
+// Покой по оси с гистерезисом: входит при размахе < порога (1,5°), выходит
+// при размахе > порог + гистерезис (1,7°)
+static bool roll_calm(bool was, bool full, float span) {
+	if (!full) {
+		return false;
 	}
-	if (ref != g_app.stab_sensor) {
-		// Сменился опорный датчик — копить окно заново
-		g_app.stab_sensor = ref;
-		s_stab_n = 0;
-		s_stab_i = 0;
-		g_app.is_stable = false;
-		g_app.stab_span = 0.0f;
+	return was ? (span <= g_app.roll_calm_deg + g_app.roll_hyst_deg)
+			: (span < g_app.roll_calm_deg);
+}
+
+// Угол в сотых градуса для буфера (|угол| <= 90° у датчика — в int16 входит)
+static int16_t roll_cdeg(float deg) {
+	float c = deg * 100.0f;
+	if (c > 32767.0f) {
+		c = 32767.0f;
+	} else if (c < -32767.0f) {
+		c = -32767.0f;
 	}
-	if (ref == APP_STAB_NONE || !fresh[ref]) {
+	return (int16_t) (c >= 0.0f ? c + 0.5f : c - 0.5f);
+}
+
+// Качка датчика i по обеим осям. Отсчёты в окно — по расписанию раз в
+// 1000 / roll_rate_hz мс (при 5 Гц — 200 мс, в среднем ровно столько при любой
+// частоте опроса; при опросе реже — каждый). Размах = максимум - минимум за
+// последние roll_window_s секунд, по filt_x/filt_y (до вычитания нуля: SET ZERO
+// не даёт ложного скачка). Расчёт — проход по <= window * rate отсчётам двух
+// осей на каждый взятый отсчёт (от нового к старым, до границы окна).
+static void roll_update(uint8_t i, uint32_t now) {
+	app_sensor_t *s = &g_app.sensor[i];
+	roll_buf_t *b = &s_roll[i];
+	const uint32_t sample_ms = 1000u / g_app.roll_rate_hz;
+	const uint32_t window_ms = (uint32_t) g_app.roll_window_s * 1000u;
+	if (b->used && (int32_t) (now - b->due_ms) < -(int32_t) APP_STAB_SAMPLE_TOL_MS) {
 		return;
 	}
-	const app_sensor_t *s = &g_app.sensor[ref];
-	s_stab[s_stab_i] = s->filt_y;
-	s_stab_i = (uint8_t) ((s_stab_i + 1) % APP_STAB_WINDOW);
-	if (s_stab_n < APP_STAB_WINDOW) {
-		s_stab_n++;
+	uint32_t next = b->due_ms + sample_ms;
+	if (!b->used || (int32_t) (now - next) >= -(int32_t) APP_STAB_SAMPLE_TOL_MS) {
+		next = now + sample_ms;
 	}
-	float mn = s_stab[0], mx = s_stab[0];
-	for (uint8_t j = 1; j < s_stab_n; j++) {
-		if (s_stab[j] < mn) {
-			mn = s_stab[j];
+	b->due_ms = next;
+	b->used = true;
+	b->v[0][b->i] = roll_cdeg(s->filt_x);
+	b->v[1][b->i] = roll_cdeg(s->filt_y);
+	b->t[b->i] = now;
+	b->i = (uint16_t) ((b->i + 1u) % APP_STAB_N);
+	if (b->n < APP_STAB_N) {
+		b->n++;
+	}
+
+	// Размах по отсчётам окна: от нового к старым, до первого отсчёта старше
+	// окна (время в буфере идёт по порядку записи). Так проход — по window *
+	// rate отсчётам, а не по всему буферу на максимальное окно.
+	int16_t mnx, mxx, mny, mxy;
+	uint16_t j = (uint16_t) ((b->i + APP_STAB_N - 1u) % APP_STAB_N); // только что записанный
+	mnx = mxx = b->v[0][j];
+	mny = mxy = b->v[1][j];
+	uint32_t oldest_age = 0;
+	for (uint16_t k = 1; k < b->n; k++) {
+		j = (uint16_t) (j == 0 ? APP_STAB_N - 1u : j - 1u);
+		uint32_t age = now - b->t[j];
+		if (age > window_ms) {
+			break;
 		}
-		if (s_stab[j] > mx) {
-			mx = s_stab[j];
+		oldest_age = age;
+		int16_t vx = b->v[0][j], vy = b->v[1][j];
+		if (vx < mnx) {
+			mnx = vx;
+		} else if (vx > mxx) {
+			mxx = vx;
+		}
+		if (vy < mny) {
+			mny = vy;
+		} else if (vy > mxy) {
+			mxy = vy;
 		}
 	}
-	g_app.stab_span = mx - mn;
-	g_app.is_stable = (s_stab_n >= APP_STAB_WINDOW)
-			&& (g_app.stab_span < APP_STAB_SPAN_DEG);
+	s->roll_x = (float) (mxx - mnx) * 0.01f;
+	s->roll_y = (float) (mxy - mny) * 0.01f;
+	// Окно заполнено, когда данные покрывают его целиком (с точностью до шага)
+	bool full = oldest_age + sample_ms >= window_ms;
+	uint32_t fill_s = (oldest_age + sample_ms) / 1000u;
+	s->roll_fill_s = (uint8_t) (fill_s > g_app.roll_window_s ? g_app.roll_window_s : fill_s);
+	s->calm_x = roll_calm(s->calm_x, full, s->roll_x);
+	s->calm_y = roll_calm(s->calm_y, full, s->roll_y);
+}
+
+// Качка по всем осям: обновить датчики со свежим отсчётом, затем сводка —
+// «ГОТОВ», только если все оси всех отвечающих датчиков в покое
+static void stability_update(const bool fresh[APP_SENSOR_COUNT], uint32_t now) {
+	uint8_t ok = 0, worst = APP_STAB_NONE, worst_axis = 0;
+	uint8_t fill = g_app.roll_window_s;
+	float worst_span = 0.0f;
+	bool calm = true;
+	for (uint8_t i = 0; i < APP_SENSOR_COUNT; i++) {
+		app_sensor_t *s = &g_app.sensor[i];
+		if (s->status != SENSOR_OK) {
+			if (s_roll[i].used) {
+				roll_reset(i); // пропал — после возвращения копить окно заново
+			}
+			continue;
+		}
+		if (fresh[i]) {
+			roll_update(i, now);
+		}
+		ok++;
+		calm = calm && s->calm_x && s->calm_y;
+		if (s->roll_fill_s < fill) {
+			fill = s->roll_fill_s;
+		}
+		if (worst == APP_STAB_NONE || s->roll_x > worst_span) {
+			worst = i;
+			worst_axis = 0;
+			worst_span = s->roll_x;
+		}
+		if (s->roll_y > worst_span) {
+			worst = i;
+			worst_axis = 1;
+			worst_span = s->roll_y;
+		}
+	}
+	g_app.stab_sensor = worst;
+	g_app.stab_axis = worst_axis;
+	g_app.stab_span = worst_span;
+	g_app.stab_fill_s = ok ? fill : 0;
+	g_app.is_stable = ok > 0 && calm;
 }
 
 // Фактическая частота: сглаженный интервал между завершёнными циклами
@@ -881,7 +991,7 @@ static void poll_collect(bool fresh[APP_SENSOR_COUNT], uint32_t now) {
 			fresh[i] = sensor_apply((uint8_t) i, &s_xfer[k]);
 		}
 	}
-	stability_update(fresh);
+	stability_update(fresh, now);
 	// Цикл, начатый до смены частоты, в оценку новой частоты не идёт
 	if (s_batch_measure && s_batch_hz == g_app.log_freq_hz) {
 		rate_update(now);
@@ -1024,6 +1134,38 @@ static float clamp_bat_alarm(float v) {
 	return v;
 }
 
+static uint8_t clamp_roll_window(uint8_t s) {
+	return s < APP_ROLL_WIN_MIN_S ? APP_ROLL_WIN_MIN_S
+			: s > APP_ROLL_WIN_MAX_S ? APP_ROLL_WIN_MAX_S : s;
+}
+
+static uint8_t clamp_roll_rate(uint8_t hz) {
+	return hz < APP_ROLL_RATE_MIN_HZ ? APP_ROLL_RATE_MIN_HZ
+			: hz > APP_ROLL_RATE_MAX_HZ ? APP_ROLL_RATE_MAX_HZ : hz;
+}
+
+// Градусы с шагом 0,01 (так хранятся во флеше), в пределах [lo, hi]; NaN — def
+static float clamp_deg(float d, float lo, float hi, float def) {
+	if (d != d) {
+		d = def;
+	}
+	if (d < lo) {
+		d = lo;
+	}
+	if (d > hi) {
+		d = hi;
+	}
+	return (float) (int32_t) (d * 100.0f + 0.5f) * 0.01f;
+}
+
+static float clamp_roll_calm(float d) {
+	return clamp_deg(d, APP_ROLL_CALM_MIN_DEG, APP_ROLL_CALM_MAX_DEG, APP_ROLL_CALM_DEF_DEG);
+}
+
+static float clamp_roll_hyst(float d) {
+	return clamp_deg(d, APP_ROLL_HYST_MIN_DEG, APP_ROLL_HYST_MAX_DEG, APP_ROLL_HYST_DEF_DEG);
+}
+
 // Значения по умолчанию, поверх — последняя запись из флеша (если есть).
 // Записанное приводится в пределы: его могла оставить другая версия прошивки.
 static void settings_init(void) {
@@ -1032,6 +1174,10 @@ static void settings_init(void) {
 	g_app.bus_gap_ms = APP_DEF_GAP_MS;
 	g_app.theme = APP_DEF_THEME;
 	g_app.bat_alarm_v = APP_DEF_BAT_ALARM_V;
+	g_app.roll_window_s = APP_ROLL_WIN_DEF_S;
+	g_app.roll_rate_hz = APP_ROLL_RATE_DEF_HZ;
+	g_app.roll_calm_deg = APP_ROLL_CALM_DEF_DEG;
+	g_app.roll_hyst_deg = APP_ROLL_HYST_DEF_DEG;
 	settings_t s;
 	if (settings_load(&s)) {
 		g_app.log_freq_hz = clamp_freq(s.log_freq_hz);
@@ -1039,6 +1185,19 @@ static void settings_init(void) {
 		g_app.bus_gap_ms = clamp_gap(s.bus_gap_ms);
 		g_app.theme = clamp_theme(s.theme);
 		g_app.bat_alarm_v = clamp_bat_alarm(s.bat_alarm_v);
+		// Поля качки: 0xFF / 0xFFFF — запись старой прошивки, остаются умолчания
+		if (s.roll_window_s != 0xFFu) {
+			g_app.roll_window_s = clamp_roll_window(s.roll_window_s);
+		}
+		if (s.roll_rate_hz != 0xFFu) {
+			g_app.roll_rate_hz = clamp_roll_rate(s.roll_rate_hz);
+		}
+		if (s.roll_calm_cdeg != 0xFFFFu) {
+			g_app.roll_calm_deg = clamp_roll_calm((float) s.roll_calm_cdeg * 0.01f);
+		}
+		if (s.roll_hyst_cdeg != 0xFFFFu) {
+			g_app.roll_hyst_deg = clamp_roll_hyst((float) s.roll_hyst_cdeg * 0.01f);
+		}
 	}
 }
 
@@ -1056,6 +1215,10 @@ static void settings_save_task(uint32_t now) {
 	s.bus_gap_ms = g_app.bus_gap_ms;
 	s.theme = g_app.theme;
 	s.bat_alarm_v = g_app.bat_alarm_v;
+	s.roll_window_s = g_app.roll_window_s;
+	s.roll_rate_hz = g_app.roll_rate_hz;
+	s.roll_calm_cdeg = (uint16_t) (g_app.roll_calm_deg * 100.0f + 0.5f);
+	s.roll_hyst_cdeg = (uint16_t) (g_app.roll_hyst_deg * 100.0f + 0.5f);
 	settings_store(&s);
 }
 
@@ -1067,8 +1230,7 @@ void app_init(void) {
 	uint32_t now = HAL_GetTick();
 	memset(&g_app, 0, sizeof(g_app));
 	memset(s_priv, 0, sizeof(s_priv));
-	s_stab_n = 0;
-	s_stab_i = 0;
+	memset(s_roll, 0, sizeof(s_roll));
 	s_rate_valid = false;
 	s_svc_step = SVC_STEP_NONE;
 	s_probe_rr = 0;
@@ -1147,6 +1309,53 @@ void app_set_theme(uint8_t theme) {
 		return;
 	}
 	g_app.theme = theme;
+	settings_touch(HAL_GetTick());
+}
+
+// Сбросить окна качки всех датчиков (сменились окно или частота отсчётов)
+static void roll_reset_all(void) {
+	for (uint8_t i = 0; i < APP_SENSOR_COUNT; i++) {
+		roll_reset(i);
+	}
+	g_app.is_stable = false;
+	g_app.stab_fill_s = 0;
+}
+
+void app_set_roll_window(uint8_t seconds) {
+	seconds = clamp_roll_window(seconds);
+	if (seconds == g_app.roll_window_s) {
+		return;
+	}
+	g_app.roll_window_s = seconds;
+	roll_reset_all();
+	settings_touch(HAL_GetTick());
+}
+
+void app_set_roll_rate(uint8_t hz) {
+	hz = clamp_roll_rate(hz);
+	if (hz == g_app.roll_rate_hz) {
+		return;
+	}
+	g_app.roll_rate_hz = hz;
+	roll_reset_all();
+	settings_touch(HAL_GetTick());
+}
+
+void app_set_roll_calm(float deg) {
+	deg = clamp_roll_calm(deg);
+	if (deg == g_app.roll_calm_deg) {
+		return;
+	}
+	g_app.roll_calm_deg = deg;
+	settings_touch(HAL_GetTick());
+}
+
+void app_set_roll_hyst(float deg) {
+	deg = clamp_roll_hyst(deg);
+	if (deg == g_app.roll_hyst_deg) {
+		return;
+	}
+	g_app.roll_hyst_deg = deg;
 	settings_touch(HAL_GetTick());
 }
 

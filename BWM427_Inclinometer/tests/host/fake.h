@@ -74,6 +74,15 @@ void fake_fs_format(void);
 void fake_fs_add(const char *name);    // создать пустой файл
 const char* fake_fs_get(const char *name, uint32_t *len); // NULL — нет файла
 int fake_fs_count(void);
+// Том FAT32, кластер 32 КБ: ёмкость и свободное место в кластерах (по
+// умолчанию 8 ГБ, занято 1000); счётчик свободных в FSInfo есть / нет
+#define FAKE_FS_CLUSTERS 262144u
+extern uint32_t fake_fs_clusters;
+extern uint32_t fake_fs_free;
+extern bool fake_fsinfo_valid;
+extern uint8_t fake_fs_csize;           // секторов в кластере (64 = 32 КБ)
+extern uint32_t fake_getfree_calls;    // вызовы f_getfree
+extern uint32_t fake_getfree_scans;    // ... с полным обходом FAT (счётчик неизвестен)
 
 // --- Шина SPI и SD-карта для настоящего драйвера (fake_sd.c) ---
 typedef enum {

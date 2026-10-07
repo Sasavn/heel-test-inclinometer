@@ -396,6 +396,17 @@ static ffile_t s_ff[FF_FILES];
 static FATFS *s_mounted;
 bool fake_card_present = true;
 uint32_t fake_fwrite_calls, fake_fwrite_bad_size, fake_fsync_calls;
+// Том: FAT32, кластер 32 КБ (64 сектора), ёмкость и свободное — в кластерах
+uint32_t fake_fs_clusters = FAKE_FS_CLUSTERS;
+uint32_t fake_fs_free = FAKE_FS_CLUSTERS - 1000u;
+bool fake_fsinfo_valid = true;       // в FSInfo есть счётчик свободных
+uint8_t fake_fs_csize = 64;          // секторов в кластере
+uint32_t fake_getfree_calls, fake_getfree_scans;
+
+static uint32_t clusters_of(uint32_t len) {
+	uint32_t cl = fake_fs_csize * 512u;
+	return (len + cl - 1u) / cl;
+}
 
 void fake_fs_format(void) {
 	for (int i = 0; i < FF_FILES; i++) {
@@ -478,7 +489,27 @@ FRESULT f_mount(FATFS *fs, const TCHAR *path, BYTE opt) {
 	if (opt == 1 && !fake_card_present) {
 		return FR_NOT_READY;
 	}
+	// Как mount_volume: геометрия тома и счётчик из FSInfo (если он есть)
+	fs->fs_type = FS_FAT32;
+	fs->csize = fake_fs_csize;
+	fs->n_fatent = fake_fs_clusters + 2u;
+	fs->free_clst = fake_fsinfo_valid ? fake_fs_free : 0xFFFFFFFFu;
 	s_mounted = fs;
+	return FR_OK;
+}
+
+FRESULT f_getfree(const TCHAR *path, DWORD *nclst, FATFS **fatfs) {
+	(void) path;
+	if (!s_mounted || !fake_card_present) {
+		return FR_NOT_READY;
+	}
+	fake_getfree_calls++;
+	if (s_mounted->free_clst > s_mounted->n_fatent - 2u) {
+		fake_getfree_scans++; // настоящая FatFs здесь обходит всю FAT
+		s_mounted->free_clst = fake_fs_free;
+	}
+	*nclst = s_mounted->free_clst;
+	*fatfs = s_mounted;
 	return FR_OK;
 }
 
@@ -527,6 +558,12 @@ FRESULT f_write(FIL *fp, const void *buff, UINT btw, UINT *bw) {
 		f->data = realloc(f->data, f->cap);
 	}
 	memcpy(&f->data[f->len], buff, btw);
+	// Новые кластеры файла: как create_chain, счётчик тома и FatFs (если известен)
+	uint32_t grow = clusters_of(f->len + btw) - clusters_of(f->len);
+	fake_fs_free -= grow;
+	if (s_mounted->free_clst <= s_mounted->n_fatent - 2u) {
+		s_mounted->free_clst -= grow;
+	}
 	f->len += btw;
 	*bw = btw;
 	return FR_OK;
@@ -641,5 +678,10 @@ void fake_reset(void) {
 	fake_card_present = true;
 	fake_fwrite_calls = fake_fwrite_bad_size = fake_fsync_calls = 0;
 	fake_fs_format();
+	fake_fs_clusters = FAKE_FS_CLUSTERS;
+	fake_fs_free = FAKE_FS_CLUSTERS - 1000u;
+	fake_fsinfo_valid = true;
+	fake_fs_csize = 64;
+	fake_getfree_calls = fake_getfree_scans = 0;
 	fake_flash_reset();
 }

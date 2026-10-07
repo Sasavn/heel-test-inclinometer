@@ -22,6 +22,21 @@
 #define APP_ALPHA_MIN      0.01f
 #define APP_ALPHA_MAX      0.99f
 #define APP_STAB_NONE      0xFF
+#define APP_STAB_WINDOW_S  20       // окно расчёта качки по умолчанию, с
+
+// Параметры качки (меню / set roll...; сохраняются во флеш)
+#define APP_ROLL_WIN_MIN_S     10
+#define APP_ROLL_WIN_MAX_S     60      // буфер рассчитан на максимум: 60 с x 5 Гц
+#define APP_ROLL_WIN_DEF_S     APP_STAB_WINDOW_S
+#define APP_ROLL_RATE_MIN_HZ   2       // отсчётов в окно качки в секунду
+#define APP_ROLL_RATE_MAX_HZ   5
+#define APP_ROLL_RATE_DEF_HZ   5
+#define APP_ROLL_CALM_MIN_DEG  0.10f   // порог «покоя»: размах меньше — покой
+#define APP_ROLL_CALM_MAX_DEG  10.0f
+#define APP_ROLL_CALM_DEF_DEG  1.5f
+#define APP_ROLL_HYST_MIN_DEG  0.0f    // покой снимается при размахе > порог + гистерезис
+#define APP_ROLL_HYST_MAX_DEG  2.0f
+#define APP_ROLL_HYST_DEF_DEG  0.2f
 
 #define APP_THEME_DARK     0
 #define APP_THEME_LIGHT    1
@@ -35,6 +50,8 @@
                                        // тревогу не поднимаем
 #define APP_BAT_CELLS           3      // 3S Li-ion 18650
 #define APP_BAT_PCT_NONE        0xFF
+
+#define APP_SD_FREE_UNKNOWN     0xFFFFFFFFu // g_app.sd_free_mb: свободное место неизвестно
 
 typedef struct {
 	uint8_t year;    // 0..99 (20xx)
@@ -82,6 +99,13 @@ typedef struct {
 	app_stat_t lat_first;    // удачные ответы: от конца запроса (TC) до первого байта ответа
 	app_stat_t lat_done;     // ... до конца ответа (кадр принят целиком)
 	uint32_t timeout_us;     // таймаут ответа, с которым датчик опрашивается сейчас, мкс
+
+	// Качка по осям этого датчика: размах угла за последние APP_STAB_WINDOW_S
+	// секунд (максимум - минимум, по filt_x/filt_y, до вычитания нуля)
+	float roll_x, roll_y;    // размах, градусы
+	bool calm_x, calm_y;     // покой по оси: размах < порога (с гистерезисом);
+	                         // false, пока окно не заполнено
+	uint8_t roll_fill_s;     // накоплено секунд окна, 0..APP_STAB_WINDOW_S
 } app_sensor_t;
 
 // Шина RS485 в целом: с включения или с app_bus_stats_reset()
@@ -142,6 +166,10 @@ typedef struct {
 	uint32_t rec_start_ms;
 	uint32_t rec_rows;       // строк записано за текущий замер (по всем файлам)
 	bool rec_switch_on;      // положение тумблера записи
+	uint32_t sd_total_mb;    // ёмкость карты, МБ (0 — неизвестна: карты нет)
+	uint32_t sd_free_mb;     // свободно, МБ; APP_SD_FREE_UNKNOWN — не посчитано
+	                         // (0 — карта заполнена). Считается при монтировании,
+	                         // во время записи — по счётчику FatFs, без чтения карты
 
 	// Прочее
 	float battery_v;
@@ -153,9 +181,19 @@ typedef struct {
 	                         // APP_BAT_PCT_NONE — АКБ не подключена
 	bool battery_adc_sat;    // АЦП батареи у верхнего предела (вход делителя выше
 	                         // ~13,3 В при VDDA 3,3 В): battery_v — оценка снизу
-	bool is_stable;         // размах качки по опорному датчику ниже порога
-	float stab_span;         // размах Y опорного датчика за окно, градусы
-	uint8_t stab_sensor;     // опорный датчик (первый отвечающий), APP_STAB_NONE — нет
+	// Сводка качки по всем осям всех отвечающих датчиков (по каждой оси —
+	// sensor[i].roll_x/roll_y, calm_x/calm_y)
+	bool is_stable;          // все оси всех отвечающих датчиков в покое (окна заполнены)
+	uint8_t stab_fill_s;     // наименьшее накопленное окно среди отвечающих датчиков, с
+	float stab_span;         // наибольший размах среди осей отвечающих датчиков, градусы
+	uint8_t stab_sensor;     // датчик с наибольшим размахом, APP_STAB_NONE — ни один не отвечает
+	uint8_t stab_axis;       // его ось: 0 = X, 1 = Y
+
+	// Параметры расчёта качки (сохраняются вместе с настройками)
+	uint8_t roll_window_s;   // окно, APP_ROLL_WIN_MIN_S..MAX_S (по умолчанию 20)
+	uint8_t roll_rate_hz;    // отсчётов в окно в секунду, 2..5
+	float roll_calm_deg;     // порог покоя, градусы
+	float roll_hyst_deg;     // гистерезис порога, градусы
 	app_time_t time;
 	bool rtc_present;        // найден DS3231 на I2C1
 
@@ -177,6 +215,12 @@ void app_set_time(const app_time_t *t);
 void app_set_bus_gap(uint8_t ms); // пауза шины RS485 перед запросом (см. bwm427.h)
 void app_set_theme(uint8_t theme); // APP_THEME_*; сохраняется вместе с настройками
 void app_set_bat_alarm(float volts); // порог тревоги АКБ, APP_BAT_ALARM_MIN_V..MAX_V; сохраняется
+// Параметры качки (сохраняются). Смена окна или частоты отсчётов сбрасывает
+// накопленные окна: «покой» снова определится через новое окно.
+void app_set_roll_window(uint8_t seconds);
+void app_set_roll_rate(uint8_t hz);
+void app_set_roll_calm(float deg);
+void app_set_roll_hyst(float deg);
 // Частота, α, пауза шины, тема и порог АКБ сохраняются во флеш и переживают выключение.
 
 // Сменить Modbus-адрес датчика old_addr -> new_addr (рег. 0x000D) и сохранить

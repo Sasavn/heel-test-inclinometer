@@ -26,6 +26,8 @@ void sim_app_init(uint8_t theme);  // исходное состояние g_app,
 void sim_app_tick(uint32_t now_ms);  // «логика»: часы, шум датчиков
 // Напряжение АКБ и заряд, % (APP_BAT_PCT_NONE — нет АКБ); тревога — по порогу
 void sim_app_battery(float volts, uint8_t pct);
+// Качка датчика i по осям: размах, покой, накоплено окна (сводка — сама)
+void sim_app_roll(int i, float roll_x, float roll_y, bool calm_x, bool calm_y, uint8_t fill_s);
 extern bool sim_app_noise;           // шевелить значения датчиков
 
 #endif /* SIM_H_ */

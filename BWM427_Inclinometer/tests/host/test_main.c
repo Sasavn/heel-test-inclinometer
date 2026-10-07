@@ -435,12 +435,16 @@ static void test_sd_driver(void) {
 static bool set_eq(const settings_t *a, const settings_t *b) {
 	return a->log_freq_hz == b->log_freq_hz && a->ema_alpha == b->ema_alpha
 			&& a->bus_gap_ms == b->bus_gap_ms && a->theme == b->theme
-			&& memcmp(&a->bat_alarm_v, &b->bat_alarm_v, sizeof(float)) == 0;
+			&& memcmp(&a->bat_alarm_v, &b->bat_alarm_v, sizeof(float)) == 0
+			&& a->roll_window_s == b->roll_window_s && a->roll_rate_hz == b->roll_rate_hz
+			&& a->roll_calm_cdeg == b->roll_calm_cdeg
+			&& a->roll_hyst_cdeg == b->roll_hyst_cdeg;
 }
 
 static void test_settings(void) {
 	settings_t s = { .log_freq_hz = 25, .ema_alpha = 0.3f, .bus_gap_ms = 20, .theme = APP_THEME_LIGHT,
-			.bat_alarm_v = 10.5f };
+			.bat_alarm_v = 10.5f, .roll_window_s = 30, .roll_rate_hz = 4, .roll_calm_cdeg = 125,
+			.roll_hyst_cdeg = 15 };
 	settings_t r;
 	const settings_info_t *in = settings_get_info();
 	CHECK(settings_crc32("123456789", 9) == 0xCBF43926u); // контрольное значение CRC-32
@@ -913,8 +917,11 @@ static void test_app_stability_and_zero(void) {
 	app_init();
 	run_ms(500);
 	CHECK(!g_app.is_stable); // окно ещё не заполнено
-	run_ms(1000);
+	run_ms(10000);
+	CHECK(!g_app.is_stable && g_app.stab_fill_s >= 9 && g_app.stab_fill_s <= 11);
+	run_ms(10000);
 	CHECK(g_app.is_stable && g_app.stab_span < 1e-6f);
+	CHECK(g_app.stab_fill_s == APP_STAB_WINDOW_S);
 	CHECK(g_app.stab_sensor == 0);
 	// Ноль не влияет на стабильность
 	app_zero_all();
@@ -935,6 +942,142 @@ static void test_app_stability_and_zero(void) {
 	fake_sensor[0].present = false;
 	run_ms(500);
 	CHECK(!g_app.is_stable);
+}
+
+// Медленная качка ±2° с периодом 10 с: окно в 1 с (как было) видело бы за
+// секунду изменение ~1,2° и показывало «ГОТОВ»; окно 20 с видит полный размах
+static void test_app_stability_slow_roll(void) {
+	world(1);
+	app_init();
+	run_ms(21000);
+	CHECK(g_app.is_stable);
+	for (int k = 0; k < 250; k++) { // 25 с по 100 мс
+		double a = 2.0 * sin(2.0 * 3.14159265358979 * k * 0.1 / 10.0);
+		fake_sensor[0].reg_y = (uint16_t) (10000 + (int) lround(a * 100.0));
+		run_ms(100);
+	}
+	printf("  качка ±2° / 10 с: размах за 20 с = %.2f°\n", (double) g_app.stab_span);
+	CHECK(!g_app.is_stable && g_app.stab_span > 3.0f);
+
+	// Отсчёты прореживаются до 5 Гц: при опросе 50 Гц окно по-прежнему 20 с
+	app_set_log_freq(50);
+	run_ms(25000);
+	CHECK(g_app.stab_fill_s == APP_STAB_WINDOW_S);
+	CHECK(g_app.is_stable);
+
+	// Гистерезис: «ГОТОВ» держится при размахе 1,5…1,7°, снимается выше 1,7°
+	world(1);
+	app_init();
+	app_set_log_freq(10);
+	run_ms(21000);
+	CHECK(g_app.is_stable);
+	uint16_t base = fake_sensor[0].reg_y;
+	fake_sensor[0].reg_y = (uint16_t) (base + 160); // скачок 1,6°: в зоне гистерезиса
+	run_ms(3000);
+	CHECK(g_app.stab_span > 1.5f && g_app.stab_span < 1.7f);
+	CHECK(g_app.is_stable);
+	fake_sensor[0].reg_y = (uint16_t) (base + 180); // 1,8° — больше порога + гистерезиса
+	run_ms(3000);
+	CHECK(!g_app.is_stable);
+	// Снова «ГОТОВ» — только когда размах за все 20 с станет < 1,5°
+	run_ms(10000);
+	CHECK(!g_app.is_stable);
+	run_ms(12000);
+	CHECK(g_app.is_stable && g_app.stab_span < 1e-3f);
+}
+
+// Качка по каждой оси каждого датчика: Д2 в покое, у Д3 качается только X
+static void test_app_roll_per_axis(void) {
+	world(2);
+	app_init();
+	app_set_log_freq(10);
+	run_ms(21000);
+	CHECK(g_app.is_stable);
+	for (int i = 0; i < 2; i++) {
+		CHECK(g_app.sensor[i].calm_x && g_app.sensor[i].calm_y);
+		CHECK(g_app.sensor[i].roll_fill_s == APP_STAB_WINDOW_S);
+	}
+	uint16_t base_x = fake_sensor[1].reg_x;
+	for (int k = 0; k < 250; k++) { // ±3° с периодом 8 с, 25 с
+		double a = 3.0 * sin(2.0 * 3.14159265358979 * k * 0.1 / 8.0);
+		fake_sensor[1].reg_x = (uint16_t) (base_x + (int) lround(a * 100.0));
+		run_ms(100);
+	}
+	printf("  Д%u.X: качка %.2f°, Д%u.Y: %.2f°, Д%u: %.2f° / %.2f°\n",
+			(unsigned) APP_SENSOR_ADDR(1), (double) g_app.sensor[1].roll_x,
+			(unsigned) APP_SENSOR_ADDR(1), (double) g_app.sensor[1].roll_y,
+			(unsigned) APP_SENSOR_ADDR(0), (double) g_app.sensor[0].roll_x,
+			(double) g_app.sensor[0].roll_y);
+	CHECK(g_app.sensor[0].calm_x && g_app.sensor[0].calm_y);
+	CHECK(!g_app.sensor[1].calm_x && g_app.sensor[1].roll_x > 4.0f);
+	CHECK(g_app.sensor[1].calm_y && g_app.sensor[1].roll_y < 1e-3f);
+	CHECK(!g_app.is_stable);
+	CHECK(g_app.stab_sensor == 1 && g_app.stab_axis == 0);
+	CHECK_NEAR(g_app.stab_span, g_app.sensor[1].roll_x, 1e-6);
+	// Д3 пропал: сводка — только по Д2, его окно не сбрасывается
+	fake_sensor[1].present = false;
+	run_ms(2000);
+	CHECK(g_app.sensor[1].status != SENSOR_OK && !g_app.sensor[1].calm_x
+			&& g_app.sensor[1].roll_fill_s == 0);
+	CHECK(g_app.is_stable && g_app.stab_sensor == 0);
+}
+
+// Параметры качки: умолчания, сохранение во флеш, запись старой прошивки,
+// окно 10 с и 2 отсчёта в секунду
+static void test_app_roll_settings(void) {
+	world(1);
+	fake_flash_reset();
+	app_init();
+	CHECK(g_app.roll_window_s == 20 && g_app.roll_rate_hz == 5);
+	CHECK_NEAR(g_app.roll_calm_deg, 1.5, 1e-6);
+	CHECK_NEAR(g_app.roll_hyst_deg, 0.2, 1e-6);
+	// Пределы
+	app_set_roll_window(200);
+	CHECK(g_app.roll_window_s == APP_ROLL_WIN_MAX_S);
+	app_set_roll_rate(9);
+	CHECK(g_app.roll_rate_hz == APP_ROLL_RATE_MAX_HZ);
+	app_set_roll_calm(-1.0f);
+	CHECK_NEAR(g_app.roll_calm_deg, APP_ROLL_CALM_MIN_DEG, 1e-6);
+	app_set_roll_hyst(5.0f);
+	CHECK_NEAR(g_app.roll_hyst_deg, APP_ROLL_HYST_MAX_DEG, 1e-6);
+	// Сохранение и чтение после «перезагрузки»
+	app_set_roll_window(10);
+	app_set_roll_rate(2);
+	app_set_roll_calm(0.8f);
+	app_set_roll_hyst(0.1f);
+	run_ms(SETTINGS_SAVE_DELAY_MS + 500);
+	app_init();
+	CHECK(g_app.roll_window_s == 10 && g_app.roll_rate_hz == 2);
+	CHECK_NEAR(g_app.roll_calm_deg, 0.8, 1e-5);
+	CHECK_NEAR(g_app.roll_hyst_deg, 0.1, 1e-5);
+	// Окно 10 с, 2 отсчёта/с: «покой» через 10 с, отсчётов в окне ~20
+	app_set_log_freq(10);
+	run_ms(9000);
+	CHECK(!g_app.is_stable && g_app.sensor[0].roll_fill_s <= 9);
+	run_ms(2000);
+	CHECK(g_app.is_stable && g_app.sensor[0].roll_fill_s == 10);
+	// Порог 0,8°: скачок на 1,0° — уже качка
+	fake_sensor[0].reg_y = (uint16_t) (fake_sensor[0].reg_y + 100);
+	run_ms(3000);
+	CHECK(!g_app.sensor[0].calm_y && !g_app.is_stable);
+
+	// Запись старой прошивки: поля качки 0xFF.. — умолчания
+	fake_flash_reset();
+	settings_t old;
+	memset(&old, 0xFF, sizeof(old));
+	old.log_freq_hz = 10;
+	old.ema_alpha = 0.15f;
+	old.bus_gap_ms = 15;
+	old.theme = APP_THEME_DARK;
+	settings_load(&old); // пустой журнал: подготовить место записи
+	memset(&old.roll_window_s, 0xFF, 6);
+	old.log_freq_hz = 12;
+	CHECK(settings_store(&old));
+	app_init();
+	CHECK(g_app.log_freq_hz == 12);
+	CHECK(g_app.roll_window_s == 20 && g_app.roll_rate_hz == 5);
+	CHECK_NEAR(g_app.roll_calm_deg, 1.5, 1e-6);
+	CHECK_NEAR(g_app.roll_hyst_deg, 0.2, 1e-6);
 }
 
 static void test_app_recording(void) {
@@ -1087,6 +1230,52 @@ static void test_app_card(void) {
 	CHECK(g_app.sd_state == SD_ERROR && fake_fs_count() == 1);
 	fake_sw_rec = 0;
 	run_ms(100);
+}
+
+// Место на карте: f_getfree только при монтировании и после записи, без
+// полного обхода FAT; во время записи — счётчик FatFs
+static void test_app_sd_space(void) {
+	// 8 ГБ, кластер 32 КБ, счётчик свободных в FSInfo
+	world(APP_SENSOR_COUNT);
+	app_init();
+	CHECK(g_app.sd_state == SD_READY && g_app.sd_total_mb == 8192u);
+	CHECK(g_app.sd_free_mb == (FAKE_FS_CLUSTERS - 1000u) / 32u);
+	CHECK(fake_getfree_calls == 1 && fake_getfree_scans == 0);
+
+	// Кластер 512 байт, свободно ровно 100 МБ: первый же кластер записи —
+	// уже 99 МБ (округление вниз)
+	world(APP_SENSOR_COUNT);
+	fake_fs_csize = 1;
+	fake_fs_free = 100u * 2048u;
+	app_init();
+	app_set_time(&T0);
+	CHECK(g_app.sd_free_mb == 100u);
+	run_ms(1000);
+	uint32_t calls = fake_getfree_calls;
+	fake_sw_rec = 1;
+	run_ms(3000);
+	CHECK(g_app.sd_state == SD_RECORDING && g_app.sd_free_mb == 99u);
+	CHECK(fake_getfree_calls == calls); // во время записи f_getfree не зовётся
+	fake_sw_rec = 0;
+	run_ms(100);
+	CHECK(g_app.sd_state == SD_READY && g_app.sd_free_mb == 99u);
+	CHECK(fake_getfree_calls == calls + 1 && fake_getfree_scans == 0);
+	run_ms(10000); // проверки карты раз в 2 с f_getfree не зовут
+	CHECK(fake_getfree_calls == calls + 1);
+
+	// FSInfo без счётчика: обход всей FAT32 не делаем — место неизвестно
+	world(APP_SENSOR_COUNT);
+	fake_fsinfo_valid = false;
+	app_init();
+	CHECK(g_app.sd_state == SD_READY && g_app.sd_total_mb == 8192u);
+	CHECK(g_app.sd_free_mb == APP_SD_FREE_UNKNOWN);
+	CHECK(fake_getfree_calls == 0 && fake_getfree_scans == 0);
+
+	// Карту вынули — ёмкость и место неизвестны
+	fake_card_pull();
+	run_ms(2100);
+	CHECK(g_app.sd_state == SD_NO_CARD && g_app.sd_total_mb == 0u);
+	CHECK(g_app.sd_free_mb == APP_SD_FREE_UNKNOWN);
 }
 
 static void test_app_set_address(void) {
@@ -1590,8 +1779,12 @@ int main(void) {
 		{ "прибор: поиск датчиков, частота", test_app_discovery_and_rate },
 		{ "прибор: потеря датчика, пробы", test_app_lost_and_probe },
 		{ "прибор: стабильность, ноль", test_app_stability_and_zero },
+		{ "прибор: качка, окно 20 с, гистерезис", test_app_stability_slow_roll },
+		{ "прибор: качка по каждой оси", test_app_roll_per_axis },
+		{ "прибор: параметры качки", test_app_roll_settings },
 		{ "прибор: запись на SD", test_app_recording },
 		{ "прибор: карта, нумерация", test_app_card },
+		{ "прибор: место на карте", test_app_sd_space },
 		{ "прибор: смена адреса", test_app_set_address },
 		{ "прибор: настройки во флеше", test_app_settings },
 		{ "прибор: часы", test_app_clock },

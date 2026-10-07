@@ -2,11 +2,18 @@
 # Симулятор интерфейса на ПК: собрать (LVGL + Core/Src/ui + заглушки),
 # прогнать сценарий и сохранить снимки экрана в tools/ui_sim/out/*.png.
 #
-#   tools/ui_sim/build.sh            сборка + запуск
+#   tools/ui_sim/build.sh            сборка + запуск (оба вида меню)
 #   tools/ui_sim/build.sh clean      удалить build/ и out/
 #
-# Нужны: MinGW-w64 gcc с поддержкой -m32 (multilib) + make — из PATH или из
-# каталога GCC_DIR (например, GCC_DIR=/c/mingw64/bin), Python с Pillow для
+# Вид меню 1 (список, как в прошивке по умолчанию) — полный сценарий: главный
+# экран, меню, общие экраны (снимки <тема>_NN_*, <тема>_menuA_*); вид 2
+# (плитки) — только меню (<тема>_menuB_*).
+#
+# Сначала — проверка шрифтов: каждый символ строк интерфейса есть в шрифтах
+# (tools/ui_sim/fonts/gen_fonts.py --check), иначе на экране был бы пустой
+# прямоугольник.
+#
+# Нужны: MinGW gcc + make (из PATH или каталога GCC_DIR), Python с Pillow для
 # перевода BMP -> PNG (без Pillow останутся BMP).
 set -e
 cd "$(dirname "$0")"
@@ -15,6 +22,7 @@ if [ -n "$GCC_DIR" ]; then
 	PATH="$GCC_DIR:$PATH"
 	export PATH
 fi
+PY=${PYTHON:-python}
 
 if [ "$1" = "clean" ]; then
 	make clean
@@ -22,13 +30,16 @@ if [ "$1" = "clean" ]; then
 	exit 0
 fi
 
-make -j8 CC=gcc
+"$PY" fonts/gen_fonts.py --check
+
+make -j8 CC=gcc MENU=1
+make -j8 CC=gcc MENU=2
 
 mkdir -p out
 rm -f out/*.bmp out/*.png
-./build/ui_sim.exe out
+./build/menu1/ui_sim.exe out
+./build/menu2/ui_sim.exe out
 
-PY=${PYTHON:-python}
 if "$PY" -c "import PIL" 2>/dev/null; then
 	"$PY" - <<'PYEOF'
 import glob, os

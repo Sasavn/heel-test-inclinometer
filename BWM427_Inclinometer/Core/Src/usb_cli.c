@@ -35,6 +35,7 @@
 #include "settings.h"
 #include "usb_device.h"
 #include "usbd_cdc_if.h"
+#include "version.h"
 
 extern TIM_HandleTypeDef htim3;
 
@@ -445,7 +446,7 @@ void usb_cli_boot_check(void) {
 
 static void cmd_help(void) {
 	cli_line("BWM427 USB CLI, commands (case-insensitive, end with CR/LF):");
-	cli_line("  ver            firmware build date/time, HAL, chip UID");
+	cli_line("  ver            firmware version, build date/time, HAL, chip UID");
 	cli_line("  diag           one-shot status dump");
 	cli_line("  diag reset     zero bus statistics (reply latency, timeouts, CRC, cycle)");
 	cli_line("  stream N       status line 'S,...' every N ms (0 = off, %u..%u)",
@@ -459,12 +460,21 @@ static void cmd_help(void) {
 	cli_line("  set batalarm X battery low alarm below X V, %u..%u (default %s)",
 			(unsigned) APP_BAT_ALARM_MIN_V, (unsigned) APP_BAT_ALARM_MAX_V,
 			fx(APP_BAT_ALARM_DEFAULT_V, 1));
+	cli_line("  set rollwin N  roll window, %u..%u s (default %u)",
+			(unsigned) APP_ROLL_WIN_MIN_S, (unsigned) APP_ROLL_WIN_MAX_S,
+			(unsigned) APP_ROLL_WIN_DEF_S);
+	cli_line("  set rollhz N   roll samples per second, %u..%u (default %u)",
+			(unsigned) APP_ROLL_RATE_MIN_HZ, (unsigned) APP_ROLL_RATE_MAX_HZ,
+			(unsigned) APP_ROLL_RATE_DEF_HZ);
+	cli_line("  set rollcalm X calm threshold, deg (default %s)", fx(APP_ROLL_CALM_DEF_DEG, 2));
+	cli_line("  set rollhyst X calm hysteresis, deg (default %s)", fx(APP_ROLL_HYST_DEF_DEG, 2));
 	cli_line("                 settings go to flash %u s after the last change",
 			(unsigned) (SETTINGS_SAVE_DELAY_MS / 1000u));
 	cli_line("                 (not while recording: after it stops)");
 	cli_line("  boot | dfu     reboot into STM32 system bootloader (USB DFU 0483:DF11)");
 	cli_line("  boot force     ... even while recording to SD");
 	cli_line("  reset [force]  reboot the firmware");
+	usb_cli_ext_help();
 	cli_line("  help");
 	cli_line("OK");
 }
@@ -472,7 +482,7 @@ static void cmd_help(void) {
 static void cmd_ver(void) {
 	const volatile uint32_t *uid = (const volatile uint32_t *) UID_BASE;
 	uint32_t hal = HAL_GetHalVersion();
-	cli_line("BWM427 inclinometer firmware, build " __DATE__ " " __TIME__);
+	cli_line("BWM427 inclinometer firmware v" FW_VERSION ", build " __DATE__ " " __TIME__);
 	cli_line("HAL %lu.%lu.%lu, SYSCLK %lu MHz, UID %08lX%08lX%08lX",
 			(unsigned long) (hal >> 24), (unsigned long) ((hal >> 16) & 0xFFu),
 			(unsigned long) ((hal >> 8) & 0xFFu),
@@ -608,6 +618,10 @@ static void cmd_diag(const char *arg) {
 				sensor_status_str(s->status), fx(s->x, 3), fx(s->y, 3),
 				(unsigned long) s->ok_count, (unsigned long) s->err_count,
 				(unsigned long) s->garbled_count, sensor_err_str(s->last_err), since);
+		// Качка по осям: размах за окно, покой по X,Y (1/0), накоплено окна
+		cli_line("  roll x=%s y=%s deg calm=%u,%u fill=%u/%u s", fx(s->roll_x, 3),
+				fx(s->roll_y, 3), s->calm_x ? 1u : 0u, s->calm_y ? 1u : 0u,
+				(unsigned) s->roll_fill_s, (unsigned) g_app.roll_window_s);
 	}
 	cli_line("rate actual=%s Hz, log_freq=%u Hz, ema_alpha=%s", fx(g_app.actual_rate_hz, 1),
 			(unsigned) g_app.log_freq_hz, fx(g_app.ema_alpha, 2));
@@ -617,6 +631,12 @@ static void cmd_diag(const char *arg) {
 			(unsigned long) g_app.rec_rows,
 			(unsigned long) (g_app.sd_state == SD_RECORDING ?
 					(now - g_app.rec_start_ms) / 1000u : 0u));
+	if (g_app.sd_free_mb != APP_SD_FREE_UNKNOWN) {
+		cli_line("sd space total=%lu MB free=%lu MB", (unsigned long) g_app.sd_total_mb,
+				(unsigned long) g_app.sd_free_mb);
+	} else {
+		cli_line("sd space total=%lu MB free=unknown", (unsigned long) g_app.sd_total_mb);
+	}
 	cli_diag_files();
 	cli_diag_battery();
 	const app_time_t *t = &g_app.time;
@@ -625,12 +645,14 @@ static void cmd_diag(const char *arg) {
 			(unsigned) t->minutes, (unsigned) t->seconds, g_app.rtc_present ? "yes" : "no");
 	cli_line("rec_switch %s", g_app.rec_switch_on ? "ON" : "OFF");
 	if (g_app.stab_sensor < APP_SENSOR_COUNT) {
-		cli_line("stability %s, span %s deg, ref sensor D%u",
+		cli_line("stability %s, span %s deg, ref sensor D%u %c, fill=%u/%u s",
 				g_app.is_stable ? "STABLE" : "UNSTABLE", fx(g_app.stab_span, 3),
-				(unsigned) APP_SENSOR_ADDR(g_app.stab_sensor));
+				(unsigned) APP_SENSOR_ADDR(g_app.stab_sensor), g_app.stab_axis ? 'Y' : 'X',
+				(unsigned) g_app.stab_fill_s, (unsigned) g_app.roll_window_s);
 	} else {
-		cli_line("stability %s, span %s deg, ref sensor none",
-				g_app.is_stable ? "STABLE" : "UNSTABLE", fx(g_app.stab_span, 3));
+		cli_line("stability %s, span %s deg, ref sensor none, fill=%u/%u s",
+				g_app.is_stable ? "STABLE" : "UNSTABLE", fx(g_app.stab_span, 3),
+				(unsigned) g_app.stab_fill_s, (unsigned) g_app.roll_window_s);
 	}
 	cli_line("bus gap %u ms", (unsigned) g_app.bus_gap_ms);
 	cli_diag_bus();
@@ -736,7 +758,8 @@ static void cmd_stream(const char *arg) {
 
 static void cmd_set_usage(void) {
 	cli_line("ERR usage: set freq N | set alpha X | set gap N | set theme dark|light"
-			" | set batalarm X");
+			" | set batalarm X | set rollwin N | set rollhz N | set rollcalm X"
+			" | set rollhyst X");
 }
 
 // Когда значение попадёт во флеш
@@ -798,6 +821,34 @@ static void cmd_set(const char *arg) {
 		}
 		app_set_bat_alarm(f);
 		cli_line("OK batalarm=%s V (%s)", fx(g_app.bat_alarm_v, 2), cmd_set_note());
+	} else if (word_is(arg, "rollwin")) {
+		if (!parse_u32(val, &n)) {
+			cmd_set_usage();
+			return;
+		}
+		app_set_roll_window((uint8_t) (n > 0xFFu ? 0xFFu : n));
+		cli_line("OK rollwin=%u s (%s)", (unsigned) g_app.roll_window_s, cmd_set_note());
+	} else if (word_is(arg, "rollhz")) {
+		if (!parse_u32(val, &n)) {
+			cmd_set_usage();
+			return;
+		}
+		app_set_roll_rate((uint8_t) (n > 0xFFu ? 0xFFu : n));
+		cli_line("OK rollhz=%u Hz (%s)", (unsigned) g_app.roll_rate_hz, cmd_set_note());
+	} else if (word_is(arg, "rollcalm")) {
+		if (!parse_decimal(val, &f)) {
+			cmd_set_usage();
+			return;
+		}
+		app_set_roll_calm(f);
+		cli_line("OK rollcalm=%s deg (%s)", fx(g_app.roll_calm_deg, 2), cmd_set_note());
+	} else if (word_is(arg, "rollhyst")) {
+		if (!parse_decimal(val, &f)) {
+			cmd_set_usage();
+			return;
+		}
+		app_set_roll_hyst(f);
+		cli_line("OK rollhyst=%s deg (%s)", fx(g_app.roll_hyst_deg, 2), cmd_set_note());
 	} else {
 		cmd_set_usage();
 	}
@@ -817,6 +868,15 @@ static void cmd_reboot(const char *name, const char *arg, bool to_bootloader) {
 	cli_reboot(to_bootloader);
 }
 
+// Вывод для команд из usb_cli_ext.c (status, files, get…)
+void usb_cli_out(const char *s, uint32_t n) {
+	cli_write(s, n);
+}
+
+uint32_t usb_cli_out_free(void) {
+	return cli_port_ready() ? CLI_TX_SIZE - (s_tx_head - s_tx_tail) : 0u;
+}
+
 // line: нижний регистр, без ведущих пробелов
 static void cli_exec(char *line) {
 	size_t n = strlen(line);
@@ -833,7 +893,9 @@ static void cli_exec(char *line) {
 		}
 	}
 
-	if (strcmp(line, "help") == 0 || strcmp(line, "?") == 0) {
+	if (usb_cli_ext_exec(line, arg)) {
+		// status, set time, addr, zero, files, get — usb_cli_ext.c
+	} else if (strcmp(line, "help") == 0 || strcmp(line, "?") == 0) {
 		cmd_help();
 	} else if (strcmp(line, "ver") == 0) {
 		cmd_ver();
@@ -989,6 +1051,8 @@ void usb_cli_task(void) {
 			stream_emit(now);
 		}
 	}
+
+	usb_cli_ext_task(now); // files / get: очередная порция
 
 	cli_tx_pump(now);
 }

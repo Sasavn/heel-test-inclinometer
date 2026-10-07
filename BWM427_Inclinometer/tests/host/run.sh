@@ -15,3 +15,9 @@ mkdir -p "$OUT"
 	Core/Src/bwm427.c Core/Src/sd_logger.c Core/Src/app.c Core/Src/settings.c \
 	-lm -o "$OUT/host_tests.exe"
 "$OUT/host_tests.exe"
+# Команды USB для программы на ПК (usb_cli_ext.c): своя имитация FatFs с чтением
+"$CC" -std=gnu11 -O1 -g -Wall -Wextra -Wno-unused-parameter 	-D__USE_MINGW_ANSI_STDIO=1 	-include tests/host/stub/ff_integer_host.h 	-Itests/host/stub -Itests/host -ICore/Inc -IFATFS/Target 	-IMiddlewares/Third_Party/FatFs/src 	tests/host/test_cli_ext.c Core/Src/usb_cli_ext.c 	-o "$OUT/cli_ext_tests.exe"
+"$OUT/cli_ext_tests.exe"
+
+# Все символы строк интерфейса есть в шрифтах (иначе — пустые прямоугольники)
+"${PYTHON:-python}" tools/ui_sim/fonts/gen_fonts.py --check

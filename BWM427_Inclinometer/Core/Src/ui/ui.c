@@ -1,7 +1,7 @@
 /*
  * ui.c — интерфейс прибора на LVGL v9: инициализация, суперцикл, темы,
  * общие стили и помощники. Экраны: ui_main.c (главный), ui_settings.c (меню,
- * дата/время, смена Modbus-адреса).
+ * дата/время, смена Modbus-адреса), ui_sd.c (карта памяти), ui_help.c (справка).
  *
  * Интерфейс только читает g_app и вызывает app_*(); своих копий настроек не
  * держит (кроме значений, которые прямо сейчас редактируются).
@@ -11,6 +11,11 @@
  *   нажатие на поле   — режим правки (жёлтая рамка и подложка), вращение
  *                       меняет значение, повторное нажатие — выход из правки;
  *   нажатие на кнопку — действие; на «Ноль» удержание 1 с — сброс нуля.
+ *
+ * Экраны: главный и корень меню живут всё время; остальные (дата и время,
+ * адрес, карта памяти, справка, подменю плиток) временные — строятся при
+ * входе и удаляются вместе со своей группой энкодера при уходе с них
+ * (ui_screen_create_temp): так куча LVGL держит не больше трёх экранов.
  *
  * Темы (тёмная / светлая): все цвета — роли ui_col_t. Общие стили красятся
  * заново и рассылаются через lv_obj_report_style_change(), а объекты со
@@ -88,9 +93,11 @@ static const uint32_t theme_tab[2][UI_C_COUNT] = {
 
 static uint8_t theme_cur = APP_THEME_DARK;
 
-// Все экраны (для перекраски при смене темы)
-#define UI_SCREEN_MAX 6
+// Действующие экраны (для перекраски при смене темы); временный экран
+// убирается отсюда сразу, как с него ушли, а удаляется чуть позже
+#define UI_SCREEN_MAX 8
 static lv_obj_t *screens[UI_SCREEN_MAX];
+static bool screen_temp[UI_SCREEN_MAX];
 static uint8_t screen_cnt;
 
 static lv_style_t st_screen;    // фон экрана
@@ -102,6 +109,7 @@ static lv_style_t st_btn_focus; // в фокусе
 static lv_style_t st_btn_edit;  // редактируется
 static lv_style_t st_box;       // простой залитый прямоугольник
 static lv_style_t st_chip;      // плашка (скруглённая подложка метки)
+static lv_style_t st_scrollbar; // полоса прокрутки списков
 
 static uint32_t last_update_ms;
 
@@ -153,6 +161,14 @@ static void styles_init(void) {
 	lv_style_set_radius(&st_chip, 9);
 	lv_style_set_pad_hor(&st_chip, 7);
 	lv_style_set_pad_ver(&st_chip, 1);
+
+	// Узкая полоса у правого края: где мы в списке и что он длиннее экрана
+	lv_style_init(&st_scrollbar);
+	lv_style_set_bg_opa(&st_scrollbar, LV_OPA_COVER);
+	lv_style_set_width(&st_scrollbar, 3);
+	lv_style_set_radius(&st_scrollbar, 2);
+	lv_style_set_pad_right(&st_scrollbar, 2);
+	lv_style_set_pad_ver(&st_scrollbar, 4);
 }
 
 // Цвета общих стилей — из текущей темы (при старте и при смене темы)
@@ -178,6 +194,8 @@ static void styles_set_colors(void) {
 	lv_style_set_border_color(&st_btn_edit, ui_color(UI_C_EDIT));
 	lv_style_set_bg_color(&st_btn_edit, ui_color(UI_C_EDIT_BG));
 	lv_style_set_text_color(&st_btn_edit, ui_color(UI_C_EDIT_TEXT));
+
+	lv_style_set_bg_color(&st_scrollbar, ui_color(UI_C_GREY));
 }
 
 /*--------------------------------------------------------------------
@@ -263,13 +281,68 @@ void ui_theme_sync(void) {
 /*--------------------------------------------------------------------
  * Создание объектов
  *--------------------------------------------------------------------*/
-lv_obj_t* ui_screen_create(void) {
+static int screen_index(const lv_obj_t *scr) {
+	for (uint8_t i = 0; i < screen_cnt; i++) {
+		if (screens[i] == scr)
+			return i;
+	}
+	return -1;
+}
+
+static void screen_forget(int i) {
+	screen_cnt--;
+	screens[i] = screens[screen_cnt];
+	screen_temp[i] = screen_temp[screen_cnt];
+}
+
+// Экран удаляется: удалить и его группу (user_data). Событие приходит
+// раньше, чем удаляются дети, поэтому группа удаляется, пока они в ней
+static void screen_delete_cb(lv_event_t *e) {
+	int i = screen_index(lv_event_get_current_target(e));
+	if (i >= 0)
+		screen_forget(i);
+	lv_group_t *g = lv_event_get_user_data(e);
+	if (g != NULL)
+		lv_group_delete(g);
+}
+
+static lv_obj_t* screen_new(lv_group_t *temp_grp) {
 	lv_obj_t *scr = lv_obj_create(NULL);
 	lv_obj_add_style(scr, &st_screen, 0);
 	lv_obj_set_scrollable(scr, false);
-	LV_ASSERT(screen_cnt < UI_SCREEN_MAX);
-	screens[screen_cnt++] = scr;
+	// Одновременно живут главный экран, корень меню и один временный — с
+	// запасом; при переполнении экран просто не перекрасится при смене темы
+	// (LV_ASSERT здесь пустой: LV_USE_ASSERT выключен)
+	if (screen_cnt < UI_SCREEN_MAX) {
+		screens[screen_cnt] = scr;
+		screen_temp[screen_cnt] = (temp_grp != NULL);
+		screen_cnt++;
+	}
+	lv_obj_add_event_cb(scr, screen_delete_cb, LV_EVENT_DELETE, temp_grp);
 	return scr;
+}
+
+lv_obj_t* ui_screen_create(void) {
+	return screen_new(NULL);
+}
+
+lv_obj_t* ui_screen_create_temp(lv_group_t *g) {
+	return screen_new(g);
+}
+
+bool ui_screen_alive(const lv_obj_t *scr) {
+	return scr != NULL && screen_index(scr) >= 0;
+}
+
+// Ушли с временного экрана — удалить его. Обычно мы ещё внутри обработки
+// нажатия на нём (LVGL после обработчика обращается к его группе), поэтому
+// удаление — отложенное, а из списка действующих экран убирается сразу
+static void leave_screen(lv_obj_t *old, lv_obj_t *scr) {
+	int i = screen_index(old);
+	if (old != scr && i >= 0 && screen_temp[i]) {
+		screen_forget(i);
+		lv_obj_delete_async(old);
+	}
 }
 
 lv_obj_t* ui_box_create(lv_obj_t *parent, int32_t x, int32_t y, int32_t w, int32_t h,
@@ -344,10 +417,34 @@ lv_obj_t* ui_title_create(lv_obj_t *scr, const char *icon, const char *text) {
 	lv_label_set_text_static(ic, icon);
 	lv_obj_align(ic, LV_ALIGN_LEFT_MID, 10, 0);
 
+	// Текст — с 38 px, а после широкого значка (батарея) — с отступом 6 px
+	int32_t x = 10 + ui_text_width(icon, UI_FONT_MID) + 6;
 	lv_obj_t *l = ui_label_create(bar, UI_FONT_MID, UI_C_TEXT);
 	lv_label_set_text_static(l, text);
-	lv_obj_align(l, LV_ALIGN_LEFT_MID, 38, 0);
+	lv_obj_align(l, LV_ALIGN_LEFT_MID, x > 38 ? x : 38, 0);
 	return bar;
+}
+
+lv_obj_t* ui_action_button_create(lv_obj_t *parent, lv_group_t *g, int32_t x, int32_t y,
+		int32_t w, int32_t h, const char *text, lv_event_cb_t cb) {
+	lv_obj_t *b = ui_button_create(parent, g, x, y, w, h);
+	lv_obj_t *l = lv_label_create(b);
+	lv_obj_set_style_text_font(l, UI_FONT_MID, 0);
+	lv_label_set_text_static(l, text);
+	lv_obj_center(l);
+	lv_obj_add_event_cb(b, cb, LV_EVENT_SHORT_CLICKED, NULL);
+	return b;
+}
+
+lv_obj_t* ui_scroll_create(lv_obj_t *parent, int32_t x, int32_t y, int32_t w, int32_t h) {
+	lv_obj_t *o = lv_obj_create(parent); // без темы: прозрачный, без рамки и полей
+	lv_obj_add_style(o, &st_scrollbar, LV_PART_SCROLLBAR);
+	lv_obj_set_scroll_dir(o, LV_DIR_VER);
+	lv_obj_set_scrollbar_mode(o, LV_SCROLLBAR_MODE_AUTO);
+	lv_obj_set_clickable(o, false);
+	lv_obj_set_pos(o, x, y);
+	lv_obj_set_size(o, w, h);
+	return o;
 }
 
 /*--------------------------------------------------------------------
@@ -374,17 +471,25 @@ static void field_event_cb(lv_event_t *e) {
 }
 
 // Указатели на функции нельзя класть в void* user_data (ISO C), поэтому
-// храним их в статической таблице и передаём адрес ячейки
-#define UI_FIELD_MAX 12
+// храним их в статической таблице и передаём адрес ячейки. Временные экраны
+// создают свои поля при каждом входе — ячейка одной функции общая, таблица
+// не растёт (UI_FIELD_MAX — число разных функций шага во всём интерфейсе)
+#define UI_FIELD_MAX 16
 static ui_step_cb_t field_cbs[UI_FIELD_MAX];
 static uint8_t field_cnt;
 
 void ui_field_attach(lv_obj_t *btn, ui_step_cb_t cb) {
-	LV_ASSERT(field_cnt < UI_FIELD_MAX);
-	field_cbs[field_cnt] = cb;
-	lv_obj_add_event_cb(btn, field_event_cb, LV_EVENT_SHORT_CLICKED, &field_cbs[field_cnt]);
-	lv_obj_add_event_cb(btn, field_event_cb, LV_EVENT_KEY, &field_cbs[field_cnt]);
-	field_cnt++;
+	uint8_t i = 0;
+	while (i < field_cnt && field_cbs[i] != cb)
+		i++;
+	if (i == field_cnt) {
+		LV_ASSERT(field_cnt < UI_FIELD_MAX);
+		if (field_cnt >= UI_FIELD_MAX)
+			return; // поле не будет правиться, но и память не испорчена
+		field_cbs[field_cnt++] = cb;
+	}
+	lv_obj_add_event_cb(btn, field_event_cb, LV_EVENT_SHORT_CLICKED, &field_cbs[i]);
+	lv_obj_add_event_cb(btn, field_event_cb, LV_EVENT_KEY, &field_cbs[i]);
 }
 
 /*--------------------------------------------------------------------
@@ -425,7 +530,21 @@ void ui_show(lv_obj_t *scr, lv_group_t *g) {
 	if (first)
 		lv_group_focus_obj(first);
 	lv_indev_wait_release(ui_indev); // не считать текущее нажатие новым экраном
+	lv_obj_t *prev = lv_screen_active();
 	lv_screen_load(scr);
+	leave_screen(prev, scr);
+}
+
+void ui_show_back(lv_obj_t *scr, lv_group_t *g) {
+	lv_group_t *old = lv_indev_get_group(ui_indev);
+	if (old)
+		lv_group_set_editing(old, false);
+	lv_group_set_editing(g, false);
+	lv_indev_set_group(ui_indev, g);
+	lv_indev_wait_release(ui_indev);
+	lv_obj_t *prev = lv_screen_active();
+	lv_screen_load(scr);
+	leave_screen(prev, scr);
 }
 
 /*--------------------------------------------------------------------

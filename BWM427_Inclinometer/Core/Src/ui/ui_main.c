@@ -1,45 +1,58 @@
 /*
  * ui_main.c — главный экран: строка состояния, карточки двух датчиков,
- * качка, органы управления (Частота, Фильтр α, Ноль, Меню).
+ * качка, органы управления (кораблик, Частота, Ноль, Меню).
  *
- *  y   0..21   14:36 [ЗАП] [SD M007]         ЦП 23%  11.8 В
- *  y  26..91   ┌ Д2 ●              X   +0.12° ┐   карточка датчика:
- *              └ [OK]              Y   −1.23° ┘   имя, плашка состояния, X/Y
+ *  y   0..21   07.10 14:36:21 [ЗАП]          ЦП 23%  11.8 В
+ *  y  26..91   ┌ Д2 ●                         ✓ OK ┐  карточка датчика: шапка
+ *              │ X  +0.12°   покой                 │  (имя, запись, связь),
+ *              └ Y  −1.23°   качка 1.23°           ┘  по осям — угол и качка
  *  y  95..160  ┌ Д3 ... ┐
- *  y 164..185  [✓ ГОТОВ] / [КАЧКА 1.23°]           запись 01:05
- *  y 190..235  [Частота][Фильтр][Ноль][Меню]
+ *  y 164..185  [✓ ГОТОВ] / [КАЧКА 1.23° Д3 X]      запись 01:05
+ *  y 190..235  [кораблик][Частота][Ноль][Меню]
  *
- * В строке состояния нет места для даты и секунд (они — в меню и на экране
- * даты и времени). Напряжение питания ниже порога (g_app.battery_low) —
- * тревога: плашка напряжения мигает, как «ЗАП», а в строке сообщений
- * красная надпись (важнее всех, кроме только что показанного сообщения).
+ * Качка — по каждой оси каждого датчика (логика: sensor[i].roll_x/roll_y —
+ * размах за окно g_app.roll_window_s, calm_x/calm_y — покой с гистерезисом):
+ * «покой» (зелёный) / «качка 1.23°» (оранжевый) / «сбор 12 с» (серый, окно
+ * ещё не набрано). Плашка внизу — сводка: ГОТОВ, только если в покое все оси
+ * всех отвечающих датчиков, иначе худшая ось или сбор окна.
+ *
+ * Плашка записи: ЗАП (мигает) / СТОП / СБОЙ (ошибка SD, код — в строке
+ * сообщений) / НЕТ SD; подробности о карте — в меню «Карта памяти».
+ * Напряжение питания ниже порога (g_app.battery_low) — тревога: плашка
+ * напряжения мигает, как «ЗАП», а в строке сообщений красная надпись (важнее
+ * всех, кроме только что показанного сообщения).
+ *
+ * Левая ячейка органов управления — место под будущую функцию; пока в ней
+ * кораблик (рисуется примитивами LVGL в цветах темы), в фокус она не попадает.
  */
 #include "ui_internal.h"
 
 // --- Раскладка ---
 #define BAR_H           22
-#define REC_X           50      // плашка записи: правее часов «00:00» (5 + 39 + 6)
-// Справа налево: плашка напряжения, загрузка ЦП, плашка карты
+// Слева направо: дата, время, плашка записи
+#define BAR_PAD_L       5
+#define BAR_GAP_L       6       // между датой, временем и плашкой записи
+// Справа налево: плашка напряжения, загрузка ЦП
 #define BAT_PAD         4       // поля плашки напряжения (залита при тревоге)
-#define BAT_R           2       // от правого края экрана (текст — в 6 px, как часы слева)
+#define BAT_R           2       // от правого края экрана (текст — в 6 px, как дата слева)
 #define BAT_GAP         8       // между загрузкой ЦП и плашкой напряжения
 #define CPU_CAP_GAP     4       // между «ЦП» и числом (ширина пробела)
-#define SD_GAP          6       // между плашкой карты и загрузкой ЦП
 #define CARD_X          4
 #define CARD_W          (UI_W - 2 * CARD_X)
 #define CARD_H          66
 #define CARD_Y0         26
 #define CARD_STEP       (CARD_H + 3)
-// Внутри карточки (координаты от внутреннего края рамки 1 px)
-#define NAME_X          9
-#define VAL_RIGHT       302     // правый край чисел
-#define VAL_W           146     // "−88.88°" шрифтом ui_font_num
-#define VAL_X           (VAL_RIGHT - VAL_W)
-#define CAP_X           (VAL_X - 20)  // подпись X / Y слева от чисел
-#define ROW_X_Y         4       // строка X
-#define ROW_Y_Y         35      // строка Y
-#define CHIP_Y          37      // плашка состояния под именем
-#define CHIP_Y_2LINE    28      // ... двухстрочная
+// Внутри карточки (координаты от внутреннего края рамки 1 px, высота 64):
+// шапка шрифтом 14 (строка 17 px, заглавные — с 3-го пикселя, поэтому метка
+// на 1 px выше края) и две строки цифр ui_font_num (22 px, шаг 24)
+#define HDR_X           8       // имя датчика
+#define HDR_Y           (-1)
+#define HDR_R           8       // состояние связи — у правого края
+#define CAP_X           8       // подпись X / Y
+#define VAL_X           26      // поле угла (ширина — под "−88.88°", val_w)
+#define ROLL_GAP        10      // от поля угла до «качка/покой»
+#define ROW_X_Y         16      // строка X
+#define ROW_Y_Y         40      // строка Y
 #define STAB_Y          164
 #define STAB_PAD        9       // поля плашки качки по горизонтали
 #define INFO_GAP        8       // зазор между плашкой качки и сообщением
@@ -55,7 +68,10 @@
 // Частота опроса считается «не успевает», если ниже уставки на 10 %
 #define RATE_LOW_RATIO  0.9f
 
-// Что сейчас показывает плашка состояния датчика
+// Качка по оси: выше этого размаха — красным, а не оранжевым
+#define ROLL_RED_DEG    3.0f
+
+// Что сейчас показывает надпись состояния связи датчика
 typedef enum {
 	CHIP_NONE = 0, CHIP_OK, CHIP_LOST, CHIP_ABSENT, CHIP_GARBLED
 } chip_state_t;
@@ -64,21 +80,24 @@ typedef struct {
 	lv_obj_t *card;
 	lv_obj_t *name;     // Д2, Д3
 	lv_obj_t *dot;      // ● — по этому датчику идёт запись
-	lv_obj_t *chip;     // OK / нет связи / не подключен / битые ответы
+	lv_obj_t *link;     // ✓ OK / нет связи / не подключен / битые ответы
 	lv_obj_t *val_x;
 	lv_obj_t *val_y;
+	lv_obj_t *roll_x;   // покой / качка 1.23° / сбор 12 с
+	lv_obj_t *roll_y;
 	chip_state_t shown; // что уже отрисовано
 } sensor_card_t;
 
 static lv_obj_t *scr;
 static lv_group_t *grp;
 
-static lv_obj_t *lbl_time, *pill_rec, *chip_sd, *lbl_cpu_cap, *lbl_cpu, *chip_bat;
+static lv_obj_t *lbl_date, *lbl_time, *pill_rec, *lbl_cpu_cap, *lbl_cpu, *chip_bat;
 static int32_t cpu_r;   // от правого края экрана до правого края числа загрузки ЦП
+static int32_t val_w;   // ширина поля угла: "−88.88°" шрифтом ui_font_num
 static sensor_card_t cards[APP_SENSOR_COUNT];
 static lv_obj_t *pill_stab, *lbl_info;
-static lv_obj_t *btn_freq, *btn_alpha, *btn_zero, *btn_menu;
-static lv_obj_t *val_freq, *val_alpha, *val_zero;
+static lv_obj_t *btn_freq, *btn_zero, *btn_menu;
+static lv_obj_t *val_freq, *val_zero;
 
 static const char *toast_text;
 static ui_col_t toast_color;
@@ -96,17 +115,6 @@ static void freq_step(int32_t step) {
 	if (hz != g_app.log_freq_hz)
 		app_set_log_freq((uint16_t) hz);
 	ui_main_update(lv_tick_get()); // показать сразу, не ждать 100 мс
-}
-
-static void alpha_step(int32_t step) {
-	// Считаем в сотых, чтобы не копить ошибку float
-	int32_t a = (int32_t) (g_app.ema_alpha * 100.0f + 0.5f) + step;
-	if (a < (int32_t) (APP_ALPHA_MIN * 100.0f + 0.5f))
-		a = (int32_t) (APP_ALPHA_MIN * 100.0f + 0.5f);
-	if (a > (int32_t) (APP_ALPHA_MAX * 100.0f + 0.5f))
-		a = (int32_t) (APP_ALPHA_MAX * 100.0f + 0.5f);
-	app_set_ema_alpha((float) a / 100.0f);
-	ui_main_update(lv_tick_get());
 }
 
 static void zero_event_cb(lv_event_t *e) {
@@ -151,47 +159,134 @@ static lv_obj_t* ctrl_create(int idx, const char *caption, lv_obj_t **value) {
 	return b;
 }
 
-// Число угла: правый край на VAL_RIGHT, ширина под самое длинное значение
+/*--------------------------------------------------------------------
+ * Кораблик: корпус с лицом, мачта, два паруса, флаг, волны — примитивы
+ * LVGL (треугольники, прямоугольники, дуги, линия) в цветах темы, без
+ * картинок. Рисуется только при перерисовке ячейки (она не меняется).
+ * Координаты — в рамке SHIP_W x SHIP_H по центру ячейки.
+ *--------------------------------------------------------------------*/
+#define SHIP_W          44
+#define SHIP_H          34
+
+static void ship_tri(lv_layer_t *layer, int32_t x0, int32_t y0, ui_col_t c,
+		int32_t ax, int32_t ay, int32_t bx, int32_t by, int32_t cx, int32_t cy) {
+	lv_draw_triangle_dsc_t d;
+	lv_draw_triangle_dsc_init(&d);
+	d.color = ui_color(c);
+	d.p[0].x = x0 + ax;
+	d.p[0].y = y0 + ay;
+	d.p[1].x = x0 + bx;
+	d.p[1].y = y0 + by;
+	d.p[2].x = x0 + cx;
+	d.p[2].y = y0 + cy;
+	lv_draw_triangle(layer, &d);
+}
+
+static void ship_rect(lv_layer_t *layer, int32_t x0, int32_t y0, ui_col_t c, int32_t radius,
+		int32_t x1, int32_t y1, int32_t x2, int32_t y2) {
+	lv_draw_rect_dsc_t d;
+	lv_draw_rect_dsc_init(&d);
+	d.bg_color = ui_color(c);
+	d.radius = radius;
+	lv_area_t a = { x0 + x1, y0 + y1, x0 + x2, y0 + y2 };
+	lv_draw_rect(layer, &d, &a);
+}
+
+// Дуга толщиной 2 px: углы в градусах, 0 — вправо, 90 — вниз
+static void ship_arc(lv_layer_t *layer, int32_t x0, int32_t y0, ui_col_t c, int32_t cx,
+		int32_t cy, int32_t r, int32_t start, int32_t end) {
+	lv_draw_arc_dsc_t d;
+	lv_draw_arc_dsc_init(&d);
+	d.color = ui_color(c);
+	d.width = 2;
+	d.rounded = 1;
+	d.center.x = x0 + cx;
+	d.center.y = y0 + cy;
+	d.radius = (uint16_t) r;
+	d.start_angle = start;
+	d.end_angle = end;
+	lv_draw_arc(layer, &d);
+}
+
+static void ship_draw_cb(lv_event_t *e) {
+	lv_obj_t *obj = lv_event_get_current_target(e);
+	lv_layer_t *layer = lv_event_get_layer(e);
+	lv_area_t a;
+	lv_obj_get_coords(obj, &a);
+	int32_t x0 = a.x1 + (lv_area_get_width(&a) - SHIP_W) / 2;
+	int32_t y0 = a.y1 + (lv_area_get_height(&a) - SHIP_H) / 2;
+
+	// Волны под корпусом
+	for (int32_t cx = 6; cx < SHIP_W; cx += 11)
+		ship_arc(layer, x0, y0, UI_C_ACCENT, cx, 35, 5, 205, 335);
+
+	// Мачта и флаг (развевается влево)
+	lv_draw_line_dsc_t l;
+	lv_draw_line_dsc_init(&l);
+	l.color = ui_color(UI_C_DIM);
+	l.width = 2;
+	l.p1.x = x0 + 22;
+	l.p1.y = y0 + 1;
+	l.p2.x = x0 + 22;
+	l.p2.y = y0 + 17;
+	lv_draw_line(layer, &l);
+	ship_tri(layer, x0, y0, UI_C_ACCENT, 21, 0, 21, 7, 13, 3);
+
+	// Паруса: большой справа от мачты, маленький слева
+	ship_tri(layer, x0, y0, UI_C_EDIT, 24, 3, 24, 15, 37, 15);
+	ship_tri(layer, x0, y0, UI_C_EDIT, 20, 7, 20, 15, 11, 15);
+
+	// Корпус: трапеция = прямоугольник + два треугольника (с нахлёстом 1 px)
+	ship_rect(layer, x0, y0, UI_C_RED, 2, 8, 17, 36, 28);
+	ship_tri(layer, x0, y0, UI_C_RED, 1, 17, 9, 17, 9, 28);
+	ship_tri(layer, x0, y0, UI_C_RED, 43, 17, 35, 17, 35, 28);
+
+	// Лицо: два иллюминатора-глаза и улыбка цветом карточки
+	ship_rect(layer, x0, y0, UI_C_CARD, LV_RADIUS_CIRCLE, 12, 19, 15, 22);
+	ship_rect(layer, x0, y0, UI_C_CARD, LV_RADIUS_CIRCLE, 29, 19, 32, 22);
+	ship_arc(layer, x0, y0, UI_C_CARD, 22, 21, 5, 25, 155);
+}
+
+// Число угла: правый край поля угла, ширина под самое длинное значение
 static lv_obj_t* value_label_create(lv_obj_t *parent, int32_t y) {
 	lv_obj_t *l = ui_label_create(parent, UI_FONT_NUM, UI_C_TEXT);
 	lv_label_set_long_mode(l, LV_LABEL_LONG_MODE_CLIP);
 	lv_obj_set_style_text_align(l, LV_TEXT_ALIGN_RIGHT, 0);
-	lv_obj_set_size(l, VAL_W, lv_font_get_line_height(UI_FONT_NUM));
+	lv_obj_set_size(l, val_w, lv_font_get_line_height(UI_FONT_NUM));
 	lv_obj_set_pos(l, VAL_X, y);
 	return l;
 }
 
-// Подпись строки (X / Y) — по высоте посередине цифр
-static void caption_create(lv_obj_t *parent, const char *text, int32_t row_y) {
-	lv_obj_t *l = ui_label_create(parent, UI_FONT_MID, UI_C_DIM);
-	lv_label_set_text_static(l, text);
-	lv_obj_set_pos(l, CAP_X, row_y + (lv_font_get_line_height(UI_FONT_NUM)
+// Надпись шрифтом 20 (подпись X / Y, качка по оси) — по высоте посередине цифр
+static lv_obj_t* row_label_create(lv_obj_t *parent, int32_t x, int32_t row_y, ui_col_t color) {
+	lv_obj_t *l = ui_label_create(parent, UI_FONT_MID, color);
+	lv_obj_set_pos(l, x, row_y + (lv_font_get_line_height(UI_FONT_NUM)
 			- lv_font_get_line_height(UI_FONT_MID)) / 2);
+	return l;
 }
 
 static void card_create(int i) {
 	sensor_card_t *c = &cards[i];
 	c->card = ui_card_create(scr, CARD_X, CARD_Y0 + i * CARD_STEP, CARD_W, CARD_H);
 
-	c->name = ui_label_create(c->card, UI_FONT_MID, UI_C_TEXT);
+	// Шапка: имя, точка записи, справа — состояние связи
+	c->name = ui_label_create(c->card, UI_FONT_SMALL, UI_C_TEXT);
 	lv_label_set_text_fmt(c->name, "Д%d", APP_SENSOR_ADDR(i));
-	lv_obj_set_pos(c->name, NAME_X, 4);
-
-	// Точка записи — справа от имени («Д2» и «Д3» одной ширины: цифры моноширинные)
-	c->dot = ui_box_create(c->card, NAME_X + 37, 12, 10, 10, UI_C_RED);
+	lv_obj_set_pos(c->name, HDR_X, HDR_Y);
+	int32_t name_w = ui_text_width("Д0", UI_FONT_SMALL); // цифры моноширинные
+	c->dot = ui_box_create(c->card, HDR_X + name_w + 6, 4, 8, 8, UI_C_RED);
 	lv_obj_set_style_radius(c->dot, LV_RADIUS_CIRCLE, 0);
 	lv_obj_set_hidden(c->dot, true);
+	c->link = ui_label_create(c->card, UI_FONT_SMALL, UI_C_DIM);
+	lv_obj_align(c->link, LV_ALIGN_TOP_RIGHT, -HDR_R, HDR_Y);
 
-	// Ширина плашки — не дальше подписей X/Y («не подключен» — самая длинная строка)
-	c->chip = ui_chip_create(c->card, UI_FONT_SMALL);
-	lv_obj_set_style_pad_hor(c->chip, 6, 0);
-	lv_obj_set_style_text_line_space(c->chip, -3, 0); // для двухстрочной плашки
-	lv_obj_set_pos(c->chip, NAME_X - 2, CHIP_Y);
-
-	caption_create(c->card, "X", ROW_X_Y);
-	caption_create(c->card, "Y", ROW_Y_Y);
+	// Строки осей: подпись, угол, качка
+	lv_label_set_text_static(row_label_create(c->card, CAP_X, ROW_X_Y, UI_C_DIM), "X");
+	lv_label_set_text_static(row_label_create(c->card, CAP_X, ROW_Y_Y, UI_C_DIM), "Y");
 	c->val_x = value_label_create(c->card, ROW_X_Y);
 	c->val_y = value_label_create(c->card, ROW_Y_Y);
+	c->roll_x = row_label_create(c->card, VAL_X + val_w + ROLL_GAP, ROW_X_Y, UI_C_DIM);
+	c->roll_y = row_label_create(c->card, VAL_X + val_w + ROLL_GAP, ROW_Y_Y, UI_C_DIM);
 
 	c->shown = CHIP_NONE;
 }
@@ -203,11 +298,20 @@ void ui_main_create(void) {
 	// --- Строка состояния ---
 	lv_obj_t *bar = ui_bar_create(scr, BAR_H);
 
+	// Дата и время: цифры моноширинные, поэтому места под «00.00» и
+	// «00:00:00» хватает при любом значении, и плашка записи не сдвигается
+	int32_t x = BAR_PAD_L;
+	lbl_date = ui_label_create(bar, UI_FONT_SMALL, UI_C_DIM);
+	lv_obj_align(lbl_date, LV_ALIGN_LEFT_MID, x, 0);
+	x += ui_text_width("00.00", UI_FONT_SMALL) + BAR_GAP_L;
 	lbl_time = ui_label_create(bar, UI_FONT_SMALL, UI_C_TEXT);
-	lv_obj_align(lbl_time, LV_ALIGN_LEFT_MID, 5, 0);
+	lv_obj_align(lbl_time, LV_ALIGN_LEFT_MID, x, 0);
+	x += ui_text_width("00:00:00", UI_FONT_SMALL) + BAR_GAP_L;
 
+	// Самая длинная надпись — «НЕТ SD»: до загрузки ЦП («ЦП 100%») остаётся
+	// не меньше 6 px (проверка в симуляторе)
 	pill_rec = ui_chip_create(bar, UI_FONT_SMALL);
-	lv_obj_align(pill_rec, LV_ALIGN_LEFT_MID, REC_X, 0);
+	lv_obj_align(pill_rec, LV_ALIGN_LEFT_MID, x, 0);
 
 	// Справа элементы прижаты к правому краю, и каждому оставлено место под
 	// самое длинное значение («28.8 В», «ЦП 100%»): соседи не сдвигаются.
@@ -223,14 +327,9 @@ void ui_main_create(void) {
 	lv_obj_align(lbl_cpu, LV_ALIGN_RIGHT_MID, -cpu_r, 0);
 	lbl_cpu_cap = ui_label_create(bar, UI_FONT_SMALL, UI_C_DIM);
 	lv_label_set_text_static(lbl_cpu_cap, "ЦП");
-	int32_t cpu_w = ui_text_width("ЦП", UI_FONT_SMALL) + CPU_CAP_GAP
-			+ ui_text_width("100%", UI_FONT_SMALL);
-
-	chip_sd = ui_chip_create(bar, UI_FONT_SMALL);
-	lv_obj_set_style_pad_hor(chip_sd, 6, 0);
-	lv_obj_align(chip_sd, LV_ALIGN_RIGHT_MID, -(cpu_r + cpu_w + SD_GAP), 0);
 
 	// --- Карточки датчиков ---
+	val_w = ui_text_width(UI_MINUS "88.88" UI_DEG, UI_FONT_NUM);
 	for (int i = 0; i < APP_SENSOR_COUNT; i++)
 		card_create(i);
 
@@ -251,11 +350,13 @@ void ui_main_create(void) {
 					- lv_font_get_line_height(UI_FONT_SMALL)) / 2);
 
 	// --- Органы управления (группа энкодера) ---
-	btn_freq = ctrl_create(0, "Частота", &val_freq);
-	ui_field_attach(btn_freq, freq_step);
+	// Левая ячейка: рамка как у кнопок, без группы и нажатий — с корабликом
+	lv_obj_t *slot = ui_button_create(scr, NULL, CTRL_GAP, CTRL_Y, CTRL_W, CTRL_H);
+	lv_obj_set_clickable(slot, false);
+	lv_obj_add_event_cb(slot, ship_draw_cb, LV_EVENT_DRAW_MAIN_END, NULL);
 
-	btn_alpha = ctrl_create(1, "Фильтр", &val_alpha);
-	ui_field_attach(btn_alpha, alpha_step);
+	btn_freq = ctrl_create(1, "Частота", &val_freq);
+	ui_field_attach(btn_freq, freq_step);
 
 	btn_zero = ctrl_create(2, "Ноль", &val_zero);
 	lv_obj_add_event_cb(btn_zero, zero_event_cb, LV_EVENT_SHORT_CLICKED, NULL);
@@ -322,56 +423,61 @@ static void update_status_bar(uint32_t now) {
 	char buf[32];
 	const app_time_t *t = &g_app.time;
 
-	lv_snprintf(buf, sizeof(buf), "%02u:%02u", t->hours, t->minutes);
+	lv_snprintf(buf, sizeof(buf), "%02u.%02u", t->date, t->month);
+	ui_set_text(lbl_date, buf);
+	lv_snprintf(buf, sizeof(buf), "%02u:%02u:%02u", t->hours, t->minutes, t->seconds);
 	ui_set_text(lbl_time, buf);
 	// Без DS3231 время после включения неверное — подсвечиваем
 	ui_set_text_color(lbl_time, g_app.rtc_present ? UI_C_TEXT : UI_C_ORANGE);
 
-	// Плашка записи (мигает заливкой) и плашка карты с номером замера
+	// Плашка записи; запись мигает заливкой
 	bool blink_on = ((now / UI_BLINK_MS) & 1U) == 0;
 	switch (g_app.sd_state) {
 	case SD_NO_CARD:
-		ui_set_hidden(pill_rec, true);
-		ui_set_text(chip_sd, LV_SYMBOL_SD_CARD " НЕТ SD");
-		ui_set_chip(chip_sd, UI_C_RED_BG, UI_C_RED);
-		ui_set_hidden(chip_sd, false);
+		ui_set_text(pill_rec, "НЕТ SD");
+		ui_set_chip(pill_rec, UI_C_RED_BG, UI_C_RED);
 		break;
 	case SD_READY:
+		ui_set_text(pill_rec, "СТОП");
+		ui_set_chip(pill_rec, UI_C_CHIP_BG, UI_C_DIM);
+		break;
 	case SD_RECORDING:
-		if (g_app.sd_state == SD_RECORDING) {
-			ui_set_text(pill_rec, "ЗАП");
-			if (blink_on)
-				ui_set_chip(pill_rec, UI_C_REC, UI_C_ON_REC);
-			else
-				ui_set_chip(pill_rec, UI_C_RED_BG, UI_C_RED);
-		} else {
-			ui_set_text(pill_rec, "СТОП");
-			ui_set_chip(pill_rec, UI_C_CHIP_BG, UI_C_DIM);
-		}
-		ui_set_hidden(pill_rec, false);
-		// Номер замера как в имени файла (2026-10-06_M007_D2.CSV); 0 — номера кончились
-		if (g_app.file_number != 0) {
-			lv_snprintf(buf, sizeof(buf), LV_SYMBOL_SD_CARD " M%03u", g_app.file_number);
-			ui_set_text(chip_sd, buf);
-			ui_set_chip(chip_sd, UI_C_CHIP_BG, UI_C_TEXT);
-		} else {
-			ui_set_text(chip_sd, LV_SYMBOL_SD_CARD " M" UI_DASH);
-			ui_set_chip(chip_sd, UI_C_ORANGE_BG, UI_C_ORANGE);
-		}
-		ui_set_hidden(chip_sd, false);
+		ui_set_text(pill_rec, "ЗАП");
+		if (blink_on)
+			ui_set_chip(pill_rec, UI_C_REC, UI_C_ON_REC);
+		else
+			ui_set_chip(pill_rec, UI_C_RED_BG, UI_C_RED);
 		break;
 	case SD_ERROR:
 	default:
-		// Длинная плашка занимает и место карты; код ошибки — в строке сообщений
-		ui_set_text(pill_rec, "ОШИБКА SD");
+		// Запись прервана ошибкой карты; код и что делать — в строке сообщений
+		ui_set_text(pill_rec, "СБОЙ");
 		ui_set_chip(pill_rec, UI_C_REC, UI_C_ON_REC);
-		ui_set_hidden(pill_rec, false);
-		ui_set_hidden(chip_sd, true);
 		break;
 	}
 
 	update_cpu();
 	update_battery(blink_on);
+}
+
+// Качка по оси датчика: только пока он отвечает
+static void update_roll(lv_obj_t *l, const app_sensor_t *s, float span, bool calm) {
+	char buf[24], num[16];
+	if (s->status != SENSOR_OK) {
+		ui_set_text(l, "");
+	} else if (s->roll_fill_s < g_app.roll_window_s) {
+		lv_snprintf(buf, sizeof(buf), "сбор %u с", (unsigned) s->roll_fill_s);
+		ui_set_text(l, buf);
+		ui_set_text_color(l, UI_C_DIM);
+	} else if (calm) {
+		ui_set_text(l, "покой");
+		ui_set_text_color(l, UI_C_GREEN);
+	} else {
+		ui_fmt_fixed(num, sizeof(num), span, 2, UI_DEG);
+		lv_snprintf(buf, sizeof(buf), "качка %s", num);
+		ui_set_text(l, buf);
+		ui_set_text_color(l, span > ROLL_RED_DEG ? UI_C_RED : UI_C_ORANGE);
+	}
 }
 
 static void update_sensor_card(int i, uint32_t now) {
@@ -396,35 +502,35 @@ static void update_sensor_card(int i, uint32_t now) {
 		ui_col_t val = UI_C_GREY;
 		switch (st) {
 		case CHIP_OK:
-			ui_set_text(c->chip, LV_SYMBOL_OK " OK");
-			ui_set_chip(c->chip, UI_C_GREEN_BG, UI_C_GREEN);
+			ui_set_text(c->link, LV_SYMBOL_OK " OK");
+			ui_set_text_color(c->link, UI_C_GREEN);
 			ui_set_border_color(c->card, UI_C_BORDER);
 			val = UI_C_TEXT;
 			break;
 		case CHIP_GARBLED:
-			ui_set_text(c->chip, "битые ответы:\nдубль адреса?");
-			ui_set_chip(c->chip, UI_C_RED_BG, UI_C_RED);
+			ui_set_text(c->link, LV_SYMBOL_WARNING " битые ответы: дубль адреса?");
+			ui_set_text_color(c->link, UI_C_RED);
 			ui_set_border_color(c->card, UI_C_RED);
 			break;
 		case CHIP_LOST:
 			// Последние значения серым
-			ui_set_text(c->chip, "нет связи");
-			ui_set_chip(c->chip, UI_C_ORANGE_BG, UI_C_ORANGE);
+			ui_set_text(c->link, "нет связи");
+			ui_set_text_color(c->link, UI_C_ORANGE);
 			ui_set_border_color(c->card, UI_C_ORANGE);
 			break;
 		case CHIP_ABSENT:
 		default:
-			ui_set_text(c->chip, "не подключен");
-			ui_set_chip(c->chip, UI_C_CHIP_BG, UI_C_DIM);
+			ui_set_text(c->link, "не подключен");
+			ui_set_text_color(c->link, UI_C_DIM);
 			ui_set_border_color(c->card, UI_C_BORDER);
 			break;
 		}
-		// Двухстрочная плашка поднимается ближе к имени
-		ui_set_y(c->chip, st == CHIP_GARBLED ? CHIP_Y_2LINE : CHIP_Y);
 		ui_set_text_color(c->name, s->status == SENSOR_ABSENT ? UI_C_GREY : UI_C_TEXT);
 		ui_set_text_color(c->val_x, val);
 		ui_set_text_color(c->val_y, val);
 	}
+	update_roll(c->roll_x, s, s->roll_x, s->calm_x);
+	update_roll(c->roll_y, s, s->roll_y, s->calm_y);
 
 	if (s->status == SENSOR_ABSENT) {
 		ui_set_text(c->val_x, UI_DASH);
@@ -452,28 +558,37 @@ static void update_stab(void) {
 	char buf[40];
 	bool changed;
 
-	// Готовность к отсчёту по качке опорного датчика (первого отвечающего);
-	// если опорный не первый (Д2), его номер — в скобках
+	// Сводка по всем осям всех отвечающих датчиков: ГОТОВ — все в покое;
+	// иначе худшая ось «КАЧКА 2.34° Д3 X»; пока окна не набраны — сбор
 	uint8_t ref = g_app.stab_sensor;
-	char who[12] = "";
-	if (ref != APP_STAB_NONE && ref != 0)
-		lv_snprintf(who, sizeof(who), " (Д%u)", (unsigned) APP_SENSOR_ADDR(ref));
-	if (ref == APP_STAB_NONE) {
+	if (ref >= APP_SENSOR_COUNT) {
 		changed = ui_set_text(pill_stab, "КАЧКА " UI_DASH);
 		ui_set_chip(pill_stab, UI_C_CHIP_BG, UI_C_GREY);
-	} else if (g_app.is_stable) {
-		lv_snprintf(buf, sizeof(buf), LV_SYMBOL_OK " ГОТОВ%s", who);
+	} else if (g_app.stab_fill_s < g_app.roll_window_s) {
+		lv_snprintf(buf, sizeof(buf), "сбор %u/%u с", (unsigned) g_app.stab_fill_s,
+				(unsigned) g_app.roll_window_s);
 		changed = ui_set_text(pill_stab, buf);
+		ui_set_chip(pill_stab, UI_C_CHIP_BG, UI_C_DIM);
+	} else if (g_app.is_stable) {
+		changed = ui_set_text(pill_stab, LV_SYMBOL_OK " ГОТОВ");
 		ui_set_chip(pill_stab, UI_C_GREEN_BG, UI_C_GREEN);
 	} else {
+		// 10° и больше — с одним знаком: плашка не теснит сообщение справа
 		char span[16];
-		ui_fmt_fixed(span, sizeof(span), g_app.stab_span, 2, UI_DEG);
-		lv_snprintf(buf, sizeof(buf), "КАЧКА %s%s", span, who);
+		ui_fmt_fixed(span, sizeof(span), g_app.stab_span, g_app.stab_span < 9.995f ? 2 : 1,
+				UI_DEG);
+		lv_snprintf(buf, sizeof(buf), "КАЧКА %s Д%u %s", span, (unsigned) APP_SENSOR_ADDR(ref),
+				g_app.stab_axis == 0 ? "X" : "Y");
 		changed = ui_set_text(pill_stab, buf);
 		ui_set_chip(pill_stab, UI_C_RED_BG, UI_C_RED);
 	}
 	if (changed)
 		fit_info_width();
+}
+
+// Помещается ли текст в строку сообщений (ширина — от плашки качки)
+static bool info_fits(const char *text) {
+	return ui_text_width(text, UI_FONT_SMALL) <= lv_obj_get_style_width(lbl_info, LV_PART_MAIN);
 }
 
 static void update_info(uint32_t now) {
@@ -489,11 +604,14 @@ static void update_info(uint32_t now) {
 	toast_text = NULL;
 
 	if (bat_alarm()) {
-		// «⚠ АКБ 9.6 В < 10.0 В»: коротко, чтобы влезло и рядом с «КАЧКА 1.23°»
+		// «⚠ АКБ 9.6 В < 10.0 В», а если рядом широкая плашка качки и не
+		// влезает — без порога: «⚠ АКБ 9.6 В»
 		char v[12], lim[12];
 		ui_fmt_fixed(v, sizeof(v), g_app.battery_v, 1, " В");
 		ui_fmt_fixed(lim, sizeof(lim), g_app.bat_alarm_v, 1, " В");
 		lv_snprintf(buf, sizeof(buf), LV_SYMBOL_WARNING " АКБ %s < %s", v, lim);
+		if (!info_fits(buf))
+			lv_snprintf(buf, sizeof(buf), LV_SYMBOL_WARNING " АКБ %s", v);
 		ui_set_text(lbl_info, buf);
 		ui_set_text_color(lbl_info, UI_C_RED);
 		return;
@@ -522,8 +640,13 @@ static void update_info(uint32_t now) {
 		ui_set_text(lbl_info, buf);
 		ui_set_text_color(lbl_info, UI_C_ORANGE);
 	} else if (g_app.sd_state == SD_ERROR) {
-		// Запись прервана: продолжится после возврата тумблера в STOP
-		lv_snprintf(buf, sizeof(buf), "E:%02u тумблер " UI_ARROW " СТОП", g_app.sd_err);
+		// Запись прервана (плашка «СБОЙ»): продолжится после возврата тумблера в
+		// STOP; рядом с широкой плашкой качки — короче
+		lv_snprintf(buf, sizeof(buf), "SD E:%02u тумблер " UI_ARROW " СТОП", g_app.sd_err);
+		if (!info_fits(buf))
+			lv_snprintf(buf, sizeof(buf), "E:%02u тумблер " UI_ARROW " СТОП", g_app.sd_err);
+		if (!info_fits(buf))
+			lv_snprintf(buf, sizeof(buf), "E:%02u " UI_ARROW " СТОП", g_app.sd_err);
 		ui_set_text(lbl_info, buf);
 		ui_set_text_color(lbl_info, UI_C_RED);
 	} else if (g_app.sd_state == SD_RECORDING) {
@@ -549,14 +672,10 @@ static void update_info(uint32_t now) {
 }
 
 static void update_controls(void) {
-	char buf[24], num[12];
+	char buf[24];
 
 	lv_snprintf(buf, sizeof(buf), "%u Гц", g_app.log_freq_hz);
 	ui_set_text(val_freq, buf);
-
-	ui_fmt_fixed(num, sizeof(num), g_app.ema_alpha, 2, "");
-	lv_snprintf(buf, sizeof(buf), UI_ALPHA " %s", num); // "α 0.15"
-	ui_set_text(val_alpha, buf);
 
 	bool zero_set = false;
 	for (int i = 0; i < APP_SENSOR_COUNT; i++) {

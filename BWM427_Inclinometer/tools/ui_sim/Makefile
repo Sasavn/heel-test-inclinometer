@@ -1,10 +1,16 @@
 # Симулятор интерфейса на ПК: LVGL + Core/Src/ui (без lv_port_*.c) + заглушки.
 # Обычно вызывается из build.sh. Компилятор — MinGW gcc хоста.
+#
+# MENU = 1 (UI_MENU_LIST) или 2 (UI_MENU_TILES) — вид меню (ui_internal.h).
+# LVGL собирается один раз (build/root), интерфейс и сценарий — для каждого
+# вида меню отдельно (build/menuN).
 
 ROOT    := ../..
 CC      ?= gcc
+MENU    ?= 1
 BUILD   := build
-TARGET  := $(BUILD)/ui_sim.exe
+VBUILD  := $(BUILD)/menu$(MENU)
+TARGET  := $(VBUILD)/ui_sim.exe
 
 LVGL_DIR := $(ROOT)/Middlewares/Third_Party/lvgl
 UI_DIR   := $(ROOT)/Core/Src/ui
@@ -22,31 +28,31 @@ DEFS := -DLV_CONF_INCLUDE_SIMPLE
 ARCH := -m32
 CFLAGS_COMMON := $(ARCH) -std=gnu11 -O1 -g $(DEFS) $(INC) -MMD -MP
 # Свой код (UI и симулятор) — со всеми предупреждениями
-CFLAGS_UI   := $(CFLAGS_COMMON) -Wall -Wextra -Wshadow -Wno-unused-parameter
+CFLAGS_UI   := $(CFLAGS_COMMON) -DUI_MENU_STYLE=$(MENU) -Wall -Wextra -Wshadow -Wno-unused-parameter
 # LVGL — как есть (предупреждения LVGL не наши)
 CFLAGS_LVGL := $(CFLAGS_COMMON) -w
 
 
 LVGL_OBJ := $(patsubst $(ROOT)/%.c,$(BUILD)/root/%.o,$(LVGL_SRC))
-UI_OBJ   := $(patsubst $(ROOT)/%.c,$(BUILD)/root/%.o,$(UI_SRC))
-SIM_OBJ  := $(patsubst %.c,$(BUILD)/sim/%.o,$(SIM_SRC))
+UI_OBJ   := $(patsubst $(ROOT)/%.c,$(VBUILD)/root/%.o,$(UI_SRC))
+SIM_OBJ  := $(patsubst %.c,$(VBUILD)/sim/%.o,$(SIM_SRC))
 
 .PHONY: all clean
 all: $(TARGET)
 
 $(TARGET): $(LVGL_OBJ) $(UI_OBJ) $(SIM_OBJ)
-	$(file >$(BUILD)/objects.list,$^)
-	$(CC) $(ARCH) @$(BUILD)/objects.list -o $@
+	$(file >$(VBUILD)/objects.list,$^)
+	$(CC) $(ARCH) @$(VBUILD)/objects.list -o $@
 
 $(LVGL_OBJ): $(BUILD)/root/%.o: $(ROOT)/%.c
 	@mkdir -p $(@D)
 	@$(CC) -c $(CFLAGS_LVGL) $< -o $@
 
-$(UI_OBJ): $(BUILD)/root/%.o: $(ROOT)/%.c
+$(UI_OBJ): $(VBUILD)/root/%.o: $(ROOT)/%.c
 	@mkdir -p $(@D)
 	$(CC) -c $(CFLAGS_UI) $< -o $@
 
-$(SIM_OBJ): $(BUILD)/sim/%.o: %.c
+$(SIM_OBJ): $(VBUILD)/sim/%.o: %.c
 	@mkdir -p $(@D)
 	$(CC) -c $(CFLAGS_UI) $< -o $@
 

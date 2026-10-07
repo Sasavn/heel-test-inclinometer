@@ -26,6 +26,10 @@
  * (см. fatfs_sd.c): попытка монтирования — 1-3 мс, проверка — до ~5 мс.
  * Карту вынули посреди записи — один таймаут занятости карты (до 500 мс),
  * дальше драйвер отвечает «не готова» сразу.
+ *
+ * Место на карте (g_app.sd_total_mb, sd_free_mb) — см. space_update():
+ * f_getfree только после монтирования и после остановки записи, во время
+ * записи — счётчик свободных кластеров, который FatFs ведёт сама.
  */
 #include "sd_logger.h"
 #include "main.h"
@@ -288,6 +292,51 @@ static FRESULT scan_numbers(void) {
 }
 
 /* ------------------------------------------------------------------------ */
+/* Место на карте                                                           */
+/* ------------------------------------------------------------------------ */
+
+// Кластеров -> МБ (сектор всегда 512 байт: _MIN_SS = _MAX_SS)
+static uint32_t clusters_mb(DWORD clusters) {
+	return (uint32_t) (((uint64_t) clusters * s_fs.csize * _MAX_SS) >> 20);
+}
+
+// Свободные кластеры известны FatFs без чтения карты: из FSInfo (FAT32,
+// _FS_NOFSINFO = 0 — счётчику FSInfo верим) или после прошлого f_getfree;
+// при записи FatFs уменьшает счётчик сама
+static bool free_known(void) {
+	return s_fs.free_clst <= s_fs.n_fatent - 2u;
+}
+
+// Во время записи: только счётчик FatFs, карту не трогаем
+static void space_from_cache(void) {
+	if (free_known()) {
+		g_app.sd_free_mb = clusters_mb(s_fs.free_clst);
+	}
+}
+
+// После монтирования и после записи. Если счётчик неизвестен, f_getfree
+// обходит всю FAT: на FAT12/16 это до 256 секторов (~0.1 с, раз при
+// монтировании), а на большой FAT32 без FSInfo — десятки тысяч секторов
+// (секунды, суперцикл стоит) — такой обход не делаем, место «неизвестно»
+static void space_update(void) {
+	g_app.sd_total_mb = clusters_mb(s_fs.n_fatent - 2u);
+	g_app.sd_free_mb = APP_SD_FREE_UNKNOWN;
+	if (s_fs.fs_type == FS_FAT32 && !free_known()) {
+		return;
+	}
+	DWORD nfree;
+	FATFS *fs;
+	if (f_getfree("", &nfree, &fs) == FR_OK) {
+		g_app.sd_free_mb = clusters_mb(nfree);
+	}
+}
+
+static void space_clear(void) {
+	g_app.sd_total_mb = 0;
+	g_app.sd_free_mb = APP_SD_FREE_UNKNOWN;
+}
+
+/* ------------------------------------------------------------------------ */
 /* Карта                                                                    */
 /* ------------------------------------------------------------------------ */
 
@@ -315,10 +364,12 @@ static void sd_mount(void) {
 		g_app.sd_state = SD_NO_CARD;
 		g_app.sd_err = (uint8_t) res;
 		g_app.file_number = 0;
+		space_clear();
 		return;
 	}
 	g_app.sd_state = SD_READY;
 	g_app.sd_err = FR_OK;
+	space_update();
 }
 
 // Карта на месте? Чтение сектора 0 в обход FatFs (её кэш не заметит замену),
@@ -330,6 +381,7 @@ static void sd_check_card(void) {
 		g_app.sd_state = SD_NO_CARD;
 		g_app.sd_err = FR_NOT_READY;
 		g_app.file_number = 0;
+		space_clear();
 	}
 }
 
@@ -374,6 +426,7 @@ static void rec_fail(FRESULT res) {
 	f_mount(NULL, "", 0); // заодно освобождает блокировки FatFs (_FS_LOCK)
 	g_app.sd_state = SD_ERROR;
 	g_app.sd_err = (uint8_t) res;
+	space_clear();
 }
 
 // Создать файл датчика i в текущем замере. false — сбой (уже обработан).
@@ -454,12 +507,14 @@ static void rec_stop(void) {
 		g_app.sd_state = SD_NO_CARD;
 		g_app.sd_err = (uint8_t) err;
 		g_app.file_number = 0;
+		space_clear();
 		return;
 	}
 	if (s_any_file) {
 		g_app.file_number = sd_number_after(g_app.file_number);
 	}
 	g_app.sd_state = SD_READY;
+	space_update(); // счётчик FatFs уже известен — без чтения карты
 }
 
 // Раз в секунду: дописать остатки буферов и f_sync
@@ -478,6 +533,7 @@ static void rec_sync(void) {
 			return;
 		}
 	}
+	space_from_cache();
 }
 
 /* ------------------------------------------------------------------------ */
@@ -487,6 +543,7 @@ static void rec_sync(void) {
 void sd_logger_init(void) {
 	g_app.sd_state = SD_NO_CARD;
 	g_app.file_number = 0;
+	space_clear();
 	sd_mount();
 	s_check_ms = HAL_GetTick();
 }
