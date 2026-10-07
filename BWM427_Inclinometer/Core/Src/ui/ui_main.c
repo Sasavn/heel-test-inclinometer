@@ -2,10 +2,11 @@
  * ui_main.c — главный экран: строка состояния, карточки двух датчиков,
  * качка, органы управления (кораблик, Частота, Ноль, Меню).
  *
- *  y   0..21   07.10 14:36:21 [ЗАП]          ЦП 23%  11.8 В
+ *  y   0..21   06.10.26 14:36 [ЗАП]          ЦП 23%  11.8 В
  *  y  26..91   ┌ Д2 ●                         ✓ OK ┐  карточка датчика: шапка
- *              │ X  +0.12°   покой                 │  (имя, запись, связь),
- *              └ Y  −1.23°   качка 1.23°           ┘  по осям — угол и качка
+ *              │ покой              X    +0.12°    │  (имя, запись, связь),
+ *              └ качка 1.23°        Y    −1.23°    ┘  по осям — слева качка,
+ *                                                     справа угол
  *  y  95..160  ┌ Д3 ... ┐
  *  y 164..185  [✓ ГОТОВ] / [КАЧКА 1.23° Д3 X]      запись 01:05
  *  y 190..235  [кораблик][Частота][Ноль][Меню]
@@ -48,9 +49,9 @@
 #define HDR_X           8       // имя датчика
 #define HDR_Y           (-1)
 #define HDR_R           8       // состояние связи — у правого края
-#define CAP_X           8       // подпись X / Y
-#define VAL_X           26      // поле угла (ширина — под "−88.88°", val_w)
-#define ROLL_GAP        10      // от поля угла до «качка/покой»
+#define ROLL_X          8       // «покой» / «качка 1.23°» — у левого края
+#define VAL_R           8       // поле угла — у правого края (ширина под "−88.88°", val_w)
+#define CAP_GAP         8       // от подписи X / Y до поля угла
 #define ROW_X_Y         16      // строка X
 #define ROW_Y_Y         40      // строка Y
 #define STAB_Y          164
@@ -247,21 +248,33 @@ static void ship_draw_cb(lv_event_t *e) {
 	ship_arc(layer, x0, y0, UI_C_CARD, 22, 21, 5, 25, 155);
 }
 
-// Число угла: правый край поля угла, ширина под самое длинное значение
+// Число угла: у правого края карточки, ширина под самое длинное значение,
+// выравнивание по правому краю (знаки и точки стоят друг под другом)
 static lv_obj_t* value_label_create(lv_obj_t *parent, int32_t y) {
 	lv_obj_t *l = ui_label_create(parent, UI_FONT_NUM, UI_C_TEXT);
 	lv_label_set_long_mode(l, LV_LABEL_LONG_MODE_CLIP);
 	lv_obj_set_style_text_align(l, LV_TEXT_ALIGN_RIGHT, 0);
 	lv_obj_set_size(l, val_w, lv_font_get_line_height(UI_FONT_NUM));
-	lv_obj_set_pos(l, VAL_X, y);
+	lv_obj_align(l, LV_ALIGN_TOP_RIGHT, -VAL_R, y);
 	return l;
 }
 
-// Надпись шрифтом 20 (подпись X / Y, качка по оси) — по высоте посередине цифр
+// Надпись шрифтом 20 (качка по оси, подпись X / Y) — по высоте посередине цифр
+static int32_t row_label_y(int32_t row_y) {
+	return row_y + (lv_font_get_line_height(UI_FONT_NUM) - lv_font_get_line_height(UI_FONT_MID)) / 2;
+}
+
+// ... от левого края
 static lv_obj_t* row_label_create(lv_obj_t *parent, int32_t x, int32_t row_y, ui_col_t color) {
 	lv_obj_t *l = ui_label_create(parent, UI_FONT_MID, color);
-	lv_obj_set_pos(l, x, row_y + (lv_font_get_line_height(UI_FONT_NUM)
-			- lv_font_get_line_height(UI_FONT_MID)) / 2);
+	lv_obj_set_pos(l, x, row_label_y(row_y));
+	return l;
+}
+
+// ... правым краем в right пикселях от правого края карточки
+static lv_obj_t* row_label_create_r(lv_obj_t *parent, int32_t right, int32_t row_y, ui_col_t color) {
+	lv_obj_t *l = ui_label_create(parent, UI_FONT_MID, color);
+	lv_obj_align(l, LV_ALIGN_TOP_RIGHT, -right, row_label_y(row_y));
 	return l;
 }
 
@@ -280,13 +293,14 @@ static void card_create(int i) {
 	c->link = ui_label_create(c->card, UI_FONT_SMALL, UI_C_DIM);
 	lv_obj_align(c->link, LV_ALIGN_TOP_RIGHT, -HDR_R, HDR_Y);
 
-	// Строки осей: подпись, угол, качка
-	lv_label_set_text_static(row_label_create(c->card, CAP_X, ROW_X_Y, UI_C_DIM), "X");
-	lv_label_set_text_static(row_label_create(c->card, CAP_X, ROW_Y_Y, UI_C_DIM), "Y");
+	// Строки осей: слева качка, справа подпись X / Y и угол
+	c->roll_x = row_label_create(c->card, ROLL_X, ROW_X_Y, UI_C_DIM);
+	c->roll_y = row_label_create(c->card, ROLL_X, ROW_Y_Y, UI_C_DIM);
+	int32_t cap_r = VAL_R + val_w + CAP_GAP;
+	lv_label_set_text_static(row_label_create_r(c->card, cap_r, ROW_X_Y, UI_C_DIM), "X");
+	lv_label_set_text_static(row_label_create_r(c->card, cap_r, ROW_Y_Y, UI_C_DIM), "Y");
 	c->val_x = value_label_create(c->card, ROW_X_Y);
 	c->val_y = value_label_create(c->card, ROW_Y_Y);
-	c->roll_x = row_label_create(c->card, VAL_X + val_w + ROLL_GAP, ROW_X_Y, UI_C_DIM);
-	c->roll_y = row_label_create(c->card, VAL_X + val_w + ROLL_GAP, ROW_Y_Y, UI_C_DIM);
 
 	c->shown = CHIP_NONE;
 }
@@ -298,15 +312,16 @@ void ui_main_create(void) {
 	// --- Строка состояния ---
 	lv_obj_t *bar = ui_bar_create(scr, BAR_H);
 
-	// Дата и время: цифры моноширинные, поэтому места под «00.00» и
-	// «00:00:00» хватает при любом значении, и плашка записи не сдвигается
+	// Дата ДД.ММ.ГГ и время ЧЧ:ММ: цифры моноширинные, поэтому места под
+	// «00.00.00» и «00:00» хватает при любом значении, и плашка записи не
+	// сдвигается
 	int32_t x = BAR_PAD_L;
 	lbl_date = ui_label_create(bar, UI_FONT_SMALL, UI_C_DIM);
 	lv_obj_align(lbl_date, LV_ALIGN_LEFT_MID, x, 0);
-	x += ui_text_width("00.00", UI_FONT_SMALL) + BAR_GAP_L;
+	x += ui_text_width("00.00.00", UI_FONT_SMALL) + BAR_GAP_L;
 	lbl_time = ui_label_create(bar, UI_FONT_SMALL, UI_C_TEXT);
 	lv_obj_align(lbl_time, LV_ALIGN_LEFT_MID, x, 0);
-	x += ui_text_width("00:00:00", UI_FONT_SMALL) + BAR_GAP_L;
+	x += ui_text_width("00:00", UI_FONT_SMALL) + BAR_GAP_L;
 
 	// Самая длинная надпись — «НЕТ SD»: до загрузки ЦП («ЦП 100%») остаётся
 	// не меньше 6 px (проверка в симуляторе)
@@ -423,9 +438,9 @@ static void update_status_bar(uint32_t now) {
 	char buf[32];
 	const app_time_t *t = &g_app.time;
 
-	lv_snprintf(buf, sizeof(buf), "%02u.%02u", t->date, t->month);
+	lv_snprintf(buf, sizeof(buf), "%02u.%02u.%02u", t->date, t->month, t->year);
 	ui_set_text(lbl_date, buf);
-	lv_snprintf(buf, sizeof(buf), "%02u:%02u:%02u", t->hours, t->minutes, t->seconds);
+	lv_snprintf(buf, sizeof(buf), "%02u:%02u", t->hours, t->minutes);
 	ui_set_text(lbl_time, buf);
 	// Без DS3231 время после включения неверное — подсвечиваем
 	ui_set_text_color(lbl_time, g_app.rtc_present ? UI_C_TEXT : UI_C_ORANGE);
