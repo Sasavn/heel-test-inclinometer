@@ -24,7 +24,7 @@ FATFS USERFatFS;    /* File system object for USER logical drive */
 FIL USERFile;       /* File object for USER */
 
 /* USER CODE BEGIN Variables */
-
+#include "app.h" // g_app.time — метка времени файлов
 /* USER CODE END Variables */
 
 void MX_FATFS_Init(void)
@@ -45,7 +45,12 @@ void MX_FATFS_Init(void)
 DWORD get_fattime(void)
 {
   /* USER CODE BEGIN get_fattime */
-  return 0;
+	// Время создания/изменения файлов = часы прибора (DS3231 или программные).
+	// Формат FatFs: год с 1980 (7 бит), месяц, день, часы, минуты, секунды/2.
+	const app_time_t *t = &g_app.time;
+	return ((DWORD) (t->year + 20u) << 25) | ((DWORD) t->month << 21)
+			| ((DWORD) t->date << 16) | ((DWORD) t->hours << 11)
+			| ((DWORD) t->minutes << 5) | ((DWORD) t->seconds >> 1);
   /* USER CODE END get_fattime */
 }
 

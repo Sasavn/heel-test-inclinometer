@@ -67,7 +67,13 @@ DSTATUS USER_initialize (
 )
 {
   /* USER CODE BEGIN INIT */
-    return SD_disk_initialize(pdrv); // <--- Вызов инициализации
+	// Обёртка ST (diskio.c) вызывает эту функцию один раз за всё время работы,
+	// поэтому карту (в том числе после замены) инициализирует sd_logger.c
+	// напрямую через SD_disk_initialize() и только потом вызывает
+	// f_mount(..., 1). Здесь карту не трогаем: повторная инициализация
+	// (сотни мс с картой) ничего не дала бы. Без инициализации FatFs получит
+	// STA_NOINIT и вернёт FR_NOT_READY.
+	return SD_disk_status(pdrv);
   /* USER CODE END INIT */
 }
 

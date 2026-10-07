@@ -1,3 +1,9 @@
+/*
+ * Растровые шрифты 7x10, 11x18, 16x26 для ILI9341_WriteString().
+ * Взяты из библиотеки afiskon/stm32-ili9341
+ * (https://github.com/afiskon/stm32-ili9341), MIT License,
+ * Copyright (c) 2018 Aleksander Alekseev; текст лицензии — fonts.LICENSE.txt.
+ */
 /* vim: set ai et ts=4 sw=4: */
 #include "fonts.h"
 
