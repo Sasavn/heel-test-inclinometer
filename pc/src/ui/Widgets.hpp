@@ -1,6 +1,7 @@
 #pragma once
 // Общие элементы интерфейса: карточки, плашки, кнопки, строки «название — значение», подсказки.
 #include <algorithm>
+#include <cmath>
 #include <cstdarg>
 #include <cstdio>
 #include <string>
@@ -258,6 +259,41 @@ inline bool Button(const char* label, BtnKind kind = BtnKind::Normal, ImVec2 siz
     return pressed && !disabled;
 }
 
+// Знак «−» / «+» на только что нарисованной кнопке: прямоугольниками по
+// пиксельной сетке, строго симметрично относительно рамки кнопки. Глифы шрифта
+// для этого не годятся: ImGui центрирует по ширине символа вместе с боковыми
+// отступами (знак уезжает вбок), а «−» и «+» стоят на математической оси шрифта.
+inline void StepSign(bool plus)
+{
+    const ImVec2 a = ImGui::GetItemRectMin(), b = ImGui::GetItemRectMax();
+    const float x0 = IM_ROUND(a.x), y0 = IM_ROUND(a.y);
+    const float w = IM_ROUND(b.x) - x0, h = IM_ROUND(b.y) - y0;
+    // Толщина и длина — той же чётности, что ширина/высота кнопки: тогда поля
+    // слева и справа (сверху и снизу) равны целому числу пикселей
+    float t = std::max(2.f, IM_ROUND(S(2.f)));
+    float len = std::max(6.f, IM_ROUND(w * 0.4f));
+    if (std::fmod(h - t, 2.f) != 0.f)
+        t += 1.f;
+    if (std::fmod(w - len, 2.f) != 0.f)
+        len += 1.f;
+    const ImU32 col = ImGui::GetColorU32(ImGuiCol_Text);
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    // Горизонтальная черта
+    const float hx = x0 + (w - len) / 2.f, hy = y0 + (h - t) / 2.f;
+    dl->AddRectFilled(ImVec2(hx, hy), ImVec2(hx + len, hy + t), col);
+    if (plus)
+    {
+        // Вертикальная: та же длина по высоте, толщина — по чётности ширины
+        float tv = t, lv = len;
+        if (std::fmod(w - tv, 2.f) != 0.f)
+            tv += 1.f;
+        if (std::fmod(h - lv, 2.f) != 0.f)
+            lv += 1.f;
+        const float vx = x0 + (w - tv) / 2.f, vy = y0 + (h - lv) / 2.f;
+        dl->AddRectFilled(ImVec2(vx, vy), ImVec2(vx + tv, vy + lv), col);
+    }
+}
+
 // Поле числа с кнопками «−» / «+» справа (вместо встроенных ImGui: там дефис,
 // он уже и тоньше плюса). Ширина — как у обычного поля (SetNextItemWidth /
 // PushItemWidth). Ctrl + кнопка — крупный шаг; удержание кнопки повторяет шаг.
@@ -273,17 +309,19 @@ inline bool StepField(const char* id, T* v, T step, T stepFast, Input input)
     const T d = ImGui::GetIO().KeyCtrl ? stepFast : step;
     ImGui::PushItemFlag(ImGuiItemFlags_ButtonRepeat, true);
     ImGui::SameLine(0, st.ItemInnerSpacing.x);
-    if (Button("−##dec", BtnKind::Normal, ImVec2(bw, bw)))
+    if (Button("##dec", BtnKind::Normal, ImVec2(bw, bw)))
     {
         *v -= d;
         changed = true;
     }
+    StepSign(false);
     ImGui::SameLine(0, st.ItemInnerSpacing.x);
-    if (Button("+##inc", BtnKind::Normal, ImVec2(bw, bw)))
+    if (Button("##inc", BtnKind::Normal, ImVec2(bw, bw)))
     {
         *v += d;
         changed = true;
     }
+    StepSign(true);
     ImGui::PopItemFlag();
     ImGui::PopID();
     return changed;
