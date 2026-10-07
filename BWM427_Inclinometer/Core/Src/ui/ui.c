@@ -62,6 +62,8 @@ static const uint32_t theme_tab[2][UI_C_COUNT] = {
 		[UI_C_CHIP_BG]   = 0x262C33,
 		[UI_C_REC]       = 0xE0261B,
 		[UI_C_ON_REC]    = 0xFFFFFF,
+		[UI_C_LOGO_MAIN] = 0xE6EEF7, // тёмно-синий на тёмном фоне не виден
+		[UI_C_LOGO_ACCENT] = 0x22B8F2,
 	},
 	[APP_THEME_LIGHT] = {
 		[UI_C_BG]        = 0xD8DDE3,
@@ -88,6 +90,8 @@ static const uint32_t theme_tab[2][UI_C_COUNT] = {
 		[UI_C_CHIP_BG]   = 0xE4E8ED,
 		[UI_C_REC]       = 0xD7141E,
 		[UI_C_ON_REC]    = 0xFFFFFF,
+		[UI_C_LOGO_MAIN] = 0x00285E, // фирменные цвета САФУ
+		[UI_C_LOGO_ACCENT] = 0x00AEEF,
 	},
 };
 

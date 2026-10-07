@@ -36,7 +36,7 @@
 #define UI_MENU_LIST        1
 #define UI_MENU_TILES       2
 #ifndef UI_MENU_STYLE
-#define UI_MENU_STYLE       UI_MENU_LIST
+#define UI_MENU_STYLE       UI_MENU_TILES
 #endif
 
 // --- Общая геометрия ---
@@ -75,13 +75,15 @@ typedef enum {
 	UI_C_CHIP_BG,    // подложка нейтральной плашки
 	UI_C_REC,        // залитая плашка «ЗАП»
 	UI_C_ON_REC,     // текст на ней
+	UI_C_LOGO_MAIN,  // логотип САФУ: слово «сафу» (фирменный тёмно-синий)
+	UI_C_LOGO_ACCENT,// ... книга с лучами и дуга (фирменный голубой)
 	UI_C_COUNT
 } ui_col_t;
 
 // --- Шрифты (Core/Src/ui/fonts, генерация: tools/ui_sim/fonts/gen_fonts.py) ---
 #define UI_FONT_SMALL       (&ui_font_14)
 #define UI_FONT_MID         (&ui_font_20)
-#define UI_FONT_NUM         (&ui_font_num)   // Bold 30, только цифры и знаки
+#define UI_FONT_NUM         (&ui_font_num)   // Bold 33, только цифры и знаки
 
 // --- Символы (UTF-8) ---
 #define UI_MINUS            "\xE2\x88\x92"   // U+2212 «минус» (той же ширины, что '+')
@@ -92,6 +94,10 @@ typedef enum {
 #define UI_ARROW            "\xE2\x86\x92"   // U+2192 «→»
 #define UI_DEG              "\xC2\xB0"       // U+00B0 «°»
 #define UI_MIDDOT           "\xC2\xB7"       // U+00B7 «·»
+
+// --- Логотип САФУ (ui_logo.c, генерация: tools/ui_sim/logo/gen_logo.js) ---
+extern const lv_image_dsc_t ui_logo_dark;   // слой «сафу», A2
+extern const lv_image_dsc_t ui_logo_light;  // слой «книга и дуга», A2
 
 // --- Общие объекты ---
 extern lv_indev_t *ui_indev;

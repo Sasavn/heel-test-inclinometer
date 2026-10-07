@@ -2,14 +2,15 @@
  * ui_main.c — главный экран: строка состояния, карточки двух датчиков,
  * качка, органы управления (кораблик, Частота, Ноль, Меню).
  *
- *  y   0..21   06.10.26 14:36 [ЗАП]          ЦП 23%  11.8 В
- *  y  26..91   ┌ Д2 ●                         ✓ OK ┐  карточка датчика: шапка
+ *  y   0..21   06.10.26 14:36      [ЗАП]      ЦП 23%  11.8 В   (ЗАП — по
+ *                                                     центру между временем и ЦП)
+ *  y  26..96   ┌ Д2 ●                         ✓ OK ┐  карточка датчика: шапка
  *              │ покой              X    +0.12°    │  (имя, запись, связь),
  *              └ качка 1.23°        Y    −1.23°    ┘  по осям — слева качка,
  *                                                     справа угол
- *  y  95..160  ┌ Д3 ... ┐
- *  y 164..185  [✓ ГОТОВ] / [КАЧКА 1.23° Д3 X]      запись 01:05
- *  y 190..235  [кораблик][Частота][Ноль][Меню]
+ *  y 100..170  ┌ Д3 ... ┐
+ *  y 174..190  [✓ ГОТОВ] / [КАЧКА 1.23° Д3 X]      запись 01:05
+ *  y 193..238  [САФУ][Частота][Ноль][Меню]
  *
  * Качка — по каждой оси каждого датчика (логика: sensor[i].roll_x/roll_y —
  * размах за окно g_app.roll_window_s, calm_x/calm_y — покой с гистерезисом):
@@ -24,7 +25,8 @@
  * всех, кроме только что показанного сообщения).
  *
  * Левая ячейка органов управления — место под будущую функцию; пока в ней
- * кораблик (рисуется примитивами LVGL в цветах темы), в фокус она не попадает.
+ * логотип САФУ (два слоя A2, перекрашиваются цветами темы), в фокус она не
+ * попадает.
  */
 #include "ui_internal.h"
 
@@ -40,24 +42,25 @@
 #define CPU_CAP_GAP     4       // между «ЦП» и числом (ширина пробела)
 #define CARD_X          4
 #define CARD_W          (UI_W - 2 * CARD_X)
-#define CARD_H          66
+#define CARD_H          71
 #define CARD_Y0         26
 #define CARD_STEP       (CARD_H + 3)
 // Внутри карточки (координаты от внутреннего края рамки 1 px, высота 64):
 // шапка шрифтом 14 (строка 17 px, заглавные — с 3-го пикселя, поэтому метка
-// на 1 px выше края) и две строки цифр ui_font_num (22 px, шаг 24)
+// на 1 px выше края) и две строки цифр ui_font_num (Bold 33, строка 24 px,
+// шаг 27)
 #define HDR_X           8       // имя датчика
 #define HDR_Y           (-1)
 #define HDR_R           8       // состояние связи — у правого края
 #define ROLL_X          8       // «покой» / «качка 1.23°» — у левого края
 #define VAL_R           8       // поле угла — у правого края (ширина под "−88.88°", val_w)
-#define CAP_GAP         8       // от подписи X / Y до поля угла
-#define ROW_X_Y         16      // строка X
-#define ROW_Y_Y         40      // строка Y
-#define STAB_Y          164
+#define CAP_GAP         5       // от подписи X / Y до поля угла
+#define ROW_X_Y         17      // строка X
+#define ROW_Y_Y         44      // строка Y
+#define STAB_Y          174     // сводка качки — шрифтом 14
 #define STAB_PAD        9       // поля плашки качки по горизонтали
 #define INFO_GAP        8       // зазор между плашкой качки и сообщением
-#define CTRL_Y          190
+#define CTRL_Y          193
 #define CTRL_H          46
 #define CTRL_W          75
 #define CTRL_GAP        4
@@ -94,6 +97,9 @@ static lv_group_t *grp;
 
 static lv_obj_t *lbl_date, *lbl_time, *pill_rec, *lbl_cpu_cap, *lbl_cpu, *chip_bat;
 static int32_t cpu_r;   // от правого края экрана до правого края числа загрузки ЦП
+// Плашка записи: центр — посередине между временем и «ЦП NN%», пределы по x
+static int32_t rec_mid, rec_min, rec_max;
+static const char *rec_placed; // для какой надписи плашка уже поставлена
 static int32_t val_w;   // ширина поля угла: "−88.88°" шрифтом ui_font_num
 static sensor_card_t cards[APP_SENSOR_COUNT];
 static lv_obj_t *pill_stab, *lbl_info;
@@ -161,91 +167,31 @@ static lv_obj_t* ctrl_create(int idx, const char *caption, lv_obj_t **value) {
 }
 
 /*--------------------------------------------------------------------
- * Кораблик: корпус с лицом, мачта, два паруса, флаг, волны — примитивы
- * LVGL (треугольники, прямоугольники, дуги, линия) в цветах темы, без
- * картинок. Рисуется только при перерисовке ячейки (она не меняется).
- * Координаты — в рамке SHIP_W x SHIP_H по центру ячейки.
+ * Логотип САФУ: два слоя LV_COLOR_FORMAT_A2 (ui_logo.c) по центру ячейки,
+ * каждый перекрашен цветом темы (в светлой — фирменные тёмно-синий и
+ * голубой, в тёмной — светлый и голубой). Рисуется только при перерисовке
+ * ячейки (она не меняется).
  *--------------------------------------------------------------------*/
-#define SHIP_W          44
-#define SHIP_H          34
-
-static void ship_tri(lv_layer_t *layer, int32_t x0, int32_t y0, ui_col_t c,
-		int32_t ax, int32_t ay, int32_t bx, int32_t by, int32_t cx, int32_t cy) {
-	lv_draw_triangle_dsc_t d;
-	lv_draw_triangle_dsc_init(&d);
-	d.color = ui_color(c);
-	d.p[0].x = x0 + ax;
-	d.p[0].y = y0 + ay;
-	d.p[1].x = x0 + bx;
-	d.p[1].y = y0 + by;
-	d.p[2].x = x0 + cx;
-	d.p[2].y = y0 + cy;
-	lv_draw_triangle(layer, &d);
+static void logo_layer(lv_layer_t *layer, const lv_image_dsc_t *img, int32_t x0, int32_t y0,
+		ui_col_t c) {
+	lv_draw_image_dsc_t d;
+	lv_draw_image_dsc_init(&d);
+	d.src = img;
+	d.recolor = ui_color(c);
+	d.recolor_opa = LV_OPA_COVER;
+	lv_area_t a = { x0, y0, x0 + img->header.w - 1, y0 + img->header.h - 1 };
+	lv_draw_image(layer, &d, &a);
 }
 
-static void ship_rect(lv_layer_t *layer, int32_t x0, int32_t y0, ui_col_t c, int32_t radius,
-		int32_t x1, int32_t y1, int32_t x2, int32_t y2) {
-	lv_draw_rect_dsc_t d;
-	lv_draw_rect_dsc_init(&d);
-	d.bg_color = ui_color(c);
-	d.radius = radius;
-	lv_area_t a = { x0 + x1, y0 + y1, x0 + x2, y0 + y2 };
-	lv_draw_rect(layer, &d, &a);
-}
-
-// Дуга толщиной 2 px: углы в градусах, 0 — вправо, 90 — вниз
-static void ship_arc(lv_layer_t *layer, int32_t x0, int32_t y0, ui_col_t c, int32_t cx,
-		int32_t cy, int32_t r, int32_t start, int32_t end) {
-	lv_draw_arc_dsc_t d;
-	lv_draw_arc_dsc_init(&d);
-	d.color = ui_color(c);
-	d.width = 2;
-	d.rounded = 1;
-	d.center.x = x0 + cx;
-	d.center.y = y0 + cy;
-	d.radius = (uint16_t) r;
-	d.start_angle = start;
-	d.end_angle = end;
-	lv_draw_arc(layer, &d);
-}
-
-static void ship_draw_cb(lv_event_t *e) {
+static void logo_draw_cb(lv_event_t *e) {
 	lv_obj_t *obj = lv_event_get_current_target(e);
 	lv_layer_t *layer = lv_event_get_layer(e);
 	lv_area_t a;
 	lv_obj_get_coords(obj, &a);
-	int32_t x0 = a.x1 + (lv_area_get_width(&a) - SHIP_W) / 2;
-	int32_t y0 = a.y1 + (lv_area_get_height(&a) - SHIP_H) / 2;
-
-	// Волны под корпусом
-	for (int32_t cx = 6; cx < SHIP_W; cx += 11)
-		ship_arc(layer, x0, y0, UI_C_ACCENT, cx, 35, 5, 205, 335);
-
-	// Мачта и флаг (развевается влево)
-	lv_draw_line_dsc_t l;
-	lv_draw_line_dsc_init(&l);
-	l.color = ui_color(UI_C_DIM);
-	l.width = 2;
-	l.p1.x = x0 + 22;
-	l.p1.y = y0 + 1;
-	l.p2.x = x0 + 22;
-	l.p2.y = y0 + 17;
-	lv_draw_line(layer, &l);
-	ship_tri(layer, x0, y0, UI_C_ACCENT, 21, 0, 21, 7, 13, 3);
-
-	// Паруса: большой справа от мачты, маленький слева
-	ship_tri(layer, x0, y0, UI_C_EDIT, 24, 3, 24, 15, 37, 15);
-	ship_tri(layer, x0, y0, UI_C_EDIT, 20, 7, 20, 15, 11, 15);
-
-	// Корпус: трапеция = прямоугольник + два треугольника (с нахлёстом 1 px)
-	ship_rect(layer, x0, y0, UI_C_RED, 2, 8, 17, 36, 28);
-	ship_tri(layer, x0, y0, UI_C_RED, 1, 17, 9, 17, 9, 28);
-	ship_tri(layer, x0, y0, UI_C_RED, 43, 17, 35, 17, 35, 28);
-
-	// Лицо: два иллюминатора-глаза и улыбка цветом карточки
-	ship_rect(layer, x0, y0, UI_C_CARD, LV_RADIUS_CIRCLE, 12, 19, 15, 22);
-	ship_rect(layer, x0, y0, UI_C_CARD, LV_RADIUS_CIRCLE, 29, 19, 32, 22);
-	ship_arc(layer, x0, y0, UI_C_CARD, 22, 21, 5, 25, 155);
+	int32_t x0 = a.x1 + (lv_area_get_width(&a) - (int32_t) ui_logo_dark.header.w) / 2;
+	int32_t y0 = a.y1 + (lv_area_get_height(&a) - (int32_t) ui_logo_dark.header.h) / 2;
+	logo_layer(layer, &ui_logo_light, x0, y0, UI_C_LOGO_ACCENT);
+	logo_layer(layer, &ui_logo_dark, x0, y0, UI_C_LOGO_MAIN);
 }
 
 // Число угла: у правого края карточки, ширина под самое длинное значение,
@@ -323,10 +269,7 @@ void ui_main_create(void) {
 	lv_obj_align(lbl_time, LV_ALIGN_LEFT_MID, x, 0);
 	x += ui_text_width("00:00", UI_FONT_SMALL) + BAR_GAP_L;
 
-	// Самая длинная надпись — «НЕТ SD»: до загрузки ЦП («ЦП 100%») остаётся
-	// не меньше 6 px (проверка в симуляторе)
-	pill_rec = ui_chip_create(bar, UI_FONT_SMALL);
-	lv_obj_align(pill_rec, LV_ALIGN_LEFT_MID, x, 0);
+	int32_t rec_x = x; // плашка записи — в промежутке от времени до «ЦП»
 
 	// Справа элементы прижаты к правому краю, и каждому оставлено место под
 	// самое длинное значение («28.8 В», «ЦП 100%»): соседи не сдвигаются.
@@ -343,16 +286,29 @@ void ui_main_create(void) {
 	lbl_cpu_cap = ui_label_create(bar, UI_FONT_SMALL, UI_C_DIM);
 	lv_label_set_text_static(lbl_cpu_cap, "ЦП");
 
+	// Плашка записи — по центру между временем и «ЦП NN%» (двузначная загрузка —
+	// обычный случай; «ЦП 100%» плашку не сдвигает): обёртка без стиля на весь
+	// промежуток, плашка в ней по центру. Самая длинная надпись «НЕТ SD» в
+	// промежуток помещается (проверка в симуляторе).
+	int32_t cap_w = CPU_CAP_GAP + ui_text_width("ЦП", UI_FONT_SMALL);
+	int32_t cpu_x2 = UI_W - cpu_r - ui_text_width("00%", UI_FONT_SMALL) - cap_w;
+	int32_t cpu_x3 = UI_W - cpu_r - ui_text_width("100%", UI_FONT_SMALL) - cap_w;
+	rec_mid = (rec_x + cpu_x2 - BAR_GAP_L) / 2;
+	rec_min = rec_x;
+	rec_max = cpu_x3 - BAR_GAP_L; // правый край плашки — не под «ЦП 100%»
+	pill_rec = ui_chip_create(bar, UI_FONT_SMALL);
+	rec_placed = NULL;
+
 	// --- Карточки датчиков ---
 	val_w = ui_text_width(UI_MINUS "88.88" UI_DEG, UI_FONT_NUM);
 	for (int i = 0; i < APP_SENSOR_COUNT; i++)
 		card_create(i);
 
 	// --- Качка и сообщения ---
-	pill_stab = ui_chip_create(scr, UI_FONT_MID);
+	pill_stab = ui_chip_create(scr, UI_FONT_SMALL);
 	lv_obj_set_style_pad_hor(pill_stab, STAB_PAD, 0);
 	lv_obj_set_style_pad_ver(pill_stab, 0, 0);
-	lv_obj_set_style_radius(pill_stab, 11, 0);
+	lv_obj_set_style_radius(pill_stab, 8, 0);
 	lv_obj_set_pos(pill_stab, CARD_X, STAB_Y);
 	// Сообщение справа: ширина — сколько осталось от плашки качки (update_stab),
 	// не влезающий текст обрезается многоточием, а не наезжает на плашку
@@ -361,14 +317,13 @@ void ui_main_create(void) {
 	lv_obj_set_style_text_align(lbl_info, LV_TEXT_ALIGN_RIGHT, 0);
 	lv_obj_set_size(lbl_info, UI_W / 2, lv_font_get_line_height(UI_FONT_SMALL));
 	lv_obj_align(lbl_info, LV_ALIGN_TOP_RIGHT, -(CARD_X + 2),
-			STAB_Y + (lv_font_get_line_height(UI_FONT_MID)
-					- lv_font_get_line_height(UI_FONT_SMALL)) / 2);
+			STAB_Y);
 
 	// --- Органы управления (группа энкодера) ---
-	// Левая ячейка: рамка как у кнопок, без группы и нажатий — с корабликом
+	// Левая ячейка: рамка как у кнопок, без группы и нажатий — с логотипом
 	lv_obj_t *slot = ui_button_create(scr, NULL, CTRL_GAP, CTRL_Y, CTRL_W, CTRL_H);
 	lv_obj_set_clickable(slot, false);
-	lv_obj_add_event_cb(slot, ship_draw_cb, LV_EVENT_DRAW_MAIN_END, NULL);
+	lv_obj_add_event_cb(slot, logo_draw_cb, LV_EVENT_DRAW_MAIN_END, NULL);
 
 	btn_freq = ctrl_create(1, "Частота", &val_freq);
 	ui_field_attach(btn_freq, freq_step);
@@ -447,17 +402,18 @@ static void update_status_bar(uint32_t now) {
 
 	// Плашка записи; запись мигает заливкой
 	bool blink_on = ((now / UI_BLINK_MS) & 1U) == 0;
+	const char *rec_txt;
 	switch (g_app.sd_state) {
 	case SD_NO_CARD:
-		ui_set_text(pill_rec, "НЕТ SD");
+		ui_set_text(pill_rec, rec_txt = "НЕТ SD");
 		ui_set_chip(pill_rec, UI_C_RED_BG, UI_C_RED);
 		break;
 	case SD_READY:
-		ui_set_text(pill_rec, "СТОП");
+		ui_set_text(pill_rec, rec_txt = "СТОП");
 		ui_set_chip(pill_rec, UI_C_CHIP_BG, UI_C_DIM);
 		break;
 	case SD_RECORDING:
-		ui_set_text(pill_rec, "ЗАП");
+		ui_set_text(pill_rec, rec_txt = "ЗАП");
 		if (blink_on)
 			ui_set_chip(pill_rec, UI_C_REC, UI_C_ON_REC);
 		else
@@ -466,9 +422,22 @@ static void update_status_bar(uint32_t now) {
 	case SD_ERROR:
 	default:
 		// Запись прервана ошибкой карты; код и что делать — в строке сообщений
-		ui_set_text(pill_rec, "СБОЙ");
+		ui_set_text(pill_rec, rec_txt = "СБОЙ");
 		ui_set_chip(pill_rec, UI_C_REC, UI_C_ON_REC);
 		break;
+	}
+	// Поставить плашку по центру промежутка (ширина зависит от надписи)
+	if (rec_txt != rec_placed) {
+		rec_placed = rec_txt;
+		int32_t w = ui_text_width(rec_txt, UI_FONT_SMALL)
+				+ lv_obj_get_style_pad_left(pill_rec, LV_PART_MAIN)
+				+ lv_obj_get_style_pad_right(pill_rec, LV_PART_MAIN);
+		int32_t x = rec_mid - w / 2;
+		if (x + w > rec_max)
+			x = rec_max - w;
+		if (x < rec_min)
+			x = rec_min;
+		lv_obj_align(pill_rec, LV_ALIGN_LEFT_MID, x, 0);
 	}
 
 	update_cpu();
@@ -561,7 +530,7 @@ static void update_sensor_card(int i, uint32_t now) {
 
 // Сообщению справа — всё место правее плашки качки
 static void fit_info_width(void) {
-	int32_t tw = ui_text_width(lv_label_get_text(pill_stab), UI_FONT_MID);
+	int32_t tw = ui_text_width(lv_label_get_text(pill_stab), UI_FONT_SMALL);
 	int32_t w = UI_W - (CARD_X + 2) - (CARD_X + tw + 2 * STAB_PAD) - INFO_GAP;
 	if (w < 0)
 		w = 0;
