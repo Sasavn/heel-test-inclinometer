@@ -338,7 +338,7 @@ void App::SettingsDeviceCard()
                 else if (info.isInt)
                 {
                     int v = static_cast<int>(std::lround(fld.value));
-                    if (ImGui::InputInt("##v", &v, 1, 5))
+                    if (InputIntStep("##v", &v, 1, 5))
                     {
                         fld.value = v;
                         edited = true;
@@ -349,7 +349,7 @@ void App::SettingsDeviceCard()
                     double v = fld.value;
                     char fmt[8];
                     std::snprintf(fmt, sizeof(fmt), "%%.%df", info.decimals);
-                    if (ImGui::InputDouble("##v", &v, info.step, info.step * 10, fmt))
+                    if (InputDoubleStep("##v", &v, info.step, info.step * 10, fmt))
                     {
                         fld.value = v;
                         edited = true;
@@ -491,15 +491,15 @@ void App::SettingsAddrCard()
         ImGui::TextUnformatted("Текущий адрес");
         ImGui::SameLine(0, S(10));
         ImGui::SetNextItemWidth(S(110));
-        ImGui::InputInt("##afrom", &set_.addrFrom, 1, 1);
+        InputIntStep("##afrom", &set_.addrFrom, 1, 1);
         ImGui::SameLine(0, S(18));
         ImGui::TextUnformatted("Новый");
         ImGui::SameLine(0, S(8));
         ImGui::SetNextItemWidth(S(110));
-        ImGui::InputInt("##ato", &set_.addrTo, 1, 1);
+        InputIntStep("##ato", &set_.addrTo, 1, 1);
         set_.addrFrom = std::clamp(set_.addrFrom, 1, 247);
         set_.addrTo = std::clamp(set_.addrTo, 1, 247);
-        ImGui::Checkbox("На шине только этот датчик", &set_.addrOnlyOne);
+        ui::Checkbox("На шине только этот датчик", &set_.addrOnlyOne);
         if (busy)
             ImGui::EndDisabled();
         const bool same = set_.addrFrom == set_.addrTo;

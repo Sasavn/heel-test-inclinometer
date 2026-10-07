@@ -44,10 +44,10 @@ void App::PageTerminal()
             TerminalSend(quick[i]);
     }
     ImGui::SameLine(0, S(20));
-    ImGui::Checkbox("поток S", &settings_.termShowStream);
+    ui::Checkbox("поток S", &settings_.termShowStream);
     Hint("Строки потока stream (углы каждые 100 мс)");
     ImGui::SameLine(0, S(14));
-    ImGui::Checkbox("опрос status", &settings_.termShowPolls);
+    ui::Checkbox("опрос status", &settings_.termShowPolls);
     Hint("Запросы status, которые программа шлёт раз в секунду, и их ответы");
     ImGui::SameLine(0, S(14));
     if (Button("Очистить", BtnKind::Normal))

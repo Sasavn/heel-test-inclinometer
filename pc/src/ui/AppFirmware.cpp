@@ -281,7 +281,7 @@ void App::PageFirmware()
         ImGui::Spacing();
         FontScope f(fontMono);
         ImGui::PushStyleColor(ImGuiCol_ChildBg, pal.cardAlt);
-        ImGui::BeginChild("##fwlog", ImVec2(0, S(150)), ImGuiChildFlags_Borders, ImGuiWindowFlags_HorizontalScrollbar);
+        ImGui::BeginChild("##fwlog", ImVec2(0, S(130)), ImGuiChildFlags_Borders, ImGuiWindowFlags_HorizontalScrollbar);
         if (updater_.Log().empty())
             Muted("Здесь будет журнал обновления и вывод dfu-util.");
         for (const auto& l : updater_.Log())

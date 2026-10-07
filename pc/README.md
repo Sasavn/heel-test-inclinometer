@@ -123,9 +123,17 @@ ShagomerPCModule) проверяет таблицу импорта: функци
 минут; со статическим триплетом `x64-windows-static-v143` из `triplets/`, как у
 Шагомера, — значит, общий двоичный кэш vcpkg).
 
-Результат (Release): `build-win7\krenomer.exe` — 4 556 288 байт (≈4,4 МБ; из них
-шрифты DejaVu ~1,8 МБ — ресурсами), 32-битный `build-win7-x86\krenomer.exe` —
-4 236 288 байт. Импорт — только системные DLL Windows 7 (`OPENGL32`,
+Результат (Release): `build-win7\krenomer.exe` — 4 564 480 байт (≈4,4 МБ; из них
+запасные шрифты DejaVu ~1,8 МБ — ресурсами), 32-битный `build-win7-x86\krenomer.exe` —
+4 244 480 байт.
+
+Шрифт интерфейса — системный Segoe UI (обычный, Semibold, Bold) и Consolas в
+терминале из `%WINDIR%\Fonts` (есть в Windows 7 и новее), растеризация FreeType с
+лёгким хинтингом. Встроенные DejaVu — запасной вариант (если системного шрифта
+нет или задана переменная окружения `KRENOMER_EMBEDDED_FONTS=1`) и источник
+знаков, которых нет в Segoe UI. Чекбоксы и кнопки — свои (`ui::Checkbox`,
+`ui::Button`, поле со шагом `ui::InputIntStep` / `InputDoubleStep` с кнопками
+«−» / «+»). Импорт — только системные DLL Windows 7 (`OPENGL32`,
 `SETUPAPI`, `ole32`, `SHELL32`, `COMDLG32`, `ADVAPI32`, `KERNEL32`, `USER32`,
 `GDI32`, `IMM32`).
 
@@ -258,8 +266,9 @@ pc\build-win7\ui_shots.exe --out shots
 
 Свой код — как у всего репозитория. Сторонние компоненты (в `.exe` статически):
 Dear ImGui и ImPlot — MIT; GLFW — zlib/libpng; FreeType — FreeType License;
-CSerialPort 4.3 — LGPL-3.0 с исключением для статической линковки; шрифты DejaVu
-Sans / Sans Bold / Sans Mono 2.35 — лицензия Bitstream Vera / DejaVu
-(`assets/fonts/LICENSE_DEJAVU.txt`). dfu-util (GPL-2.0) — отдельная программа, в
+CSerialPort 4.3 — LGPL-3.0 с исключением для статической линковки; запасные шрифты
+DejaVu Sans / Sans Bold / Sans Mono 2.35 — лицензия Bitstream Vera / DejaVu
+(`assets/fonts/LICENSE_DEJAVU.txt`); системные шрифты Windows (Segoe UI, Consolas)
+в программу не входят — читаются из системы. dfu-util (GPL-2.0) — отдельная программа, в
 `krenomer.exe` не входит. Сборочные скрипты, проверка импортов Windows 7, растеризатор
 снимков и `TestUtil.hpp` — из ShagomerPCModule (тот же автор).

@@ -337,7 +337,7 @@ void App::PageFiles()
                 bool sel = files_.sel[f.name];
                 if (dl_.running)
                     ImGui::BeginDisabled();
-                if (ImGui::Checkbox("##sel", &sel))
+                if (ui::Checkbox("##sel", &sel))
                     files_.sel[f.name] = sel;
                 ImGui::TableNextColumn();
                 ImGui::AlignTextToFramePadding();
@@ -430,7 +430,7 @@ void App::PageFiles()
             fs::create_directories(text::PathFromUtf8(files_.dir), ec);
             dialogs::OpenFolder(files_.dir);
         }
-        ImGui::Checkbox("Перезаписывать файлы, которые уже есть в папке", &settings_.overwriteFiles);
+        ui::Checkbox("Перезаписывать файлы, которые уже есть в папке", &settings_.overwriteFiles);
         Hint("Без отметки файл, который уже лежит в папке с тем же размером, не скачивается заново.");
         ImGui::Spacing();
         if (!dl_.running)

@@ -11,7 +11,7 @@ struct Palette
     ImVec4 accent, accentHover, accentText;
     ImVec4 ok, warn, err, info;
     ImVec4 okBg, warnBg, errBg, infoBg;
-    ImVec4 button, buttonHover, buttonActive, frame, frameHover;
+    ImVec4 button, buttonHover, buttonActive, buttonBorder, buttonDisabled, frame, frameHover;
     ImVec4 sensor[2]; // цвета Д2 и Д3 на графиках
     ImVec4 navSel, navHover;
 };
@@ -38,9 +38,11 @@ inline Palette MakeLight()
     p.warnBg = {1.00f, 0.94f, 0.80f, 1.f};
     p.errBg = {0.99f, 0.88f, 0.88f, 1.f};
     p.infoBg = {0.88f, 0.92f, 0.99f, 1.f};
-    p.button = {0.89f, 0.91f, 0.94f, 1.f};
-    p.buttonHover = {0.82f, 0.86f, 0.92f, 1.f};
-    p.buttonActive = {0.74f, 0.80f, 0.90f, 1.f};
+    p.button = {1.f, 1.f, 1.f, 1.f};
+    p.buttonHover = {0.925f, 0.945f, 0.98f, 1.f};
+    p.buttonActive = {0.85f, 0.89f, 0.96f, 1.f};
+    p.buttonBorder = {0.76f, 0.79f, 0.84f, 1.f};
+    p.buttonDisabled = {0.91f, 0.92f, 0.94f, 1.f};
     p.frame = {0.965f, 0.97f, 0.98f, 1.f};
     p.frameHover = {0.93f, 0.945f, 0.97f, 1.f};
     p.sensor[0] = {0.12f, 0.42f, 0.80f, 1.f};
@@ -72,9 +74,11 @@ inline Palette MakeDark()
     p.warnBg = {0.32f, 0.25f, 0.08f, 1.f};
     p.errBg = {0.35f, 0.13f, 0.13f, 1.f};
     p.infoBg = {0.13f, 0.21f, 0.36f, 1.f};
-    p.button = {0.19f, 0.23f, 0.28f, 1.f};
-    p.buttonHover = {0.24f, 0.30f, 0.37f, 1.f};
-    p.buttonActive = {0.28f, 0.36f, 0.46f, 1.f};
+    p.button = {0.18f, 0.21f, 0.25f, 1.f};
+    p.buttonHover = {0.22f, 0.27f, 0.33f, 1.f};
+    p.buttonActive = {0.27f, 0.34f, 0.44f, 1.f};
+    p.buttonBorder = {0.29f, 0.33f, 0.39f, 1.f};
+    p.buttonDisabled = {0.15f, 0.17f, 0.20f, 1.f};
     p.frame = {0.17f, 0.20f, 0.24f, 1.f};
     p.frameHover = {0.21f, 0.25f, 0.30f, 1.f};
     p.sensor[0] = {0.36f, 0.62f, 1.f, 1.f};
@@ -106,19 +110,19 @@ inline void ApplyTheme(bool dark, float scale)
 
     style.WindowRounding = 0.f;
     style.ChildRounding = 8.f;
-    style.FrameRounding = 5.f;
+    style.FrameRounding = 6.f;
     style.PopupRounding = 6.f;
     style.GrabRounding = 5.f;
     style.TabRounding = 5.f;
     style.ScrollbarRounding = 8.f;
     style.WindowPadding = {14, 12};
-    style.FramePadding = {9, 6};
+    style.FramePadding = {12, 6};
     style.ItemSpacing = {10, 8};
     style.ItemInnerSpacing = {7, 6};
-    style.CellPadding = {8, 5};
+    style.CellPadding = {8, 4};
     style.ChildBorderSize = 1.f;
     style.WindowBorderSize = 0.f;
-    style.FrameBorderSize = dark ? 0.f : 1.f;
+    style.FrameBorderSize = 1.f;
     style.PopupBorderSize = 1.f;
     style.ScrollbarSize = 16.f;
     style.GrabMinSize = 12.f;

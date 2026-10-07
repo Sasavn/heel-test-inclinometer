@@ -24,6 +24,64 @@ inline ImVec4 Alpha(const ImVec4& c, float a)
     return ImVec4(c.x, c.y, c.z, a);
 }
 
+// Смесь цветов: t = 0 — a, t = 1 — b.
+inline ImVec4 Mix(const ImVec4& a, const ImVec4& b, float t)
+{
+    return ImVec4(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t, a.z + (b.z - a.z) * t, a.w + (b.w - a.w) * t);
+}
+
+// Чекбокс: скруглённый квадрат с тонкой рамкой; отмеченный — заливка акцентом и белая галка. Наведение — рамка
+// акцентного оттенка. Высота строки — как у полей ввода (выравнивается с ними в одной строке).
+inline bool Checkbox(const char* label, bool* v)
+{
+    ImGuiWindow* w = ImGui::GetCurrentWindow();
+    if (w->SkipItems)
+        return false;
+    ImGuiContext& g = *GImGui;
+    const ImGuiStyle& st = g.Style;
+    const ImGuiID id = w->GetID(label);
+    const char* end = ImGui::FindRenderedTextEnd(label);
+    const ImVec2 ts = ImGui::CalcTextSize(label, end, false);
+    const float frameH = ImGui::GetFrameHeight();
+    const float box = IM_ROUND(g.FontSize * 1.05f);
+    const ImVec2 pos = w->DC.CursorPos;
+    const float labelW = ts.x > 0.f ? st.ItemInnerSpacing.x + S(2) + ts.x : 0.f;
+    const ImRect bb(pos, ImVec2(pos.x + box + labelW, pos.y + frameH));
+    ImGui::ItemSize(bb, st.FramePadding.y);
+    if (!ImGui::ItemAdd(bb, id))
+        return false;
+    bool hovered = false, held = false;
+    const bool pressed = ImGui::ButtonBehavior(bb, id, &hovered, &held);
+    if (pressed)
+    {
+        *v = !*v;
+        ImGui::MarkItemEdited(id);
+    }
+    ImDrawList* dl = w->DrawList;
+    const ImVec2 b0(pos.x, IM_ROUND(pos.y + (frameH - box) * 0.5f));
+    const ImVec2 b1(b0.x + box, b0.y + box);
+    const float r = S(4.f);
+    if (*v)
+    {
+        const ImVec4 fill = held ? Mix(pal.accent, ImVec4(0, 0, 0, 1), 0.15f) : hovered ? pal.accentHover : pal.accent;
+        dl->AddRectFilled(b0, b1, ImGui::GetColorU32(fill), r);
+        const float t = std::max(1.6f, box * 0.12f);
+        dl->PathLineTo(ImVec2(b0.x + box * 0.25f, b0.y + box * 0.53f));
+        dl->PathLineTo(ImVec2(b0.x + box * 0.43f, b0.y + box * 0.70f));
+        dl->PathLineTo(ImVec2(b0.x + box * 0.76f, b0.y + box * 0.33f));
+        dl->PathStroke(ImGui::GetColorU32(pal.accentText), 0, t);
+    }
+    else
+    {
+        dl->AddRectFilled(b0, b1, ImGui::GetColorU32(hovered ? pal.frameHover : pal.frame), r);
+        const ImVec4 bc = (hovered || held) ? Mix(pal.border, pal.accent, 0.7f) : Mix(pal.border, pal.muted, 0.35f);
+        dl->AddRect(b0, b1, ImGui::GetColorU32(bc), r, 0, S(1.2f));
+    }
+    if (ts.x > 0.f)
+        ImGui::RenderText(ImVec2(b1.x + st.ItemInnerSpacing.x + S(2), pos.y + (frameH - ts.y) * 0.5f), label, end);
+    return pressed;
+}
+
 struct FontScope
 {
     explicit FontScope(ImFont* f) : on(f != nullptr)
@@ -134,39 +192,112 @@ enum class BtnKind
     Warn,
 };
 
-// Кнопка; disabled — серая, не нажимается (подсказка — почему).
+// Кнопка. Обычная — светлая заливка с рамкой, при наведении рамка и фон с акцентным оттенком, при нажатии
+// темнее; основная (Primary) — акцентная заливка; Danger / Warn — красная / оранжевая. disabled — серый фон и
+// серый текст без рамки-акцента, не нажимается (подсказка — почему).
 inline bool Button(const char* label, BtnKind kind = BtnKind::Normal, ImVec2 size = {0, 0}, bool disabled = false,
                    const char* whyDisabled = nullptr)
 {
-    int colors = 0;
-    if (kind == BtnKind::Primary)
+    const ImVec4 black(0, 0, 0, 1);
+    ImVec4 bg, bgHover, bgActive, fg, border;
+    switch (kind)
     {
-        ImGui::PushStyleColor(ImGuiCol_Button, pal.accent);
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, pal.accentHover);
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive, pal.accent);
-        ImGui::PushStyleColor(ImGuiCol_Text, pal.accentText);
-        colors = 4;
-    }
-    else if (kind == BtnKind::Danger || kind == BtnKind::Warn)
+    case BtnKind::Primary:
+        bg = pal.accent;
+        bgHover = pal.accentHover;
+        bgActive = Mix(pal.accent, black, 0.18f);
+        fg = pal.accentText;
+        border = pal.accent;
+        break;
+    case BtnKind::Danger:
+    case BtnKind::Warn:
     {
         const ImVec4 c = kind == BtnKind::Danger ? pal.err : pal.warn;
-        ImGui::PushStyleColor(ImGuiCol_Button, c);
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, Alpha(c, 0.85f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive, c);
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, 1, 1, 1));
-        colors = 4;
+        bg = c;
+        bgHover = Mix(c, ImVec4(1, 1, 1, 1), 0.12f);
+        bgActive = Mix(c, black, 0.15f);
+        fg = ImVec4(1, 1, 1, 1);
+        border = c;
+        break;
     }
+    default:
+        bg = pal.button;
+        bgHover = pal.buttonHover;
+        bgActive = pal.buttonActive;
+        fg = pal.text;
+        border = pal.buttonBorder;
+        break;
+    }
+    if (disabled)
+    {
+        bg = bgHover = bgActive = pal.buttonDisabled;
+        fg = pal.muted;
+        border = pal.buttonDisabled;
+    }
+    ImGui::PushStyleColor(ImGuiCol_Button, bg);
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, bgHover);
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, bgActive);
+    ImGui::PushStyleColor(ImGuiCol_Text, fg);
+    ImGui::PushStyleColor(ImGuiCol_Border, border);
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, S(1.f));
+    ImGui::PushStyleVar(ImGuiStyleVar_DisabledAlpha, 1.f); // серость — цветами выше, без полупрозрачности
     if (disabled)
         ImGui::BeginDisabled();
     const bool pressed = ImGui::Button(label, size);
     if (disabled)
-    {
         ImGui::EndDisabled();
-        if (whyDisabled && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-            ImGui::SetTooltip("%s", whyDisabled);
-    }
-    ImGui::PopStyleColor(colors);
+    // Наведение на обычную кнопку — рамка акцентного оттенка
+    if (!disabled && kind == BtnKind::Normal && ImGui::IsItemHovered())
+        ImGui::GetWindowDrawList()->AddRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(),
+                                            U32(Mix(pal.buttonBorder, pal.accent, 0.65f)),
+                                            ImGui::GetStyle().FrameRounding, 0, S(1.f));
+    if (disabled && whyDisabled && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+        ImGui::SetTooltip("%s", whyDisabled);
+    ImGui::PopStyleVar(2);
+    ImGui::PopStyleColor(5);
     return pressed && !disabled;
+}
+
+// Поле числа с кнопками «−» / «+» справа (вместо встроенных ImGui: там дефис,
+// он уже и тоньше плюса). Ширина — как у обычного поля (SetNextItemWidth /
+// PushItemWidth). Ctrl + кнопка — крупный шаг; удержание кнопки повторяет шаг.
+template <typename T, typename Input>
+inline bool StepField(const char* id, T* v, T step, T stepFast, Input input)
+{
+    ImGuiStyle& st = ImGui::GetStyle();
+    const float bw = ImGui::GetFrameHeight();
+    const float w = ImGui::CalcItemWidth();
+    ImGui::PushID(id);
+    ImGui::SetNextItemWidth(std::max(S(30), w - 2.f * (bw + st.ItemInnerSpacing.x)));
+    bool changed = input(v);
+    const T d = ImGui::GetIO().KeyCtrl ? stepFast : step;
+    ImGui::PushItemFlag(ImGuiItemFlags_ButtonRepeat, true);
+    ImGui::SameLine(0, st.ItemInnerSpacing.x);
+    if (Button("−##dec", BtnKind::Normal, ImVec2(bw, bw)))
+    {
+        *v -= d;
+        changed = true;
+    }
+    ImGui::SameLine(0, st.ItemInnerSpacing.x);
+    if (Button("+##inc", BtnKind::Normal, ImVec2(bw, bw)))
+    {
+        *v += d;
+        changed = true;
+    }
+    ImGui::PopItemFlag();
+    ImGui::PopID();
+    return changed;
+}
+
+inline bool InputIntStep(const char* id, int* v, int step, int stepFast)
+{
+    return StepField(id, v, step, stepFast, [](int* p) { return ImGui::InputInt("##v", p, 0, 0); });
+}
+
+inline bool InputDoubleStep(const char* id, double* v, double step, double stepFast, const char* fmt)
+{
+    return StepField(id, v, step, stepFast,
+                     [fmt](double* p) { return ImGui::InputDouble("##v", p, 0.0, 0.0, fmt); });
 }
 
 // Подсказка «?» рядом с подписью.

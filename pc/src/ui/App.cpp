@@ -402,11 +402,11 @@ void App::RenderDemoPanel()
         return;
     auto c = sim_->GetControls();
     bool changed = false;
-    changed |= ImGui::Checkbox("Тумблер записи", &c.recSwitch);
-    changed |= ImGui::Checkbox("Датчик Д2 на шине", &c.sensorOn[0]);
-    changed |= ImGui::Checkbox("Датчик Д3 на шине", &c.sensorOn[1]);
-    changed |= ImGui::Checkbox("Карта вставлена", &c.card);
-    changed |= ImGui::Checkbox("АКБ разряжена", &c.batteryLow);
+    changed |= ui::Checkbox("Тумблер записи", &c.recSwitch);
+    changed |= ui::Checkbox("Датчик Д2 на шине", &c.sensorOn[0]);
+    changed |= ui::Checkbox("Датчик Д3 на шине", &c.sensorOn[1]);
+    changed |= ui::Checkbox("Карта вставлена", &c.card);
+    changed |= ui::Checkbox("АКБ разряжена", &c.batteryLow);
     const char* motions[] = {"Качка: штиль", "Качка: слабая", "Качка: сильная"};
     ImGui::SetNextItemWidth(-1);
     changed |= ImGui::Combo("##motion", &c.motion, motions, 3);

@@ -1,7 +1,10 @@
 #pragma once
-// Шрифты интерфейса — DejaVu Sans / Sans Bold / Sans Mono 2.35 (полные, с кириллицей; лицензия —
-// assets/fonts/LICENSE_DEJAVU.txt). Встроены в .exe ресурсами RCDATA (fonts.rc): программа не зависит от шрифтов
-// Windows и выглядит одинаково на Windows 7 и 10.
+// Шрифты интерфейса. Основной — системный Segoe UI (обычный, Semibold для подписей и заголовков, Bold для крупных
+// цифр) и Consolas для терминала из %WINDIR%\Fonts: они есть в Windows 7 и новее, с кириллицей, и выглядят как
+// остальные программы Windows. Растеризация — FreeType с лёгким хинтингом: чётко, без «мыла».
+// Встроенные в .exe ресурсами RCDATA (fonts.rc) DejaVu Sans / Sans Bold / Sans Mono 2.35 (лицензия —
+// assets/fonts/LICENSE_DEJAVU.txt) — запасной вариант, если системного шрифта нет, и источник знаков, которых нет в
+// Segoe UI (подмешиваются в тот же шрифт: MergeMode берёт только недостающие).
 //
 // Атлас: основной 16 px, мелкий, полужирный, заголовки, крупные цифры углов, моноширинный для терминала. Знаки
 // (● ▲ ✓ ⚙ …) — только нужные (GlyphRangesBuilder), чтобы атлас не рос: старые встроенные видеокарты не берут
@@ -19,6 +22,18 @@
 #endif
 
 #include "Theme.hpp"
+
+#include <cmath>
+#include <cstdio>
+#include <cstdlib>
+#include <string>
+
+#if defined(IMGUI_ENABLE_FREETYPE) && __has_include(<imgui_freetype.h>)
+#include <imgui_freetype.h>
+#define KRENOMER_FT_FLAGS ImGuiFreeTypeBuilderFlags_LightHinting
+#else
+#define KRENOMER_FT_FLAGS 0u
+#endif
 
 // Номера ресурсов (fonts.rc.in)
 #define KRENOMER_FONT_REGULAR 101
@@ -88,7 +103,8 @@ inline const ImWchar* BigRanges()
     return ranges.Data;
 }
 
-inline ImFont* AddFont(ImGuiIO& io, int id, float px, const ImWchar* ranges)
+inline ImFont* AddFont(ImGuiIO& io, int id, float px, const ImWchar* ranges, bool merge = false,
+                       float glyphOffsetY = 0.f)
 {
     void* data = nullptr;
     int size = 0;
@@ -98,29 +114,80 @@ inline ImFont* AddFont(ImGuiIO& io, int id, float px, const ImWchar* ranges)
     cfg.FontDataOwnedByAtlas = false; // данные — в ресурсах .exe
     cfg.OversampleH = 2;
     cfg.OversampleV = 1;
+    cfg.MergeMode = merge;
+    cfg.GlyphOffset.y = glyphOffsetY;
+    cfg.FontBuilderFlags = KRENOMER_FT_FLAGS;
     return io.Fonts->AddFontFromMemoryTTF(data, size, px, &cfg, ranges);
 }
 
-// Загрузить шрифты в атлас (до первого кадра). scale — масштаб экрана (96 dpi = 1).
+// Путь к системному шрифту Windows (пусто, если файла нет).
+inline std::string SystemFontPath(const char* file)
+{
+#ifdef _WIN32
+    char dir[MAX_PATH] = {};
+    const UINT n = GetWindowsDirectoryA(dir, MAX_PATH);
+    if (n == 0 || n >= MAX_PATH)
+        return {};
+    std::string path = std::string(dir) + "\\Fonts\\" + file;
+    if (GetFileAttributesA(path.c_str()) == INVALID_FILE_ATTRIBUTES)
+        return {};
+    return path;
+#else
+    (void) file;
+    return {};
+#endif
+}
+
+// Шрифт: системный file (если есть) + подмешанный встроенный fallbackId для недостающих знаков; без системного —
+// только встроенный.
+inline ImFont* AddUiFont(ImGuiIO& io, const char* file, int fallbackId, float px, const ImWchar* ranges)
+{
+    const std::string path = file ? SystemFontPath(file) : std::string();
+    if (path.empty())
+        return AddFont(io, fallbackId, px, ranges);
+    ImFontConfig cfg;
+    cfg.OversampleH = 2;
+    cfg.OversampleV = 1;
+    cfg.FontBuilderFlags = KRENOMER_FT_FLAGS;
+    // У Segoe UI большой верхний запас в метриках (место под диакритику): по
+    // ним ImGui ставит строку, и строчные буквы и цифры оказываются ниже середины
+    // кнопок и полей на ~6 % кегля. Поднять глифы на столько же.
+    cfg.GlyphOffset.y = -std::round(px * 0.06f);
+    ImFont* f = io.Fonts->AddFontFromFileTTF(path.c_str(), px, &cfg, ranges);
+    if (!f)
+        return AddFont(io, fallbackId, px, ranges);
+    AddFont(io, fallbackId, px, ranges, true, cfg.GlyphOffset.y); // только знаки, которых нет в системном
+    return f;
+}
+
+// Загрузить шрифты в атлас (до первого кадра). scale — масштаб экрана (96 dpi = 1). Segoe UI при том же кегле
+// визуально мельче DejaVu (меньше высота строчных) — ему размеры на 1–2 px больше.
+// KRENOMER_EMBEDDED_FONTS=1 в окружении — только встроенные DejaVu (для сравнения и на случай проблем).
 inline void SetupFonts(ImGuiIO& io, float scale)
 {
     io.Fonts->Clear();
     io.Fonts->TexDesiredWidth = 2048;
-    fontBody = AddFont(io, KRENOMER_FONT_REGULAR, 16.f * scale, TextRanges());
+    const char* env = std::getenv("KRENOMER_EMBEDDED_FONTS");
+    const bool sys = !(env && env[0] == '1');
+    const char* regular = sys ? "segoeui.ttf" : nullptr;
+    const char* semibold = sys ? "seguisb.ttf" : nullptr;
+    const char* bold = sys ? "segoeuib.ttf" : nullptr;
+    const char* mono = sys ? "consola.ttf" : nullptr;
+    fontBody = AddUiFont(io, regular, KRENOMER_FONT_REGULAR, (sys ? 17.f : 16.f) * scale, TextRanges());
     if (!fontBody)
     {
-        // Нет ресурсов (не должно быть) — встроенный шрифт ImGui, без кириллицы
+        // Нет ни системного шрифта, ни ресурсов (не должно быть) — встроенный шрифт ImGui, без кириллицы
         fontBody = io.Fonts->AddFontDefault();
         fontSmall = fontBold = fontH2 = fontBig = fontHuge = fontMono = fontBody;
         io.FontDefault = fontBody;
         return;
     }
-    fontSmall = AddFont(io, KRENOMER_FONT_REGULAR, 13.5f * scale, TextRanges());
-    fontBold = AddFont(io, KRENOMER_FONT_BOLD, 16.f * scale, TextRanges());
-    fontH2 = AddFont(io, KRENOMER_FONT_BOLD, 19.f * scale, TextRanges());
-    fontBig = AddFont(io, KRENOMER_FONT_BOLD, 38.f * scale, BigRanges());
-    fontHuge = AddFont(io, KRENOMER_FONT_BOLD, 30.f * scale, BigRanges());
-    fontMono = AddFont(io, KRENOMER_FONT_MONO, 14.f * scale, TextRanges());
+    fontSmall = AddUiFont(io, regular, KRENOMER_FONT_REGULAR, (sys ? 15.f : 13.5f) * scale, TextRanges());
+    fontBold = AddUiFont(io, semibold, KRENOMER_FONT_BOLD, (sys ? 17.f : 16.f) * scale, TextRanges());
+    fontH2 = AddUiFont(io, semibold, KRENOMER_FONT_BOLD, (sys ? 20.5f : 19.f) * scale, TextRanges());
+    fontBig = AddUiFont(io, bold, KRENOMER_FONT_BOLD, (sys ? 40.f : 38.f) * scale, BigRanges());
+    fontHuge = AddUiFont(io, bold, KRENOMER_FONT_BOLD, (sys ? 31.f : 30.f) * scale, BigRanges());
+    fontMono = AddUiFont(io, mono, KRENOMER_FONT_MONO, (sys ? 15.f : 14.f) * scale, TextRanges());
     io.FontDefault = fontBody;
 }
 
