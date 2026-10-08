@@ -204,6 +204,7 @@ private:
     {
         bool ok = false;      // status OK
         bool everOk = false;  // иначе ABSENT
+        double rawX = 0, rawY = 0; // ответ датчика, шаг 0,01°
         double filtX = 0, filtY = 0, offX = 0, offY = 0;
         bool filtInit = false;
         std::uint64_t okCount = 0, errCount = 0, garbled = 0;
@@ -362,6 +363,10 @@ private:
             }
             double x, y;
             TrueAngles(i, ts, x, y);
+            x = std::round(x * 100.0) / 100.0; // датчик отдаёт сотые градуса
+            y = std::round(y * 100.0) / 100.0;
+            s.rawX = x;
+            s.rawY = y;
             if (!s.filtInit)
             {
                 s.filtX = x;
@@ -485,17 +490,36 @@ private:
         return b;
     }
 
-    static std::string Row(std::time_t t, double rx, double ry, double ox, double oy, double bat, std::int64_t ms)
+    // Целое v / 10^dec с десятичной запятой, как sd_logger.c: (-46, 2) -> "-0,46"
+    static std::string Scaled(long long v, int dec)
     {
-        const std::tm tm = LocalTm(t);
-        char b[160];
-        std::snprintf(b, sizeof(b), "%02d.%02d.%02d %02d:%02d:%02d,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.1f,%lld\n", tm.tm_mday,
-                      tm.tm_mon + 1, tm.tm_year % 100, tm.tm_hour, tm.tm_min, tm.tm_sec, rx, ry, ox, oy, rx - ox, ry - oy,
-                      bat, static_cast<long long>(ms));
+        long long scale = 1;
+        for (int k = 0; k < dec; k++)
+            scale *= 10;
+        const long long a = v < 0 ? -v : v;
+        char b[32];
+        if (dec)
+            std::snprintf(b, sizeof(b), "%s%lld,%0*lld", v < 0 ? "-" : "", a / scale, dec, a % scale);
+        else
+            std::snprintf(b, sizeof(b), "%s%lld", v < 0 ? "-" : "", a);
         return b;
     }
 
-    static constexpr const char* kHeader = "Time,RawX,RawY,OffsetX,OffsetY,CalcX,CalcY,BatV,Ms\n";
+    // Строка как у прибора 1.4: сырой угол (сотые), ноль и Raw − Offset (тысячные), «;», запятая
+    static std::string Row(std::time_t t, double rx, double ry, double ox, double oy, double bat, std::int64_t ms)
+    {
+        const std::tm tm = LocalTm(t);
+        const long long rcx = std::llround(rx * 100.0), rcy = std::llround(ry * 100.0);
+        const long long omx = std::llround(ox * 1000.0), omy = std::llround(oy * 1000.0);
+        char d[40];
+        std::snprintf(d, sizeof(d), "%02d.%02d.%04d;%02d:%02d:%02d;", tm.tm_mday, tm.tm_mon + 1, tm.tm_year + 1900,
+                      tm.tm_hour, tm.tm_min, tm.tm_sec);
+        return d + Scaled(rcx, 2) + ";" + Scaled(rcy, 2) + ";" + Scaled(omx, 3) + ";" + Scaled(omy, 3) + ";" +
+               Scaled(rcx * 10 - omx, 3) + ";" + Scaled(rcy * 10 - omy, 3) + ";" + Scaled(std::llround(bat * 10.0), 1) +
+               ";" + std::to_string(ms) + "\n";
+    }
+
+    static constexpr const char* kHeader = "Date;Time;RawX;RawY;OffsetX;OffsetY;CalcX;CalcY;BatV;Ms\n";
 
     void MakeInitialFiles(std::time_t now)
     {
@@ -555,7 +579,7 @@ private:
     void AppendRow(int i, std::int64_t t)
     {
         const Sensor& s = sens_[i];
-        recData_[i] += Row(WallTime(t), s.filtX, s.filtY, s.offX, s.offY, batV_, t - recStartMs_);
+        recData_[i] += Row(WallTime(t), s.rawX, s.rawY, s.offX, s.offY, batV_, t - recStartMs_);
     }
 
     std::time_t WallTime(std::int64_t now) const { return clockBase_ + static_cast<std::time_t>(now / 1000); }
@@ -1266,7 +1290,7 @@ private:
     std::mt19937 rng_;
     Controls ctl_;
 
-    std::string fwVersion_ = "1.3";
+    std::string fwVersion_ = "1.4";
     std::int64_t bootMs_ = 0, simMs_ = 0, nextPoll_ = 0, nextRoll_ = 0;
     std::int64_t usbBackAt_ = 0;
     bool inDfu_ = false;

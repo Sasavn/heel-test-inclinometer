@@ -36,7 +36,8 @@ bool sd_logger_file_name(uint8_t i, char out[SD_NAME_LEN]);
 
 // --- Чистые функции (host-тесты) ---
 
-// Строка CSV: Time,RawX,RawY,OffsetX,OffsetY,CalcX,CalcY,BatV,Ms + '\n'.
+// Строка CSV: Date;Time;RawX;RawY;OffsetX;OffsetY;CalcX;CalcY;BatV;Ms + '\n',
+// дробная часть через запятую (столбцы — см. sd_logger.c).
 // Возвращает длину без '\0' (не больше SD_ROW_MAX - 1).
 uint16_t sd_format_row(char *out, const app_time_t *t, const app_sensor_t *s,
 		float bat_v, uint32_t ms);

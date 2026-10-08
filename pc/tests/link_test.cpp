@@ -120,7 +120,7 @@ static void TestConnectAndStream()
     Rig r;
     CHECK(r.WaitConnected(3000));
     auto s = r.link->Snapshot();
-    CHECK(s.state == LinkState::Connected && s.haveVer && s.ver.version == "1.3");
+    CHECK(s.state == LinkState::Connected && s.haveVer && s.ver.version == "1.4");
     CHECK(s.demo && s.port == "ДЕМО");
     r.Run(3000);
     s = r.link->Snapshot();

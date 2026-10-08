@@ -43,13 +43,22 @@
 #define SD_CHECK_MS    2000                          // проверка/монтирование карты без записи
 #define SD_BAD_RETRY_MS 10000                        // карта отвечает, но не монтируется (нет FAT и т. п.)
 
-// Заголовок CSV. Колонки менять нельзя — их читает скрипт обработки.
-// ВНИМАНИЕ: исторически "RawX/RawY" — это ОТФИЛЬТРОВАННЫЙ угол (медиана + EMA)
-// до вычитания нуля, а не сырой ответ датчика. CalcX/CalcY = RawX/RawY - Offset.
-// Ms — миллисекунды от начала записи (момент ответа датчика): в одной секунде
-// колонки Time бывает до 50 строк.
+// Заголовок CSV. Столбцы через «;», дробная часть — через запятую: Excel с
+// русскими настройками открывает файл сразу, без мастера импорта.
+//   Date, Time — дата ДД.ММ.ГГГГ и время ЧЧ:ММ:СС часов прибора;
+//   RawX, RawY — сырой ответ датчика без какой-либо обработки: регистр угла,
+//       переведённый в градусы по формуле датчика (код - 10000) / 100,
+//       2 знака — ровно шаг датчика 0,01°;
+//   OffsetX, OffsetY — смещение нуля (кнопка «Ноль»; 0, пока ноль не задан);
+//   CalcX, CalcY — пересчитанный угол: RawX - OffsetX, RawY - OffsetY — ровно
+//       разность записанных в строке чисел;
+//   BatV — напряжение аккумулятора, В;
+//   Ms — миллисекунды от начала записи (момент ответа датчика): в одной секунде
+//       столбца Time бывает до 50 строк.
+// Медиана и EMA (сглаживание) — только для экрана и расчёта качки, в файл
+// не попадают. Ноль снимается со сглаженного угла в момент нажатия «Ноль».
 static const char s_header[] =
-		"Time,RawX,RawY,OffsetX,OffsetY,CalcX,CalcY,BatV,Ms\n";
+		"Date;Time;RawX;RawY;OffsetX;OffsetY;CalcX;CalcY;BatV;Ms\n";
 
 typedef struct {
 	FIL fil;
@@ -91,30 +100,37 @@ static char* put_u32(char *p, uint32_t v) {
 	return p;
 }
 
-// Число с dec (0..3) знаками после точки — тот же текст, что даёт printf("%.*f"),
-// но без printf: быстро, без кучи и одинаково на МК и в host-тестах.
-static char* put_fixed(char *p, float v, uint8_t dec) {
-	static const uint32_t pow10[] = { 1u, 10u, 100u, 1000u };
-	uint32_t scale = pow10[dec];
+static const uint32_t s_pow10[] = { 1u, 10u, 100u, 1000u };
+
+// v * 10^dec (dec 0..3), округлённое к ближайшему целому — то же, что
+// printf("%.*f"): произведение точное (24 бита мантиссы float * 10^dec),
+// на точной половине — к чётному. Без printf: быстро, без кучи и одинаково
+// на МК и в host-тестах.
+static int32_t to_scaled(float v, uint8_t dec) {
 	double a = (v < 0.0f) ? -(double) v : (double) v;
 	if (!(a < 1.0e6)) {
 		a = 999999.0; // NaN или переполнение — в норме не бывает
 	}
-	// Произведение точное (24 бита мантиссы float * scale), поэтому округление
-	// совпадает с printf: к ближайшему, на точной половине — к чётному.
-	double prod = a * (double) scale;
+	double prod = a * (double) s_pow10[dec];
 	uint32_t q = (uint32_t) prod;
 	double frac = prod - (double) q;
 	if (frac > 0.5 || (frac == 0.5 && (q & 1u))) {
 		q++;
 	}
-	if (v < 0.0f) {
+	return (v < 0.0f) ? -(int32_t) q : (int32_t) q;
+}
+
+// Целое v / 10^dec с dec знаками после десятичной ЗАПЯТОЙ: (-46, 2) -> "-0,46"
+static char* put_scaled(char *p, int32_t v, uint8_t dec) {
+	uint32_t scale = s_pow10[dec];
+	uint32_t a = (v < 0) ? 0u - (uint32_t) v : (uint32_t) v;
+	if (v < 0) {
 		*p++ = '-';
 	}
-	p = put_u32(p, q / scale);
+	p = put_u32(p, a / scale);
 	if (dec) {
-		uint32_t f = q % scale;
-		*p++ = '.';
+		uint32_t f = a % scale;
+		*p++ = ',';
 		for (uint32_t d = scale / 10; d; d /= 10) {
 			*p++ = (char) ('0' + (f / d) % 10);
 		}
@@ -122,37 +138,45 @@ static char* put_fixed(char *p, float v, uint8_t dec) {
 	return p;
 }
 
-// Строка CSV одного отсчёта датчика.
-// Формат как у прежней прошивки: "%02d.%02d.%02d %02d:%02d:%02d,%.3f x6,%.1f" + ",Ms".
+// Строка CSV одного отсчёта датчика (столбцы — см. s_header):
+// "01.06.2026;09:05:07;-0,46;1,25;0,125;0,000;-0,585;1,250;12,4;1234".
+// Сырой угол — в сотых градуса (ровно регистр датчика), смещение нуля — в
+// тысячных; пересчитанный считается в целых от уже округлённых чисел, поэтому
+// в файле CalcX = RawX - OffsetX точно.
 uint16_t sd_format_row(char *out, const app_time_t *t, const app_sensor_t *s,
 		float bat_v, uint32_t ms) {
+	int32_t raw_x = to_scaled(s->raw_x, 2), raw_y = to_scaled(s->raw_y, 2);
+	int32_t off_x = to_scaled(s->off_x, 3), off_y = to_scaled(s->off_y, 3);
 	char *p = out;
 	p = put_u2(p, t->date);
 	*p++ = '.';
 	p = put_u2(p, t->month);
 	*p++ = '.';
+	*p++ = '2';
+	*p++ = '0';
 	p = put_u2(p, t->year);
-	*p++ = ' ';
+	*p++ = ';';
 	p = put_u2(p, t->hours);
 	*p++ = ':';
 	p = put_u2(p, t->minutes);
 	*p++ = ':';
 	p = put_u2(p, t->seconds);
-	*p++ = ',';
-	p = put_fixed(p, s->filt_x, 3); // RawX (фильтрованный, до нуля — см. s_header)
-	*p++ = ',';
-	p = put_fixed(p, s->filt_y, 3); // RawY
-	*p++ = ',';
-	p = put_fixed(p, s->off_x, 3);
-	*p++ = ',';
-	p = put_fixed(p, s->off_y, 3);
-	*p++ = ',';
-	p = put_fixed(p, s->x, 3);      // CalcX
-	*p++ = ',';
-	p = put_fixed(p, s->y, 3);      // CalcY
-	*p++ = ',';
-	p = put_fixed(p, bat_v, 1);
-	*p++ = ',';
+	*p++ = ';';
+	// Порядок столбцов: RawX;RawY;OffsetX;OffsetY;CalcX;CalcY
+	p = put_scaled(p, raw_x, 2);
+	*p++ = ';';
+	p = put_scaled(p, raw_y, 2);
+	*p++ = ';';
+	p = put_scaled(p, off_x, 3);
+	*p++ = ';';
+	p = put_scaled(p, off_y, 3);
+	*p++ = ';';
+	p = put_scaled(p, raw_x * 10 - off_x, 3);
+	*p++ = ';';
+	p = put_scaled(p, raw_y * 10 - off_y, 3);
+	*p++ = ';';
+	p = put_scaled(p, to_scaled(bat_v, 1), 1);
+	*p++ = ';';
 	p = put_u32(p, ms);
 	*p++ = '\n';
 	*p = '\0';

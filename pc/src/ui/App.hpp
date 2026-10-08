@@ -20,7 +20,7 @@
 namespace ui
 {
 
-inline constexpr const char* kAppVersion = "1.0";
+inline constexpr const char* kAppVersion = "1.1";
 
 enum class Page
 {

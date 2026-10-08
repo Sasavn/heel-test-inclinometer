@@ -70,8 +70,8 @@
 #define TILE_W              ((UI_W - 3 * TILE_GAP) / 2)
 #define TILE_H              65
 
-// Значок качки — волна
-#define ICON_ROLL           "~"
+// Значок качки — кораблик с креном над ватерлинией (шрифт 20)
+#define ICON_ROLL           UI_SYMBOL_SHIP
 
 // Шаги полей качки
 #define ROLL_WIN_STEP_S     5       // окно — по 5 с

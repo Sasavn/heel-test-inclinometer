@@ -118,7 +118,7 @@ static void TestUpdateDemo()
     CHECK_MSG(up.GetStep() == fw::Updater::Step::Done, "шаг %d, ошибка: %s", static_cast<int>(up.GetStep()),
               up.Error().c_str());
     CHECK(sawDfu && sawDownload && sawReadback);
-    CHECK(up.NewVersion() == "1.3"); // имитатор «прошивается» без смены версии
+    CHECK(up.NewVersion() == "1.4"); // имитатор «прошивается» без смены версии
     CHECK(link.IsConnected());
     bool verified = false;
     for (const auto& l : up.Log())

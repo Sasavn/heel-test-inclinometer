@@ -49,7 +49,7 @@
 param(
     [ValidateSet('sweep', 'watch')]
     [string]$Mode = 'sweep',
-    [int[]]$Gaps = @(15, 10, 8, 6, 5, 4, 3),
+    [string[]]$Gaps = @('15', '10', '8', '6', '5', '4', '3'),
     [int]$Freq = 50,
     [int]$BaseGap = 15,
     [int]$ExtraFreq = 20,
@@ -63,6 +63,8 @@ param(
 )
 
 $ErrorActionPreference = 'Continue'
+# powershell -File hands "-Gaps 15,10,5" over as one string: split it here
+$Gaps = @($Gaps | ForEach-Object { $_ -split '[,; ]+' } | Where-Object { $_ -ne '' } | ForEach-Object { [int]$_ })
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 if (-not $OutDir) { $OutDir = $ScriptDir }
 $Stamp = Get-Date -Format 'yyyyMMdd_HHmmss'
@@ -72,6 +74,7 @@ $StreamFile = Join-Path $OutDir ("rs485_sweep_{0}_stream.csv" -f $Stamp)
 
 $CDC_ID = 'VID_0483&PID_5740'
 $Sensors = @(2, 3)
+$Judge = $Sensors   # sensors that count for the CLEAN/ERRORS verdict
 
 function Log([string]$msg) {
     $line = '{0} {1}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss.fff'), $msg
@@ -260,7 +263,7 @@ function Run-Step($sp, [string]$name, [int]$seconds) {
         $r["done_avg_us$a"] = V $after "done_avg$a"; $r["timeout_us$a"] = V $after "tmo_us$a"
         $errs = 0
         foreach ($k in @("to$a", "crc$a", "bad$a")) { if ($after.ContainsKey($k)) { $errs += $after[$k] } }
-        if ($errs -gt 0 -or (V $after "st$a") -ne 'OK') { $bad++ }
+        if ($Judge -contains $a -and ($errs -gt 0 -or (V $after "st$a") -ne 'OK')) { $bad++ }
     }
     if ($bad -eq 0) { $r['verdict'] = 'CLEAN' } else { $r['verdict'] = 'ERRORS' }
     $Summary.Add([pscustomobject]$r)
@@ -302,6 +305,10 @@ try {
         Log "ERROR: sensor(s) $($notOk -join ',') not OK - connect both sensors (or -Force)"
         $rc = 3
         throw 'sensors'
+    }
+    if ($notOk.Count -gt 0) {
+        $script:Judge = @($Sensors | Where-Object { $notOk -notcontains $_ })
+        Log "WARNING: sensor(s) $($notOk -join ',') not OK - measuring anyway (-Force), verdict by sensor(s) $($Judge -join ',')"
     }
     if ((V $d0 'sd') -eq 'RECORDING' -and -not $Force) {
         Log "ERROR: the board is recording to SD - not changing its settings (stop recording or -Force)"

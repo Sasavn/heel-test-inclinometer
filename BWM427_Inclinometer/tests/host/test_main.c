@@ -224,18 +224,50 @@ static void test_csv(void) {
 				}
 			}
 		}
-		s.filt_x = v[0];
+		// Сырой угол — всегда из регистра датчика (любой 16-битный код)
+		uint16_t regs[2] = { (uint16_t) rand(), (uint16_t) (rand() * 7u) };
+		if (i < 4) {
+			regs[0] = (uint16_t[]) { 10000, 9954, 0, 65535 }[i];
+			regs[1] = (uint16_t[]) { 10001, 9999, 42768, 32767 }[i];
+		}
+		bwm427_decode_xy(regs, &s.raw_x, &s.raw_y);
+		s.filt_x = v[0]; // фильтр и экранный угол в файл не идут
 		s.filt_y = v[1];
-		s.off_x = v[2];
-		s.off_y = v[3];
 		s.x = v[4];
 		s.y = v[5];
+		s.off_x = v[2];
+		s.off_y = v[3];
 		uint32_t ms = (uint32_t) rand() * 7919u;
 		uint16_t n = sd_format_row(row, &t, &s, v[6], ms);
-		snprintf(ref, sizeof(ref), "%02d.%02d.%02d %02d:%02d:%02d,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.1f,%lu\n",
+		// Эталон: printf, затем десятичная запятая; пересчитанный — из записанных чисел
+		int raw_c[2] = { (int16_t) regs[0] - 10000, (int16_t) regs[1] - 10000 };
+		char off_s[2][24], calc_s[2][24], raw_s[2][24], bat_s[16];
+		for (int a = 0; a < 2; a++) {
+			snprintf(raw_s[a], sizeof(raw_s[a]), "%s%d.%02d", raw_c[a] < 0 ? "-" : "",
+					abs(raw_c[a]) / 100, abs(raw_c[a]) % 100);
+			snprintf(off_s[a], sizeof(off_s[a]), "%.3f", a ? v[3] : v[2]);
+			if (strcmp(off_s[a], "-0.000") == 0) {
+				strcpy(off_s[a], "0.000"); // прибор не пишет «минус ноль»
+			}
+			long off_m = lround(strtod(off_s[a], NULL) * 1000.0);
+			long calc_m = raw_c[a] * 10L - off_m;
+			snprintf(calc_s[a], sizeof(calc_s[a]), "%s%ld.%03ld", calc_m < 0 ? "-" : "",
+					labs(calc_m) / 1000, labs(calc_m) % 1000);
+		}
+		snprintf(bat_s, sizeof(bat_s), "%.1f", v[6]);
+		if (strcmp(bat_s, "-0.0") == 0) {
+			strcpy(bat_s, "0.0");
+		}
+		snprintf(ref, sizeof(ref), "%02d.%02d.20%02d;%02d:%02d:%02d;%s;%s;%s;%s;%s;%s;%s;%lu\n",
 				t.date, t.month, t.year, t.hours, t.minutes, t.seconds,
-				v[0], v[1], v[2], v[3], v[4], v[5], v[6], (unsigned long) ms);
-		if (strcmp(row, ref) != 0 || n != strlen(ref)) {
+				raw_s[0], raw_s[1], off_s[0], off_s[1], calc_s[0], calc_s[1], bat_s,
+				(unsigned long) ms);
+		for (char *c = ref; *c; c++) {
+			if (*c == '.' && c > ref + 10) { // точки даты оставить
+				*c = ',';
+			}
+		}
+		if (strcmp(row, ref) != 0 || n != strlen(ref) || n >= SD_ROW_MAX) {
 			if (mismatches++ < 5) {
 				printf("  CSV: got  %s        want %s", row, ref);
 			}
@@ -243,14 +275,23 @@ static void test_csv(void) {
 	}
 	CHECK(mismatches == 0);
 	t = (app_time_t ) { .year = 5, .month = 12, .date = 31, .hours = 23, .minutes = 59, .seconds = 0 };
-	s.filt_x = 1.5f;
+	s.raw_x = 1.5f;
+	s.raw_y = -0.46f;
+	s.filt_x = 1.4f;
 	s.filt_y = -0.25f;
 	s.off_x = 0.5f;
-	s.off_y = 0.0f;
-	s.x = 1.0f;
+	s.off_y = -0.0004f;
+	s.x = 0.9f;
 	s.y = -0.25f;
 	sd_format_row(row, &t, &s, 7.36f, 0);
-	CHECK(strcmp(row, "31.12.05 23:59:00,1.500,-0.250,0.500,0.000,1.000,-0.250,7.4,0\n") == 0);
+	CHECK(strcmp(row, "31.12.2005;23:59:00;1,50;-0,46;0,500;0,000;1,000;-0,460;7,4;0\n") == 0);
+	s.raw_x = -0.05f;
+	s.off_x = 0.0125f; // смещение пишется с округлением, разность — от записанного
+	s.raw_y = 327.67f;
+	s.off_y = -327.68f;
+	sd_format_row(row, &t, &s, 12.0f, 4294967295u);
+	CHECK(strcmp(row, "31.12.2005;23:59:00;-0,05;327,67;0,013;-327,680;-0,063;655,350;12,0;4294967295\n")
+			== 0);
 
 	char name[SD_NAME_LEN];
 	uint16_t num;
@@ -751,7 +792,7 @@ static uint32_t requests_to(uint8_t addr, uint32_t from) {
 }
 
 // Разобрать CSV: число строк данных, проверить заголовок, монотонность Ms
-// и CalcX = RawX - OffsetX. Возвращает -1 при ошибке формата.
+// и CalcX = RawX - OffsetX (точно до 0,001). Возвращает -1 при ошибке формата.
 static int csv_rows(const char *name, uint32_t *first_ms, uint32_t *last_ms) {
 	uint32_t len;
 	const char *d = fake_fs_get(name, &len);
@@ -761,7 +802,7 @@ static int csv_rows(const char *name, uint32_t *first_ms, uint32_t *last_ms) {
 	char *buf = malloc(len + 1);
 	memcpy(buf, d, len);
 	buf[len] = 0;
-	const char *hdr = "Time,RawX,RawY,OffsetX,OffsetY,CalcX,CalcY,BatV,Ms\n";
+	const char *hdr = "Date;Time;RawX;RawY;OffsetX;OffsetY;CalcX;CalcY;BatV;Ms\n";
 	if (strncmp(buf, hdr, strlen(hdr)) != 0) {
 		free(buf);
 		return -1;
@@ -776,12 +817,20 @@ static int csv_rows(const char *name, uint32_t *first_ms, uint32_t *last_ms) {
 			break;
 		}
 		*nl = 0;
+		char tmp[SD_ROW_MAX];
+		snprintf(tmp, sizeof(tmp), "%s", line);
+		for (char *c = tmp; *c; c++) {
+			if (*c == ',') {
+				*c = '.'; // десятичная запятая -> точка для sscanf
+			}
+		}
 		int dd, mo, yy, hh, mi, ss;
-		float rx, ry, ox, oy, cx, cy, bv;
+		double rx, ry, ox, oy, cx, cy, bv;
 		unsigned long ms;
-		if (sscanf(line, "%d.%d.%d %d:%d:%d,%f,%f,%f,%f,%f,%f,%f,%lu", &dd, &mo, &yy, &hh,
-				&mi, &ss, &rx, &ry, &ox, &oy, &cx, &cy, &bv, &ms) != 14
-				|| fabsf(cx - (rx - ox)) > 0.0015f || fabsf(cy - (ry - oy)) > 0.0015f
+		if (strchr(line, '.') - line != 2 || strlen(line) >= SD_ROW_MAX
+				|| sscanf(tmp, "%d.%d.%d;%d:%d:%d;%lf;%lf;%lf;%lf;%lf;%lf;%lf;%lu", &dd, &mo,
+						&yy, &hh, &mi, &ss, &rx, &ry, &ox, &oy, &cx, &cy, &bv, &ms) != 14
+				|| yy < 2000 || fabs(cx - (rx - ox)) > 1e-6 || fabs(cy - (ry - oy)) > 1e-6
 				|| (long) ms <= prev) {
 			printf("  плохая строка в %s: %s\n", name, line);
 			rows = -1;

@@ -94,6 +94,8 @@ typedef enum {
 #define UI_ARROW            "\xE2\x86\x92"   // U+2192 «→»
 #define UI_DEG              "\xC2\xB0"       // U+00B0 «°»
 #define UI_MIDDOT           "\xC2\xB7"       // U+00B7 «·»
+// Свои значки (tools/ui_sim/fonts/make_ship_font.py), только в шрифте 20
+#define UI_SYMBOL_SHIP      "\xEE\x80\x80"   // U+E000 кораблик с креном (качка)
 
 // --- Логотип САФУ (ui_logo.c, генерация: tools/ui_sim/logo/gen_logo.js) ---
 extern const lv_image_dsc_t ui_logo_dark;   // слой «сафу», A2

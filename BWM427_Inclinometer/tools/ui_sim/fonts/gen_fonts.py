@@ -12,8 +12,10 @@
   DejaVuSans-subset.ttf — только греческий и геометрические фигуры
       (α и ● — в Montserrat их нет), вырезано fontTools из DejaVuSans.ttf LVGL;
   FontAwesome5-lvsymbols.ttf — символы LV_SYMBOL_* из
-      scripts/built_in_font/FontAwesome5-Solid+Brands+Regular.woff LVGL.
-Лицензии — в licenses/.
+      scripts/built_in_font/FontAwesome5-Solid+Brands+Regular.woff LVGL;
+  ShipIcon.ttf — свой значок «Качка» (кораблик с креном, U+E000), рисует
+      make_ship_font.py (fontTools) — правят его там, затем перегенерируют.
+Лицензии — в licenses/ (ShipIcon — своя работа проекта).
 
 Шрифты:
   ui_font_14  — Montserrat Medium 14: текст + значки строки состояния;
@@ -31,7 +33,12 @@ Core/Inc/version.h) + цифры и символы имён файлов (выв
 
 Значки FontAwesome — списки SYM_* ниже (какой значок каким шрифтом
 рисуется, по строкам не определить); проверка требует, чтобы каждый
-LV_SYMBOL_* из интерфейса был хотя бы в одном шрифте.
+LV_SYMBOL_* из интерфейса был хотя бы в одном шрифте. Свои значки — коды
+U+E000–U+E0FF (OWN_ICONS, в строках — макросы UI_SYMBOL_* из
+ui_internal.h) — так же: списки ICON_* ниже, проверка — что каждый код из
+строк интерфейса есть хотя бы в одном шрифте; в текстовые наборы символов
+они не попадают. Свои значки растеризуются без автохинтинга (рисунок уже
+выровнен по пикселям шрифта 20).
 
 После lv_font_conv цифры 0-9 делаются моноширинными (ширина самой широкой
 цифры, глиф по центру ячейки), чтобы меняющиеся числа не «прыгали».
@@ -74,6 +81,7 @@ MONT_MED = os.path.join(SRC, "Montserrat-Medium.ttf")
 MONT_BOLD = os.path.join(SRC, "Montserrat-Bold.ttf")
 DEJAVU = os.path.join(SRC, "DejaVuSans-subset.ttf")
 FA = os.path.join(SRC, "FontAwesome5-lvsymbols.ttf")
+SHIP = os.path.join(SRC, "ShipIcon.ttf")
 
 # Символы, которые выводятся не из строк интерфейса: цифры (числа) и знаки
 # имён файлов замера 2026-10-07_M007_D2.CSV (sd_logger_file_name)
@@ -96,16 +104,20 @@ SYM_BATTERY_1 = "0xF243"        # LV_SYMBOL_BATTERY_1 (меню: порог АК
 SYM_EYE = "0xF06E"              # LV_SYMBOL_EYE_OPEN (плитки: датчики)
 SYM_LOOP = "0xF079"             # LV_SYMBOL_LOOP     (плитки: частота)
 
+# Свои значки (ShipIcon.ttf): коды U+E000–U+E0FF
+OWN_ICONS = range(0xE000, 0xE100)
+ICON_SHIP = "0xE000"            # UI_SYMBOL_SHIP     (меню: качка)
+
 # Размер крупных цифр углов. Ширина "−88.88°" = 4 цифры + знак + точка + °;
 # в строке карточки датчика рядом с ней — «качка 12.34°» (ui_main.c)
 NUM_SIZE = 33
 
 TEXT_FONTS = {
-	# имя: (размер, значки FontAwesome)
-	"ui_font_14": (14, [SYM_SD, SYM_WARNING, SYM_OK, SYM_CLOSE]),
+	# имя: (размер, значки FontAwesome, свои значки)
+	"ui_font_14": (14, [SYM_SD, SYM_WARNING, SYM_OK, SYM_CLOSE], []),
 	"ui_font_20": (20, [SYM_SETTINGS, SYM_OK, SYM_CLOSE, SYM_LEFT, SYM_WARNING, SYM_SAVE,
 	                    SYM_REFRESH, SYM_BELL, SYM_EDIT, SYM_PAUSE, SYM_TINT, SYM_BATTERY_1,
-	                    SYM_SD, SYM_EYE, SYM_LOOP]),
+	                    SYM_SD, SYM_EYE, SYM_LOOP], [ICON_SHIP]),
 }
 # Крупные цифры углов и полей ввода: только то, что реально выводится:
 # пробел + . 0-9 : ° — и U+2212 «минус» (той же ширины, что и '+'; в тексте
@@ -228,7 +240,8 @@ def ui_files():
 
 
 def used_chars():
-	"""(символы для шрифта 14, для шрифта 20, коды значков) по строкам интерфейса."""
+	"""(символы для шрифта 14, для шрифта 20, коды значков) по строкам интерфейса.
+	Значки — LV_SYMBOL_* (FontAwesome) и свои (OWN_ICONS, из строк)."""
 	small, mid = set(DYNAMIC), set(DYNAMIC)
 	syms = set()
 	codes = symbol_codes()
@@ -240,7 +253,9 @@ def used_chars():
 		for name in re.findall(r"\bLV_SYMBOL_\w+", open(f, encoding="utf-8").read()):
 			if name in codes:
 				syms.add(codes[name])
-	clean = lambda s: {ord(c) for c in s if ord(c) >= 0x20 and not 0xF000 <= ord(c) <= 0xF8FF}
+	syms.update(ord(c) for c in small if ord(c) in OWN_ICONS)
+	clean = lambda s: {ord(c) for c in s if ord(c) >= 0x20 and not 0xF000 <= ord(c) <= 0xF8FF
+	                   and ord(c) not in OWN_ICONS}
 	return clean(small), clean(mid), syms
 
 
@@ -266,8 +281,9 @@ def ranges(codes):
 	return ",".join(parts)
 
 
-def text_font_args(chars, syms):
-	"""Символы по исходным шрифтам: Montserrat, нет — DejaVu."""
+def text_font_args(chars, syms, own):
+	"""Символы по исходным шрифтам: Montserrat, нет — DejaVu; значки
+	FontAwesome (syms) и свои (own, без автохинтинга)."""
 	mont, dejavu = cmap(MONT_MED), cmap(DEJAVU)
 	in_mont = {c for c in chars if c in mont}
 	in_dejavu = {c for c in chars - in_mont if c in dejavu}
@@ -279,6 +295,8 @@ def text_font_args(chars, syms):
 	if in_dejavu:
 		args += ["--font", DEJAVU, "-r", ranges(in_dejavu)]
 	args += ["--font", FA, "-r", ",".join(syms)]
+	if own:
+		args += ["--font", SHIP, "--autohint-off", "-r", ",".join(own)]
 	return args
 
 
@@ -364,7 +382,8 @@ def check(out_dir):
 		if not any(s in h for h in have.values()):
 			ok = False
 			print("значка U+%04X нет ни в одном шрифте" % s)
-	extra = {name: len(have[name] - need[name] - set(range(0xF000, 0xF900))) for name in need}
+	extra = {name: len(have[name] - need[name] - set(range(0xF000, 0xF900)) - set(OWN_ICONS))
+	         for name in need}
 	print("шрифты: %s — %s" % (", ".join("%s %d симв. (лишних %d)" % (n, len(have[n]), extra[n])
 	                                    for n in need), "OK" if ok else "ОШИБКА"))
 	if any(extra.values()):
@@ -389,8 +408,9 @@ def main():
 	os.makedirs(out_dir, exist_ok=True)
 	small, mid, _ = used_chars()
 	chars = {"ui_font_14": small, "ui_font_20": mid}
-	for name, (size, syms) in TEXT_FONTS.items():
-		path = run_conv(name, size, text_font_args(chars[name], syms), out_dir, a.bpp, a.compress)
+	for name, (size, syms, own) in TEXT_FONTS.items():
+		path = run_conv(name, size, text_font_args(chars[name], syms, own), out_dir, a.bpp,
+		                a.compress)
 		make_tabular_digits(path, out_dir)
 	path = run_conv("ui_font_num", NUM_SIZE, ["--font", MONT_BOLD, "-r", NUM_RANGE, "--no-kerning"],
 	                out_dir, a.bpp, a.compress)
