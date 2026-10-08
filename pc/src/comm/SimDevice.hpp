@@ -1,8 +1,9 @@
 #pragma once
 // Прибор-имитатор для демо-режима и тестов: говорит тем же протоколом, что прошивка (usb_cli.c + usb_cli_ext.c):
 // ver, help, diag, diag reset, stream N (шапка и строки S), set …, set time, status (тот же JSON), addr, zero,
-// files, get (G / D / E с base64 и CRC-32), get abort, boot / dfu, reset. Форматы ответов — как у прошивки, чтобы
-// демо проверяло тот же разбор, что и настоящий прибор.
+// files, get (G / D / E с base64 и CRC-32), get abort, samples on|off (строки R, с прошивки 1.5), boot / dfu, reset.
+// Форматы ответов — как у прошивки, чтобы демо проверяло тот же разбор, что и настоящий прибор. Версия прошивки
+// имитатора — 1.5; SetFwVersion("1.4") — старая прошивка без samples («ERR unknown command»).
 //
 // Модель: опыт кренования — каждые 40 с груз переносят, крен меняется ступенькой (0 → +1 → +2 → +1 → 0 → −1 → −2 → −1)
 // и затухающими колебаниями; поверх — качка (слабая / сильная) и шум датчика. Фильтр EMA, ноль, окно качки с
@@ -101,11 +102,26 @@ public:
         return fwVersion_;
     }
 
+    // Для тестов: версия прошивки (до 1.5 — команды samples нет).
+    void SetFwVersion(const std::string& v)
+    {
+        std::lock_guard lock(m_);
+        fwVersion_ = v;
+    }
+
+    // Для тестов: выбрасывать каждую k-ю строку R (прибор «не успел отправить»; 0 — не выбрасывать).
+    void SetSamplesDropEvery(int k)
+    {
+        std::lock_guard lock(m_);
+        samplesDropEvery_ = k;
+    }
+
     // Порт открыли (DTR 0 -> 1): прибор выбрасывает неотправленное; закрыли — выключает поток.
     void PortOpened()
     {
         std::lock_guard lock(m_);
         streamMs_ = 0;
+        samplesOn_ = false;
         xfer_ = {};
     }
 
@@ -243,6 +259,7 @@ private:
         for (auto& s : sens_)
             s = Sensor{};
         streamMs_ = 0;
+        samplesOn_ = false;
         xfer_ = {};
         sdState_ = ctl_.card ? "READY" : "NO_CARD";
         recRows_ = 0;
@@ -338,6 +355,7 @@ private:
         std::uniform_int_distribution<int> jitter(0, 400);
         std::uint64_t cyc = 0;
         bool allOk = true;
+        bool fresh[kSensors] = {};
         for (int i = 0; i < kSensors; i++)
         {
             Sensor& s = sens_[i];
@@ -379,6 +397,7 @@ private:
             s.everOk = true;
             s.okCount++;
             s.lastOkMs = t;
+            fresh[i] = true;
             const std::uint64_t lat = (i == 0 ? 3000 : 7000) + static_cast<std::uint64_t>(jitter(rng_));
             s.lat.Add(lat);
             s.done.Add(lat + 781);
@@ -395,7 +414,35 @@ private:
                     recMask_ |= 1 << i;
                     AppendRow(i, t);
                 }
+        // samples: строка R на каждый свежий отсчёт (usb_cli_ext_samples)
+        if (samplesOn_ && !inDfu_ && t >= usbBackAt_)
+            for (int i = 0; i < kSensors; i++)
+                if (fresh[i])
+                {
+                    if (samplesDropEvery_ > 0 && ++samplesSeq_ % static_cast<std::uint64_t>(samplesDropEvery_) == 0)
+                    {
+                        samplesDropped_++;
+                        continue;
+                    }
+                    Out(SampleLine(i, t));
+                }
     }
+
+    // «R,<адрес>,<n>,<t_ms>,<RawX>,<RawY>,<OffsetX>,<OffsetY>,<BatV>»: целые, округлены как в CSV на карте; t_ms —
+    // от включения прибора (HAL_GetTick), ответ Д3 — позже ответа Д2 в том же цикле
+    std::string SampleLine(int i, std::int64_t t) const
+    {
+        const Sensor& s = sens_[i];
+        char b[128];
+        std::snprintf(b, sizeof(b), "R,%d,%llu,%lu,%lld,%lld,%lld,%lld,%lld", kAddr[i],
+                      static_cast<unsigned long long>(s.okCount & 0xFFFFFFFFull),
+                      static_cast<unsigned long>(static_cast<std::uint32_t>(t - bootMs_ + (i ? 12 : 4))),
+                      std::llround(s.rawX * 100.0), std::llround(s.rawY * 100.0), std::llround(s.offX * 1000.0),
+                      std::llround(s.offY * 1000.0), std::llround(batV_ * 10.0));
+        return b;
+    }
+
+    bool HasSamples() const { return proto::VersionAtLeast(fwVersion_, 1, 5).value_or(true); }
 
     void RollSample(std::int64_t t)
     {
@@ -856,9 +903,12 @@ private:
                                   "  zero | zero reset   zero angles of answering sensors / clear zero",
                                   "  files          list *.CSV on the card: F,name,bytes,date time",
                                   "  get NAME [OFS] send a file: G,name,size,ofs  D,base64...  E,bytes,crc32",
-                                  "  get abort      stop the transfer", "  help", "OK"})
+                                  "  get abort      stop the transfer"})
                 Out(l);
-            return;
+            if (HasSamples())
+                Out("  samples on|off every reading: R,addr,n,t_ms,raw_x,raw_y,off_x,off_y,bat");
+            Out("  help");
+            return Out("OK");
         }
         if (cmd == "ver")
         {
@@ -925,6 +975,21 @@ private:
         }
         if (cmd == "get")
             return Get(arg, now);
+        if (cmd == "samples" && HasSamples())
+        {
+            if (arg == "on" || arg.rfind("on ", 0) == 0)
+            {
+                if (!samplesOn_)
+                    samplesDropped_ = 0;
+                samplesOn_ = true;
+            }
+            else if (arg == "off" || arg.rfind("off ", 0) == 0)
+                samplesOn_ = false;
+            else if (!arg.empty())
+                return Out("ERR usage: samples on|off");
+            return Out(std::string("OK samples ") + (samplesOn_ ? "on" : "off") + ", dropped " +
+                       std::to_string(samplesDropped_));
+        }
         if (cmd == "boot" || cmd == "dfu" || cmd == "reset")
         {
             const bool force = arg == "force";
@@ -1290,7 +1355,7 @@ private:
     std::mt19937 rng_;
     Controls ctl_;
 
-    std::string fwVersion_ = "1.4";
+    std::string fwVersion_ = "1.5";
     std::int64_t bootMs_ = 0, simMs_ = 0, nextPoll_ = 0, nextRoll_ = 0;
     std::int64_t usbBackAt_ = 0;
     bool inDfu_ = false;
@@ -1326,6 +1391,9 @@ private:
 
     int streamMs_ = 0;
     std::int64_t streamLast_ = 0;
+    bool samplesOn_ = false;
+    std::uint64_t samplesDropped_ = 0, samplesSeq_ = 0;
+    int samplesDropEvery_ = 0;
     Xfer xfer_;
     double xferBytesPerMs_ = 120.0; // ~120 КБ/с данных файла
 };

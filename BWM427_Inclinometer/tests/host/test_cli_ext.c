@@ -817,7 +817,7 @@ static void test_commands(void) {
 	tx_reset();
 	usb_cli_ext_help();
 	split_lines();
-	CHECK(s_nlines == 7);
+	CHECK(s_nlines == 8);
 	printf("  ok\n");
 }
 
@@ -1105,6 +1105,77 @@ static void test_get(void) {
 	printf("  ok\n");
 }
 
+static void test_samples(void) {
+	group("samples: каждый отсчёт для записи на ПК");
+	setup_app();
+	tx_reset();
+	app_sensor_t *a = &g_app.sensor[0], *b = &g_app.sensor[1];
+	a->raw_x = -0.46f;     // как bwm427_decode_angle: (9954 - 10000) / 100
+	a->raw_y = -0.17f;
+	a->off_x = -0.4583f;   // ноль — со сглаженного угла
+	a->off_y = 0.0f;
+	a->ok_count = 1234;
+	a->last_ok_ms = 567890;
+	b->raw_x = 327.67f;
+	b->raw_y = -427.68f;
+	b->off_x = 0.0125f;
+	b->off_y = -0.0004f;   // «минус ноль» не пишется
+	b->ok_count = 4294967295u;
+	b->last_ok_ms = 4294967295u;
+	g_app.battery_v = 11.83f;
+	bool fresh[APP_SENSOR_COUNT] = { true, true };
+
+	// Выключено — ничего
+	usb_cli_ext_samples(fresh);
+	CHECK(s_cap_len == 0);
+	CHECK(run("samples"));
+	CHECK(strcmp(last_line(), "OK samples off, dropped 0") == 0);
+
+	tx_reset();
+	CHECK(run("samples on"));
+	CHECK(strcmp(last_line(), "OK samples on, dropped 0") == 0);
+	tx_reset();
+	usb_cli_ext_samples(fresh);
+	split_lines();
+	CHECK(s_nlines == 2);
+	CHECK(s_nlines == 2 && strcmp(s_lines[0], "R,2,1234,567890,-46,-17,-458,0,118") == 0);
+	CHECK(s_nlines == 2 && strcmp(s_lines[1], "R,3,4294967295,4294967295,32767,-42768,13,0,118") == 0);
+
+	// Только свежие
+	tx_reset();
+	fresh[0] = false;
+	usb_cli_ext_samples(fresh);
+	split_lines();
+	CHECK(s_nlines == 1 && strncmp(s_lines[0], "R,3,", 4) == 0);
+	fresh[0] = true;
+
+	// Кольцо полно — строки выброшены и посчитаны, остальной вывод цел
+	tx_reset();
+	s_tx_used = TX_SIZE - 20;
+	usb_cli_ext_samples(fresh);
+	CHECK(s_cap_len == 0 && s_tx_dropped == 0);
+	tx_drain();
+	CHECK(run("samples"));
+	CHECK(strcmp(last_line(), "OK samples on, dropped 2") == 0);
+	CHECK(run("samples on")); // повторное on счётчик не сбрасывает
+	CHECK(strcmp(last_line(), "OK samples on, dropped 2") == 0);
+
+	// Порт закрыт — выключено; ошибки разбора
+	usb_cli_ext_abort();
+	tx_reset();
+	usb_cli_ext_samples(fresh);
+	CHECK(s_cap_len == 0);
+	CHECK(run("samples"));
+	CHECK(strcmp(last_line(), "OK samples off, dropped 2") == 0);
+	CHECK(run("samples on"));
+	CHECK(strcmp(last_line(), "OK samples on, dropped 0") == 0); // включили заново — с нуля
+	CHECK(run("samples maybe"));
+	CHECK(strcmp(last_line(), "ERR usage: samples on|off") == 0);
+	CHECK(run("samples off"));
+	CHECK(strcmp(last_line(), "OK samples off, dropped 0") == 0);
+	printf("  ok\n");
+}
+
 int main(void) {
 	test_base64();
 	test_crc32();
@@ -1113,6 +1184,7 @@ int main(void) {
 	test_commands();
 	test_files();
 	test_get();
+	test_samples();
 	printf("\n%d проверок, %d ошибок\n", s_checks, s_fails);
 	return s_fails ? 1 : 0;
 }

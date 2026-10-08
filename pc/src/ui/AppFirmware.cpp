@@ -25,6 +25,11 @@ void App::SetFirmwarePath(const std::string& path)
 bool App::StartFirmwareUpdate(bool force)
 {
     settings_.firmwarePath = fw_.path;
+    if (PcRecording())
+    {
+        Notify("Обновление не начато: идёт запись на ПК — остановите её", 2, 6000);
+        return false;
+    }
     const bool ok = updater_.Start(fw_.path, force, link_->NowMs());
     if (!ok)
         Notify("Обновление не начато: " + updater_.Error(), 2, 6000);
@@ -235,6 +240,7 @@ void App::PageFirmware()
                           : fw_.dfuPath.empty() ? "Не найден dfu-util.exe"
                           : !deviceOk        ? "Прибор не подключён"
                           : dl_.running      ? "Идёт скачивание файлов"
+                          : PcRecording()    ? "Идёт запись на ПК — остановите её на странице «Измерение»"
                                              : nullptr;
         if (!updater_.Busy())
         {

@@ -39,6 +39,13 @@ void App::StartDownload()
 {
     if (dl_.running || !Connected())
         return;
+    if (PcRecording())
+    {
+        Notify("Идёт запись на ПК — остановите её («Измерение»): передача файла заняла бы канал USB, и отсчёты "
+               "терялись бы",
+               2, 6000);
+        return;
+    }
     dl_.jobs.clear();
     for (const auto& f : files_.list)
         if (files_.sel[f.name])
@@ -438,8 +445,9 @@ void App::PageFiles()
             const std::string label = nSel ? Fmt("Скачать выбранные (%d · %s)", nSel, text::Bytes(selBytes).c_str())
                                            : std::string("Скачать выбранные");
             const char* why = rec ? "Идёт запись замера — остановите её тумблером на приборе"
-                              : nSel == 0 ? "Отметьте файлы в списке"
-                                          : nullptr;
+                              : PcRecording() ? "Идёт запись на ПК — остановите её на странице «Измерение»"
+                              : nSel == 0     ? "Отметьте файлы в списке"
+                                              : nullptr;
             if (Button(label.c_str(), BtnKind::Primary, ImVec2(S(320), S(36)), why != nullptr, why))
                 StartDownload();
             if (!dl_.summary.empty())

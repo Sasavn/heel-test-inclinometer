@@ -1,7 +1,9 @@
 // Связь с прибором (DeviceLink) без железа: модельное время, прибор-имитатор (тот же протокол, что прошивка) и
 // канал-сценарий. Подключение и проверка ver, поток stream -> история, опрос status, команды set / set time / zero /
 // addr, files и скачивание с проверкой CRC, отмена передачи, запись (отказы), перезагрузка прибора и
-// переподключение, чужой порт, зависший прибор, строки потока посреди ответа.
+// переподключение, чужой порт, зависший прибор, строки потока посреди ответа; samples (строки R) и запись на ПК
+// (pcrec::Recorder): файлы CSV по датчикам, Ms, CalcX, пропуски, обрыв связи и перезагрузка прибора посреди записи,
+// книга .xlsx, старая прошивка без samples.
 #include <chrono>
 #include <cstdio>
 #include <deque>
@@ -16,6 +18,7 @@
 #include "comm/DeviceLink.hpp"
 #include "comm/SimConnection.hpp"
 #include "core/Download.hpp"
+#include "core/PcRecorder.hpp"
 
 namespace fs = std::filesystem;
 
@@ -120,7 +123,7 @@ static void TestConnectAndStream()
     Rig r;
     CHECK(r.WaitConnected(3000));
     auto s = r.link->Snapshot();
-    CHECK(s.state == LinkState::Connected && s.haveVer && s.ver.version == "1.4");
+    CHECK(s.state == LinkState::Connected && s.haveVer && s.ver.version == "1.5");
     CHECK(s.demo && s.port == "ДЕМО");
     r.Run(3000);
     s = r.link->Snapshot();
@@ -300,9 +303,9 @@ static void TestReboot()
     CHECK(r.Wait(q) && q->final == "DFU...");
     r.Run(1000);
     CHECK(r.sim->InDfu() && r.link->Snapshot().state == LinkState::Searching);
-    r.sim->LeaveDfu(r.t, "1.4");
+    r.sim->LeaveDfu(r.t, "1.4"); // «прошили» старую версию: samples нет
     CHECK(r.WaitConnected(5000));
-    CHECK(r.link->Snapshot().ver.version == "1.4");
+    CHECK(r.link->Snapshot().ver.version == "1.4" && r.link->Snapshot().samplesSupport == -1);
 }
 
 static void TestAddress()
@@ -457,6 +460,340 @@ static void TestForeignAndHung()
     }
 }
 
+static int CountWritten(const std::vector<TermLine>& log, const std::string& cmd)
+{
+    int n = 0;
+    for (const auto& l : log)
+        n += l.kind == '>' && l.text == cmd;
+    return n;
+}
+
+static void TestSamples()
+{
+    SECTION("samples: строки R в очередь, включение после подключения, старая прошивка");
+    {
+        Rig r;
+        CHECK(r.WaitConnected());
+        r.Run(1500);
+        auto s = r.link->Snapshot();
+        CHECK(s.samplesSupport == 1 && !s.samplesOn && !s.samplesWanted);
+        CHECK(CountWritten(r.link->TermSince(0), "samples on") == 0); // без записи — не включается
+        r.link->SetSamples(true);
+        r.Run(300);
+        s = r.link->Snapshot();
+        CHECK(s.samplesOn && s.samplesWanted);
+        std::vector<RxSample> got;
+        r.link->TakeSamples(got); // начало — отбросить
+        got.clear();
+        r.Run(3000);
+        const std::size_t taken = r.link->TakeSamples(got);
+        CHECK(taken == got.size());
+        CHECK_RANGE(static_cast<double>(got.size()), 55, 65, "строк R за 3 с (2 датчика × 10 Гц)");
+        std::uint32_t lastN[2] = {}, lastT = 0;
+        bool haveN[2] = {}, consecutive = true, timeUp = true, sane = true;
+        for (const auto& x : got)
+        {
+            const int i = x.s.addr == 2 ? 0 : x.s.addr == 3 ? 1 : -1;
+            if (i < 0)
+            {
+                sane = false;
+                continue;
+            }
+            if (haveN[i] && x.s.n != lastN[i] + 1)
+                consecutive = false;
+            haveN[i] = true;
+            lastN[i] = x.s.n;
+            if (x.s.tMs < lastT)
+                timeUp = false;
+            lastT = x.s.tMs;
+            sane = sane && x.s.batV > 100 && x.s.batV < 130 && std::abs(x.s.rawX) < 1000 && x.wallMs > 1700000000000LL;
+        }
+        CHECK(consecutive && timeUp && sane && haveN[0] && haveN[1]);
+        // строки R при записи в журнал не пишутся (до 50 в секунду), ответ samples — пишется
+        int rLines = 0;
+        for (const auto& l : r.link->TermSince(0))
+            rLines += l.text.rfind("R,", 0) == 0;
+        CHECK(rLines == 0);
+        CHECK(s.badLines == 0 && r.link->Snapshot().timeouts == 0);
+        // Выключить: samples off, строки больше не копятся
+        r.link->SetSamples(false);
+        r.Run(300);
+        CHECK(!r.link->Snapshot().samplesOn && CountWritten(r.link->TermSince(0), "samples off") == 1);
+        got.clear();
+        r.link->TakeSamples(got);
+        r.Run(1000);
+        got.clear();
+        CHECK(r.link->TakeSamples(got) == 0);
+        // Переподключение посреди записи: прибор выключил samples при открытии порта — программа включает снова
+        r.link->SetSamples(true);
+        r.Run(500);
+        r.link->SetEnabled(false);
+        r.Run(1000);
+        CHECK(!r.link->Snapshot().samplesOn);
+        r.link->SetEnabled(true);
+        CHECK(r.WaitConnected());
+        r.Run(800);
+        CHECK(r.link->Snapshot().samplesOn && CountWritten(r.link->TermSince(0), "samples on") == 3);
+        // Пользователь выключил samples в терминале — включаются снова (идёт запись)
+        auto q = r.link->Send("samples off", Origin::User);
+        CHECK(r.Wait(q) && q->ok && q->final == "OK samples off, dropped 0");
+        r.Run(300);
+        CHECK(r.link->Snapshot().samplesOn);
+    }
+    {
+        // Прошивка 1.4: samples не отправляется вовсе, запись на ПК недоступна
+        Rig r;
+        r.sim->SetFwVersion("1.4");
+        CHECK(r.WaitConnected());
+        r.link->SetSamples(true);
+        r.Run(2000);
+        const auto s = r.link->Snapshot();
+        CHECK(s.samplesSupport == -1 && !s.samplesOn && s.ver.version == "1.4");
+        CHECK(CountWritten(r.link->TermSince(0), "samples on") == 0);
+        auto q = r.link->Send("samples on", Origin::User); // вручную — как у прошивки 1.4
+        CHECK(r.Wait(q) && !q->ok && q->final == "ERR unknown command 'samples' (try: help)");
+    }
+    {
+        // Версия не разобрана: пробуем samples; «ERR unknown command» — больше не пытаемся
+        auto fake = std::make_unique<FakeConnection>();
+        auto* f = fake.get();
+        f->reply = [](const std::string& cmd) -> std::vector<std::string> {
+            if (cmd == "ver")
+                return {"BWM427 inclinometer firmware vdev, build x", "OK"};
+            if (cmd.rfind("stream", 0) == 0)
+                return {"OK stream every 100 ms"};
+            if (cmd == "status")
+                return {R"({"v":1,"sens":[]})", "OK"};
+            return {"ERR unknown command '" + cmd.substr(0, cmd.find(' ')) + "' (try: help)"};
+        };
+        DeviceLink link(std::move(fake), false);
+        link.SetSamples(true);
+        for (std::int64_t t = 0; t < 8000; t += 10)
+            link.Step(t);
+        int sent = 0;
+        for (const auto& w : f->written)
+            sent += w == "samples on";
+        const auto s = link.Snapshot();
+        CHECK_MSG(sent == 1 && s.samplesSupport == -1 && !s.samplesMsg.empty(), "samples on × %d, support %d", sent,
+                  s.samplesSupport);
+    }
+    {
+        // Строки R посреди ответа на команду и мусорная строка R
+        auto fake = std::make_unique<FakeConnection>();
+        auto* f = fake.get();
+        f->reply = [](const std::string& cmd) -> std::vector<std::string> {
+            if (cmd == "ver")
+                return {"BWM427 inclinometer firmware v1.5, build x", "OK"};
+            if (cmd.rfind("stream", 0) == 0)
+                return {"OK stream every 100 ms"};
+            if (cmd == "samples on")
+                return {"R,2,7,1000,-46,-17,-458,0,118", "OK samples on, dropped 0"};
+            if (cmd == "status")
+                return {"R,2,8,1066,-45,-17,-458,0,118", R"({"v":1,"freq":9,"sens":[]})", "R,3,5,1070,1,2,3,4,118",
+                        "R,3,x", "OK"};
+            return {"OK"};
+        };
+        DeviceLink link(std::move(fake), false);
+        link.SetSamples(true);
+        for (std::int64_t t = 0; t < 2500; t += 10)
+            link.Step(t);
+        std::vector<RxSample> got;
+        link.TakeSamples(got);
+        const auto s = link.Snapshot();
+        CHECK(s.haveStatus && s.status.freq == 9 && s.samplesOn);
+        bool n7 = false, n8 = false, d3 = false;
+        for (const auto& x : got)
+        {
+            n7 |= x.s.addr == 2 && x.s.n == 7 && x.s.rawX == -46 && x.s.offX == -458 && x.s.batV == 118;
+            n8 |= x.s.addr == 2 && x.s.n == 8 && x.s.tMs == 1066;
+            d3 |= x.s.addr == 3 && x.s.n == 5 && x.s.offY == 4;
+        }
+        CHECK_MSG(n7 && n8 && d3, "строк R %zu", got.size());
+        CHECK(s.badLines >= 1); // «R,3,x»
+    }
+}
+
+// Отсчёты из очереди связи — в запись (как App::TickRecord)
+static void Pump(Rig& r, pcrec::Recorder& rec, std::int64_t ms)
+{
+    std::vector<RxSample> buf;
+    for (std::int64_t e = r.t + ms; r.t < e; r.t += 10)
+    {
+        r.link->Step(r.t);
+        if (r.t % 50 == 0)
+        {
+            buf.clear();
+            r.link->TakeSamples(buf);
+            for (const auto& x : buf)
+                rec.Add(x.s, x.wallMs, x.linkMs);
+            if (!r.link->IsConnected())
+                rec.LinkLost(pcrec::WallNowMs());
+            else if (r.link->Snapshot().samplesOn)
+                rec.LinkBack(pcrec::WallNowMs());
+            rec.Tick(r.t);
+        }
+    }
+}
+
+struct CsvCheck
+{
+    std::size_t rows = 0;
+    bool header = false, parsed = true, calcOk = true, msUp = true, noNegZero = true, noCr = true, dateOk = true;
+    std::int64_t firstMs = -1, lastMs = -1;
+    std::size_t offsetChanges = 0;
+};
+
+static CsvCheck CheckCsv(const fs::path& p)
+{
+    CsvCheck c;
+    const std::string all = ReadAll(p);
+    c.noCr = all.find('\r') == std::string::npos;
+    c.noNegZero = all.find("-0,000") == std::string::npos && all.find(";-0,00;") == std::string::npos &&
+                  all.find(";-0,0;") == std::string::npos;
+    std::size_t a = 0;
+    std::int64_t prevOff = 0;
+    bool first = true;
+    while (a < all.size())
+    {
+        std::size_t b = all.find('\n', a);
+        if (b == std::string::npos)
+            b = all.size();
+        const std::string line = all.substr(a, b - a);
+        a = b + 1;
+        if (first)
+        {
+            first = false;
+            c.header = line == "Date;Time;RawX;RawY;OffsetX;OffsetY;CalcX;CalcY;BatV;Ms";
+            continue;
+        }
+        pcrec::CsvRow r;
+        if (!pcrec::ParseRow(line, r))
+        {
+            c.parsed = false;
+            continue;
+        }
+        c.rows++;
+        c.calcOk = c.calcOk && r.calcX == r.rawX * 10 - r.offX && r.calcY == r.rawY * 10 - r.offY;
+        c.dateOk = c.dateOk && r.date.size() == 10 && r.date[2] == '.' && r.date[5] == '.' && r.time.size() == 8 &&
+                   r.time[2] == ':' && r.time[5] == ':';
+        if (c.firstMs < 0)
+            c.firstMs = r.ms;
+        else if (r.ms < c.lastMs)
+            c.msUp = false;
+        c.lastMs = r.ms;
+        if (c.rows > 1 && r.offX != prevOff)
+            c.offsetChanges++;
+        prevOff = r.offX;
+    }
+    return c;
+}
+
+static void TestPcRecording()
+{
+    SECTION("запись на ПК: CSV по датчикам, ноль посреди записи, обрыв связи, перезагрузка, .xlsx");
+    const fs::path dir = fs::temp_directory_path() / L"krenomer_pcrec_test";
+    std::error_code ec;
+    fs::remove_all(dir, ec);
+    Rig r(3);
+    CHECK(r.WaitConnected());
+    r.Run(1500);
+
+    pcrec::Recorder rec;
+    pcrec::Recorder::Options o;
+    o.dir = dir;
+    o.label = "опыт 1";
+    o.xlsx = true;
+    o.device = "имитатор";
+    const std::int64_t wall0 = pcrec::WallNowMs();
+    std::string err;
+    CHECK(rec.Start(o, wall0, r.t, &err));
+    CHECK(rec.Base() == pcrec::BaseName(wall0, "опыт 1") && rec.Base().find("_опыт 1") != std::string::npos);
+    r.link->SetSamples(true);
+    Pump(r, rec, 6000);
+    // Ноль посреди записи: OffsetX/Y и CalcX/Y меняются, CalcX = RawX − OffsetX по-прежнему точно
+    auto q = r.link->Send("zero");
+    CHECK(r.Wait(q) && q->ok);
+    Pump(r, rec, 6000);
+    CHECK(rec.Sensors().size() == 2 && rec.TotalLost() == 0);
+    const std::uint64_t before = rec.TotalRows();
+    CHECK_RANGE(static_cast<double>(before), 220, 260, "строк за 12 с (2 датчика × 10 Гц)");
+    CHECK_RANGE(rec.Sensors()[0].hz, 8.0, 12.0, "частота строк Д2, Гц");
+
+    // Файл уже на диске (сброс раз в секунду), до остановки
+    const fs::path d2 = dir / text::PathFromUtf8(pcrec::CsvName(rec.Base(), 2));
+    const fs::path d3 = dir / text::PathFromUtf8(pcrec::CsvName(rec.Base(), 3));
+    CHECK(fs::exists(d2, ec) && fs::exists(d3, ec));
+    CHECK_RANGE(static_cast<double>(CheckCsv(d2).rows), static_cast<double>(rec.Sensors()[0].rows) - 12,
+                static_cast<double>(rec.Sensors()[0].rows), "строк Д2 в файле до остановки (теряется не больше ~1 с)");
+
+    // Прибор «не успевает»: каждая 7-я строка R выброшена — пропуски по n
+    r.sim->SetSamplesDropEvery(7);
+    Pump(r, rec, 3000);
+    r.sim->SetSamplesDropEvery(0);
+    const std::uint64_t lostDrop = rec.TotalLost();
+    CHECK_RANGE(static_cast<double>(lostDrop), 6, 11, "потеряно при выбросе каждой 7-й строки за 3 с");
+
+    // Обрыв связи на ~3 с: файлы открыты, после переподключения samples on снова, пропуски — по n
+    r.link->SetEnabled(false);
+    Pump(r, rec, 3000);
+    CHECK(!r.link->IsConnected() && rec.Gaps().size() == 1 && rec.Gaps()[0].to == 0);
+    r.link->SetEnabled(true);
+    Pump(r, rec, 3000);
+    CHECK(r.link->IsConnected() && r.link->Snapshot().samplesOn);
+    CHECK(rec.Gaps().size() == 1 && rec.Gaps()[0].to != 0);
+    const std::uint64_t lostGap = rec.TotalLost() - lostDrop;
+    CHECK_RANGE(static_cast<double>(lostGap), 50, 80, "потеряно за ~3,3 с без связи (2 × 10 Гц)");
+
+    // Перезагрузка прибора: n и t_ms с нуля — Ms не идёт назад, пропуски не считаются
+    const std::uint64_t lostBefore = rec.TotalLost();
+    q = r.link->Send("reset");
+    CHECK(r.Wait(q) && q->final == "RESET...");
+    Pump(r, rec, 7000);
+    CHECK(r.link->IsConnected() && rec.Reboots() == 1 && rec.TotalLost() == lostBefore);
+    CHECK(rec.Gaps().size() == 2);
+    const std::uint64_t rowsAll = rec.TotalRows();
+
+    rec.Stop(pcrec::WallNowMs(), r.t);
+    r.link->SetSamples(false);
+    CHECK_RANGE(static_cast<double>(rec.ElapsedMs(r.t)), 27900, 28500, "длительность записи (время связи), мс");
+    CHECK(!rec.Running());
+    rec.WaitConverted();
+    CHECK_MSG(rec.XlsxOk(), "xlsx: %s", rec.XlsxError().c_str());
+    CHECK(rec.Error().empty());
+
+    // Файлы: по датчику, формат карты
+    std::uint64_t fileRows = 0;
+    for (const auto& p : {d2, d3})
+    {
+        const CsvCheck c = CheckCsv(p);
+        CHECK_MSG(c.header && c.parsed && c.calcOk && c.msUp && c.noNegZero && c.noCr && c.dateOk,
+                  "%s: header %d parsed %d calc %d msUp %d -0 %d cr %d date %d", text::PathToUtf8(p.filename()).c_str(),
+                  c.header, c.parsed, c.calcOk, c.msUp, c.noNegZero, c.noCr, c.dateOk);
+        CHECK(c.firstMs >= 0 && c.firstMs < 100);
+        CHECK(c.offsetChanges == 2); // ноль задан, перезагрузка его сбросила
+        // Ms последней строки: 21 с до перезагрузки (по часам прибора, и без связи) + ~4 с после
+        CHECK_RANGE(static_cast<double>(c.lastMs), 23000, 28000, "Ms последней строки");
+        fileRows += c.rows;
+    }
+    CHECK(fileRows == rowsAll);
+    const std::string xlsx = ReadAll(rec.XlsxPath());
+    CHECK(xlsx.size() > 1000 && xlsx.rfind("PK", 0) == 0 && xlsx.find("xl/worksheets/sheet3.xml") != std::string::npos);
+    CHECK(rec.XlsxPath().filename() == text::PathFromUtf8(pcrec::XlsxName(rec.Base())));
+
+    // Новая запись в ту же секунду — не перезаписывает: « (2)»
+    pcrec::Recorder rec2;
+    o.xlsx = false;
+    CHECK(rec2.Start(o, wall0, r.t, &err));
+    CHECK(rec2.Base() == pcrec::BaseName(wall0, "опыт 1") + " (2)");
+    proto::RawSample one;
+    one.addr = 2;
+    rec2.Add(one, wall0, r.t);
+    rec2.Stop(wall0 + 1000, r.t + 1000);
+    CHECK(rec2.TotalRows() == 1 && fs::exists(dir / text::PathFromUtf8(pcrec::CsvName(rec2.Base(), 2)), ec));
+    CHECK(CheckCsv(d2).rows + CheckCsv(d3).rows == rowsAll); // прежние файлы целы
+    // Файлы оставлены для проверки openpyxl (scratch-скрипт): %TEMP%\krenomer_pcrec_test
+}
+
 static void TestThreaded()
 {
     SECTION("поток связи в реальном времени (как в программе)");
@@ -483,6 +820,12 @@ static void TestThreaded()
         ok += r->done.load() && r->ok;
     CHECK(ok == 20);
     CHECK(link.Snapshot().timeouts == 0);
+    // Отсчёты samples в реальном времени
+    link.SetSamples(true);
+    std::this_thread::sleep_for(std::chrono::milliseconds(1200));
+    std::vector<RxSample> got;
+    link.TakeSamples(got);
+    CHECK_RANGE(static_cast<double>(got.size()), 12, 30, "строк R за ~1 с в реальном времени");
 }
 
 int main(int argc, char** argv)
@@ -496,5 +839,7 @@ int main(int argc, char** argv)
     TestReboot();
     TestAddress();
     TestForeignAndHung();
+    TestSamples();
+    TestPcRecording();
     return TestSummary();
 }

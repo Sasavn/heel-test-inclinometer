@@ -66,6 +66,10 @@ static uint32_t s_xf_crc;          // get: CRC-32 переданного
 static uint32_t s_xf_count;        // files: файлов в списке
 static uint32_t s_xf_ms;           // HAL_GetTick() последнего продвижения
 
+// samples: строки R на каждый свежий отсчёт
+static bool s_samples_on;
+static uint32_t s_samples_dropped; // строк не влезло в кольцо передачи
+
 // Буфер на один вызов: JSON status или сектор файла get (между вызовами
 // ничего в нём не хранится)
 static char s_scratch[CLI_EXT_SCRATCH];
@@ -694,6 +698,50 @@ static void xf_get_step(uint32_t now) {
 
 void usb_cli_ext_abort(void) {
 	xf_close();
+	s_samples_on = false;
+}
+
+/* ----------------------------------------------------------------------------
+ * samples — каждый отсчёт датчика для записи на ПК
+ * ------------------------------------------------------------------------- */
+
+static void cmd_samples(const char *arg) {
+	if (word_is(arg, "on")) {
+		if (!s_samples_on) {
+			s_samples_dropped = 0u;
+		}
+		s_samples_on = true;
+	} else if (word_is(arg, "off")) {
+		s_samples_on = false;
+	} else if (*arg != '\0') {
+		ext_line("ERR usage: samples on|off");
+		return;
+	}
+	ext_line("OK samples %s, dropped %lu", s_samples_on ? "on" : "off",
+			(unsigned long) s_samples_dropped);
+}
+
+void usb_cli_ext_samples(const bool fresh[APP_SENSOR_COUNT]) {
+	if (!s_samples_on) {
+		return;
+	}
+	for (uint8_t i = 0; i < APP_SENSOR_COUNT; i++) {
+		if (!fresh[i]) {
+			continue;
+		}
+		const app_sensor_t *s = &g_app.sensor[i];
+		char line[96];
+		int n = snprintf(line, sizeof(line), "R,%u,%lu,%lu,%ld,%ld,%ld,%ld,%ld\r\n",
+				(unsigned) APP_SENSOR_ADDR(i), (unsigned long) s->ok_count,
+				(unsigned long) s->last_ok_ms, (long) sd_to_scaled(s->raw_x, 2),
+				(long) sd_to_scaled(s->raw_y, 2), (long) sd_to_scaled(s->off_x, 3),
+				(long) sd_to_scaled(s->off_y, 3), (long) sd_to_scaled(g_app.battery_v, 1));
+		if (n <= 0 || (size_t) n >= sizeof(line) || usb_cli_out_free() < (uint32_t) n) {
+			s_samples_dropped++; // хост не успевает (или порт закрыт) — строку не копим
+			continue;
+		}
+		usb_cli_out(line, (uint32_t) n);
+	}
 }
 
 void usb_cli_ext_task(uint32_t now) {
@@ -838,6 +886,8 @@ bool usb_cli_ext_exec(const char *cmd, const char *arg) {
 		cmd_files(arg);
 	} else if (strcmp(cmd, "get") == 0) {
 		cmd_get(arg);
+	} else if (strcmp(cmd, "samples") == 0) {
+		cmd_samples(arg);
 	} else {
 		return false;
 	}
@@ -852,4 +902,5 @@ void usb_cli_ext_help(void) {
 	ext_line("  files          list *.CSV on the card: F,name,bytes,date time");
 	ext_line("  get NAME [OFS] send a file: G,name,size,ofs  D,base64...  E,bytes,crc32");
 	ext_line("  get abort      stop the transfer");
+	ext_line("  samples on|off every reading: R,addr,n,t_ms,raw_x,raw_y,off_x,off_y,bat");
 }

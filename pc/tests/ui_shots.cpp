@@ -1,8 +1,9 @@
 // Стенд снимков экрана без окна и видеокарты: весь интерфейс (ui::App) с прибором-имитатором в модельном времени,
 // кадры ImGui растеризуются программно в PNG (растеризатор и PngWriter — из стенда ui_smoke ShagomerPCModule).
 // Сценарий проходит все страницы и основные состояния: нет связи, измерение (покой / качка / запись, датчик пропал,
-// АКБ), тёмная тема, малый экран, диагностика, настройки (ошибка ввода, смена адреса), файлы (скачивание идёт /
-// готово), перепрошивка (идёт / готово), терминал. Заодно — проверки: индексы отрисовки в пределах, кадр не пустой.
+// АКБ), тёмная тема, малый экран, запись на ПК (прошивка 1.4 — недоступна; идёт, обрыв связи, готово с .xlsx),
+// диагностика, настройки (ошибка ввода, смена адреса), файлы (скачивание идёт / готово), перепрошивка (идёт /
+// готово), терминал. Заодно — проверки: индексы отрисовки в пределах, кадр не пустой.
 //
 // Запуск: ui_shots [--out ПАПКА] (по умолчанию ./shots)
 #include <algorithm>
@@ -13,6 +14,7 @@
 #include <filesystem>
 #include <fstream>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include <imgui.h>
@@ -31,6 +33,15 @@ namespace fs = std::filesystem;
 
 namespace
 {
+
+// Папка для файлов стенда (видна на снимках): KRENOMER_SHOTS_DIR, иначе %TEMP%. Для снимков в README
+// — короткий нейтральный путь (например, subst-диск), без имени пользователя.
+fs::path ShotsWorkDir()
+{
+    if (const wchar_t* e = _wgetenv(L"KRENOMER_SHOTS_DIR"); e && *e)
+        return fs::path(e);
+    return fs::temp_directory_path();
+}
 
 const unsigned char* g_tex = nullptr;
 int g_texW = 0, g_texH = 0;
@@ -201,11 +212,63 @@ std::string FirmwareImage()
     const std::uint32_t sp = 0x20020000u, rst = 0x08000199u;
     std::memcpy(d.data(), &sp, 4);
     std::memcpy(d.data() + 4, &rst, 4);
-    const std::string tag = "BWM427 inclinometer firmware v1.4, build Oct  8 2026 10:00:00";
+    const std::string tag = "BWM427 inclinometer firmware v1.5, build Oct  8 2026 17:33:25";
     std::memcpy(d.data() + 0x2000, tag.c_str(), tag.size() + 1);
-    const fs::path p = fs::temp_directory_path() / L"krenomer_shots_fw.bin";
+    const fs::path p = ShotsWorkDir() / L"bwm427-fw-1.5.bin";
     std::ofstream(p, std::ios::binary).write(reinterpret_cast<const char*>(d.data()), static_cast<std::streamsize>(d.size()));
     return text::PathToUtf8(p);
+}
+
+// Опыт кренования для «Обработки»: 8 переносов груза P = 15 т (D = 1500 т, h = 0,8 м), плечи ±2,25 / ±4,5 м и
+// два возврата в ноль; файлы прибора 1.4 (Д2 — нос, Д3 — корма), 2 мин по 10 Гц: переход от прежнего крена с
+// затухающими колебаниями, лёгкая качка, шум датчика 0,01°. Крен — по оси X.
+const double kHeelArm[8] = {2.25, 4.5, 2.25, 0.0, -2.25, -4.5, -2.25, 0.0};
+
+void MakeHeelSet(const fs::path& dir)
+{
+    std::error_code ec;
+    fs::create_directories(dir, ec);
+    auto dec = [](double v, int d) {
+        char b[32];
+        std::snprintf(b, sizeof(b), "%.*f", d, v);
+        for (char* p = b; *p; p++)
+            if (*p == '.')
+                *p = ',';
+        return std::string(b);
+    };
+    unsigned seed = 1;
+    auto noise = [&] { // ±0,01° (шаг датчика)
+        seed = seed * 1103515245u + 12345u;
+        return ((seed >> 16) % 3) * 0.01 - 0.01;
+    };
+    double prev[2] = {0.0, 0.0};
+    for (int m = 0; m < 8; m++)
+    {
+        const double theta = std::atan(15.0 * kHeelArm[m] / (1500.0 * 0.8)) * 180.0 / 3.14159265358979;
+        for (int s = 0; s < 2; s++)
+        {
+            const double target = theta * (s ? 1.012 : 1.0) + (s ? -0.006 : 0.004);
+            std::string csv = "Date;Time;RawX;RawY;OffsetX;OffsetY;CalcX;CalcY;BatV;Ms\n";
+            const int start = 10 * 3600 + m * 240;
+            for (int k = 0; k < 1200; k++)
+            {
+                const double t = k / 10.0;
+                const double x = target + (prev[s] - target) * std::exp(-t / 14.0) * std::cos(t * 0.62) +
+                                 0.03 * std::sin(t * 0.71 + m + s) + noise();
+                const double y = 0.12 * (s ? -1 : 1) + 0.02 * std::sin(t * 0.5) + noise();
+                const double rx = std::round(x * 100.0) / 100.0, ry = std::round(y * 100.0) / 100.0;
+                const int sec = start + k / 10;
+                char tm[48];
+                std::snprintf(tm, sizeof(tm), "08.10.2026;%02d:%02d:%02d;", sec / 3600, (sec / 60) % 60, sec % 60);
+                csv += tm + dec(rx, 2) + ";" + dec(ry, 2) + ";0,000;0,000;" + dec(rx, 3) + ";" + dec(ry, 3) + ";" +
+                       dec(12.6 - 0.05 * m - k * 0.00002, 1) + ";" + std::to_string(k * 100 + (s ? 37 : 12)) + "\n";
+            }
+            prev[s] = target;
+            char name[64];
+            std::snprintf(name, sizeof(name), "2026-10-08_M%03d_D%d.CSV", m + 1, s + 2);
+            std::ofstream(dir / name, std::ios::binary).write(csv.data(), static_cast<std::streamsize>(csv.size()));
+        }
+    }
 }
 
 } // namespace
@@ -305,6 +368,64 @@ int main(int argc, char** argv)
     app.SetPage(ui::Page::Measure);
     st.size = ImVec2(1280, 800);
 
+    SECTION("запись на ПК");
+    {
+        const fs::path pc = ShotsWorkDir() / L"Записи на ПК";
+        fs::remove_all(pc, ec);
+        app.SetRecordDir(text::PathToUtf8(pc), true);
+        app.SetRecordLabel("опыт 1");
+        // Прошивка 1.4: записи на ПК нет — кнопка недоступна, подсказка
+        app.Sim()->SetFwVersion("1.4");
+        app.Link().SetEnabled(false);
+        st.Run(1500);
+        app.Link().SetEnabled(true);
+        st.Run(2500);
+        CHECK(!app.StartPcRecording());
+        st.Shot("16_measure_pc_old_fw", true);
+        app.Sim()->SetFwVersion("1.5");
+        app.Link().SetEnabled(false);
+        st.Run(1500);
+        app.Link().SetEnabled(true);
+        st.Run(2500);
+        CHECK(app.StartPcRecording());
+        st.Run(40000);
+        app.Link().SetEnabled(false); // связь пропала посреди записи
+        st.Run(4000);
+        st.Shot("16_measure_pc_nolink"); // сверху — панель «Прибор не подключён»: страница прокручивается
+        app.Link().SetEnabled(true);
+        st.Run(25000);
+        CHECK(app.PcRecording());
+        st.Shot("16_measure_pc_recording", true);
+        ui::ApplyTheme(true, 1.f);
+        ImPlot::StyleColorsDark();
+        st.Shot("16_measure_pc_recording_dark", true);
+        ui::ApplyTheme(false, 1.f);
+        ImPlot::StyleColorsLight();
+        st.size = ImVec2(1024, 700);
+        st.Shot("16_measure_pc_recording_1024x700", true);
+        st.size = ImVec2(1280, 800);
+        app.StopPcRecording();
+        for (int i = 0; i < 200 && app.PcRecorder()->Converting(); i++) // книга .xlsx — в отдельном потоке
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+            st.Run(50);
+        }
+        st.Run(500);
+        const auto* r = app.PcRecorder();
+        CHECK(r && !r->Running() && r->XlsxOk() && r->Gaps().size() == 1 && r->Sensors().size() == 2);
+        CHECK_MSG(r && r->TotalRows() > 1100 && r->TotalLost() > 50, "строк %llu, потеряно %llu",
+                  static_cast<unsigned long long>(r ? r->TotalRows() : 0), static_cast<unsigned long long>(r ? r->TotalLost() : 0));
+        st.Shot("17_measure_pc_done", true);
+        std::size_t csv = 0, xl = 0;
+        for (const auto& e : fs::directory_iterator(pc, ec))
+        {
+            csv += e.path().extension() == ".CSV";
+            xl += e.path().extension() == ".xlsx";
+        }
+        CHECK_MSG(csv == 2 && xl == 1, "CSV %zu, xlsx %zu", csv, xl);
+        // Файлы оставлены для проверки (openpyxl): <ShotsWorkDir>\Записи на ПК
+    }
+
     SECTION("диагностика");
     app.SetPage(ui::Page::Diag);
     app.RequestDiag();
@@ -339,7 +460,7 @@ int main(int argc, char** argv)
     CHECK(app.FileCount() >= 12);
     app.SelectAllFiles(false);
     {
-        const fs::path dl = fs::temp_directory_path() / L"krenomer_shots_dl";
+        const fs::path dl = ShotsWorkDir() / L"Скачано с карты";
         fs::remove_all(dl, ec);
         app.SetDownloadDir(text::PathToUtf8(dl));
         app.Sim()->SetXferBytesPerMs(25.0);
@@ -384,6 +505,58 @@ int main(int argc, char** argv)
         st.Run(400);
     }
     st.Shot("14_terminal", true);
+
+    SECTION("обработка: опыт кренования по файлам");
+    {
+        const fs::path dir = ShotsWorkDir() / L"Опыт кренования";
+        fs::remove_all(dir, ec);
+        MakeHeelSet(dir);
+        // Чтение и сохранение — в фоне (настоящие потоки): ждать по часам ПК
+        auto wait = [&] {
+            for (int i = 0; i < 3000 && app.ProcessBusy(); i++)
+            {
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                st.Run(50);
+            }
+        };
+        app.SetPage(ui::Page::Process);
+        app.ProcessOpen(text::PathToUtf8(dir));
+        wait();
+        for (int m = 0; m < 8; m++)
+            if (std::fabs(kHeelArm[m]) > 0 && std::fabs(kHeelArm[m]) != 4.5)
+                app.ProcessSetArm(m + 1, kHeelArm[m]);
+        st.Run(500);
+        CHECK(app.ProcessMeasurements() == 8);
+        const auto& sum = app.ProcessSummary();
+        CHECK(sum.n == 12); // 6 переносов × 2 поста; возвраты в ноль — ниже порога
+        CHECK_RANGE(sum.h, 0.76, 0.84, "h (среднее) по файлам стенда");
+        CHECK_RANGE(sum.ls.h, 0.78, 0.82, "h по МНК по файлам стенда");
+        st.Shot("18_process", true);
+        app.ProcessShowPost(1);
+        ui::ApplyTheme(true, 1.f);
+        ImPlot::StyleColorsDark();
+        st.Shot("18_process_dark", true);
+        ui::ApplyTheme(false, 1.f);
+        ImPlot::StyleColorsLight();
+        st.size = ImVec2(1024, 700);
+        st.Shot("18_process_1024x700");
+        st.size = ImVec2(1280, 800);
+        app.ProcessShowPost(0);
+        // Отчёт: книга и две картинки графиков (свой контекст ImGui без окна)
+        app.ProcessSaveReport();
+        st.Run(100);
+        wait();
+        CHECK(!app.ProcessBusy());
+        for (const wchar_t* f : {L"Отчет_Кренование.xlsx", L"График_Нос.png", L"График_Корма.png"})
+            CHECK_MSG(fs::file_size(dir / f, ec) > 10000, "нет файла отчёта %s", text::PathToUtf8(f).c_str());
+        fs::copy_file(dir / L"График_Нос.png", fs::path(g_out) / "18_process_export_bow.png",
+                      fs::copy_options::overwrite_existing, ec);
+        fs::copy_file(dir / L"График_Корма.png", fs::path(g_out) / "18_process_export_stern.png",
+                      fs::copy_options::overwrite_existing, ec);
+        fs::copy_file(dir / L"Отчет_Кренование.xlsx", fs::path(g_out) / "18_process_report.xlsx",
+                      fs::copy_options::overwrite_existing, ec);
+        st.Shot("18_process_saved", true);
+    }
 
     SECTION("о программе");
     app.SetPage(ui::Page::Measure);

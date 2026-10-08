@@ -1,5 +1,5 @@
 // Страница «Измерение»: сводка ГОТОВ / КАЧКА, запись, карта, АКБ, опрос; карточки датчиков Д2 и Д3 с углами и
-// качкой по осям; ноль; графики углов X и Y за выбранное окно (10 с … 10 мин).
+// качкой по осям; запись на ПК (AppRecord.cpp); ноль; графики углов X и Y за выбранное окно (10 с … 10 мин).
 #include "App.hpp"
 
 #include <algorithm>
@@ -34,6 +34,7 @@ struct SensorView
 void App::PageMeasure()
 {
     const float W = ImGui::GetContentRegionAvail().x;
+    const bool tall = ImGui::GetContentRegionAvail().y >= S(680); // «Запись на ПК» — в две строки
     const float gap = S(12);
     if (!Connected())
     {
@@ -57,6 +58,10 @@ void App::PageMeasure()
     SensorCard(1, W - cardW - gap, cardH);
     ImGui::Dummy(ImVec2(0, gap - ImGui::GetStyle().ItemSpacing.y));
 
+    // Запись на ПК (AppRecord.cpp)
+    RecordCard(W, tall);
+    ImGui::Dummy(ImVec2(0, gap - ImGui::GetStyle().ItemSpacing.y));
+
     // Строка 3: ноль и окно графика (на узком окне — без подписи и плотнее)
     const bool narrow = W < S(900);
     const bool canZero = HaveStatus();
@@ -75,7 +80,7 @@ void App::PageMeasure()
         {
             ImGui::TextUnformatted(z == 0 ? "Принять текущие углы отвечающих датчиков за ноль?"
                                           : "Сбросить ноль у всех датчиков (углы — без вычета нуля)?");
-            if (Recording())
+            if (Recording() || PcRecording())
                 TextColored(pal.warn, "Идёт запись: в файлах изменятся колонки OffsetX/Y и CalcX/Y.");
             ImGui::Spacing();
             if (Button(z == 0 ? "Ноль" : "Сбросить", BtnKind::Primary, ImVec2(S(140), 0)))
@@ -112,7 +117,7 @@ void App::PageMeasure()
     ImGui::Dummy(ImVec2(0, S(4)));
 
     const float rest = ImGui::GetContentRegionAvail().y;
-    Charts(W, std::max(S(200), rest));
+    Charts(W, std::max(tall ? S(200) : S(150), rest)); // невысокое окно (1024×700): графики ниже, без прокрутки
 }
 
 void App::MeasureBanner(float w, float h)

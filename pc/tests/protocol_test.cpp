@@ -1,6 +1,7 @@
 // Разбор протокола прибора: строки ответа, шапка и строки потока stream (по именам колонок, с новыми колонками в
 // конце и без шапки), JSON status (образец — вывод host-теста прошивки tests/data/status_fw.json), ver, files,
-// base64 / CRC-32 и приём файла get (G / D / E) в файл с проверкой.
+// base64 / CRC-32 и приём файла get (G / D / E) в файл с проверкой; samples (строки R, ответ, версия 1.5) и строка
+// CSV записи на ПК — против примеров прошивки (host-тест sd_format_row, README «Формат файлов на SD-карте»).
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -12,6 +13,7 @@
 #include "core/Codec.hpp"
 #include "core/Download.hpp"
 #include "core/Json.hpp"
+#include "core/PcRecorder.hpp"
 #include "core/Protocol.hpp"
 #include "core/TextUtil.hpp"
 
@@ -369,6 +371,128 @@ static void TestText()
     CHECK(proto::InRange(0.10, proto::limits::kRollCalm) && !proto::InRange(0.09, proto::limits::kRollCalm));
 }
 
+static void TestSamples()
+{
+    SECTION("samples: строки R, ответ, версия прошивки");
+    proto::RawSample r;
+    CHECK(proto::IsSampleLine("R,2,1234,567890,-46,-17,-458,0,118"));
+    CHECK(!proto::IsStreamLine("R,2,1") && !proto::IsTerminator("R,2,1") && !proto::IsSampleLine("RESET..."));
+    CHECK(proto::ParseSampleLine("R,2,1234,567890,-46,-17,-458,0,118", r));
+    CHECK(r.addr == 2 && r.n == 1234 && r.tMs == 567890 && r.rawX == -46 && r.rawY == -17 && r.offX == -458 &&
+          r.offY == 0 && r.batV == 118);
+    CHECK(proto::ParseSampleLine("R,3,4294967295,4294967295,32767,-32768,-327680,327680,0\r", r));
+    CHECK(r.addr == 3 && r.n == 4294967295u && r.tMs == 4294967295u && r.rawY == -32768 && r.offX == -327680);
+    CHECK(proto::ParseSampleLine("R,2,1,2,3,4,5,6,7,99,new", r) && r.batV == 7); // новые поля в конце
+    CHECK(!proto::ParseSampleLine("R,2,1,2,3,4,5,6", r));                      // не хватает поля
+    CHECK(!proto::ParseSampleLine("R,2,1,2,3,4,5,6,x", r));
+    CHECK(!proto::ParseSampleLine("R,2,1,2,3.5,4,5,6,7", r));
+    CHECK(!proto::ParseSampleLine("R,0,1,2,3,4,5,6,7", r));  // адрес 1..247
+    CHECK(!proto::ParseSampleLine("R,2,-1,2,3,4,5,6,7", r)); // n без знака
+    CHECK(!proto::ParseSampleLine("R,2,4294967296,2,3,4,5,6,7", r));
+    CHECK(!proto::ParseSampleLine("R,2,,2,3,4,5,6,7", r));
+    CHECK(!proto::ParseSampleLine("S,2,1,2,3,4,5,6,7", r));
+
+    bool on = false;
+    std::uint64_t dropped = 99;
+    CHECK(proto::ParseSamplesReply("OK samples on, dropped 12", on, dropped) && on && dropped == 12);
+    CHECK(proto::ParseSamplesReply("OK samples off, dropped 0", on, dropped) && !on && dropped == 0);
+    CHECK(!proto::ParseSamplesReply("OK stream off", on, dropped));
+    CHECK(!proto::ParseSamplesReply("ERR usage: samples on|off", on, dropped));
+
+    CHECK(proto::VersionAtLeast("1.5", 1, 5) == true);
+    CHECK(proto::VersionAtLeast("1.5.2", 1, 5) == true);
+    CHECK(proto::VersionAtLeast("1.10", 1, 5) == true);
+    CHECK(proto::VersionAtLeast("2.0", 1, 5) == true);
+    CHECK(proto::VersionAtLeast("1.4.1", 1, 5) == false);
+    CHECK(proto::VersionAtLeast("1.4", 1, 5) == false);
+    CHECK(proto::VersionAtLeast("0.9", 1, 5) == false);
+    CHECK(proto::VersionAtLeast("", 1, 5) == false); // прошивки до 1.3 — без номера
+    CHECK(!proto::VersionAtLeast("dev", 1, 5).has_value());
+}
+
+static void TestPcRow()
+{
+    SECTION("запись на ПК: строка CSV как sd_format_row прошивки");
+    CHECK(pcrec::Scaled(-46, 2) == "-0,46" && pcrec::Scaled(0, 3) == "0,000" && pcrec::Scaled(118, 1) == "11,8");
+    CHECK(pcrec::Scaled(-1, 3) == "-0,001" && pcrec::Scaled(655350, 3) == "655,350" && pcrec::Scaled(105, 0) == "105");
+    CHECK(pcrec::Scaled(-2147483647LL * 10 - 2147483647LL, 3) == "-23622320,117");
+    std::string kHeader = pcrec::kHeader;
+    CHECK(kHeader == "Date;Time;RawX;RawY;OffsetX;OffsetY;CalcX;CalcY;BatV;Ms\n");
+
+    std::tm tm{};
+    tm.tm_year = 2026 - 1900;
+    tm.tm_mon = 9;
+    tm.tm_mday = 8;
+    tm.tm_hour = 16;
+    tm.tm_min = 25;
+    tm.tm_sec = 31;
+    proto::RawSample s;
+    s.addr = 2;
+    s.rawX = -46;
+    s.rawY = -17;
+    s.offX = -458;
+    s.offY = -171;
+    s.batV = 118;
+    // README прошивки, «Формат файлов на SD-карте»
+    CHECK(pcrec::FormatRow(tm, s, 0) == "08.10.2026;16:25:31;-0,46;-0,17;-0,458;-0,171;-0,002;0,001;11,8;0\n");
+    // host-тест прошивки (tests/host/test_main.c): смещение пишется округлённым, разность — от записанного
+    tm.tm_year = 2005 - 1900;
+    tm.tm_mon = 11;
+    tm.tm_mday = 31;
+    tm.tm_hour = 23;
+    tm.tm_min = 59;
+    tm.tm_sec = 0;
+    s.rawX = -5;
+    s.rawY = 32767;
+    s.offX = 13;
+    s.offY = -327680;
+    s.batV = 120;
+    CHECK(pcrec::FormatRow(tm, s, 4294967295u) ==
+          "31.12.2005;23:59:00;-0,05;327,67;0,013;-327,680;-0,063;655,350;12,0;4294967295\n");
+    s.rawX = 150;
+    s.rawY = -46;
+    s.offX = 500;
+    s.offY = 0; // -0.0004 у прибора -> 0
+    s.batV = 74;
+    CHECK(pcrec::FormatRow(tm, s, 0) == "31.12.2005;23:59:00;1,50;-0,46;0,500;0,000;1,000;-0,460;7,4;0\n");
+    // Ноль ровно в отсчёт: CalcX = 0 — «0,000», не «-0,000»
+    s.rawX = -46;
+    s.offX = -460;
+    const std::string zero = pcrec::FormatRow(tm, s, 7);
+    CHECK(zero.find(";0,000;") != std::string::npos && zero.find("-0,000") == std::string::npos);
+
+    // Разбор обратно (книга .xlsx)
+    pcrec::CsvRow row;
+    CHECK(pcrec::ParseRow("31.12.2005;23:59:00;-0,05;327,67;0,013;-327,680;-0,063;655,350;12,0;4294967295\n", row));
+    CHECK(row.date == "31.12.2005" && row.time == "23:59:00" && row.rawX == -5 && row.rawY == 32767 &&
+          row.offX == 13 && row.offY == -327680 && row.calcX == -63 && row.calcY == 655350 && row.batV == 120 &&
+          row.ms == 4294967295LL);
+    CHECK(!pcrec::ParseRow("Date;Time;RawX;RawY;OffsetX;OffsetY;CalcX;CalcY;BatV;Ms", row));
+    CHECK(!pcrec::ParseRow("31.12.2005;23:59:00;-0,05;327,67;0,013", row)); // недописанная строка
+    CHECK(!pcrec::ParseRow("31.12.2005;23:59:00;-0,5;327,67;0,013;-327,680;-0,063;655,350;12,0;1", row));
+    std::int64_t v = 0;
+    CHECK(pcrec::ParseScaled("-0,46", 2, v) && v == -46);
+    CHECK(pcrec::ParseScaled("12", 0, v) && v == 12 && !pcrec::ParseScaled("1,2", 0, v));
+
+    // Имена файлов
+    CHECK(pcrec::CleanLabel("  опыт 3: груз <правый>?  ") == "опыт 3 груз правый");
+    CHECK(pcrec::CleanLabel("a/b\\c|d\"e*") == "abcde");
+    CHECK(pcrec::CleanLabel(" ... ").empty());
+    CHECK(pcrec::CleanLabel(std::string(60, 'x')).size() == 40);
+    std::tm t0{};
+    t0.tm_year = 2026 - 1900;
+    t0.tm_mon = 9;
+    t0.tm_mday = 8;
+    t0.tm_hour = 17;
+    t0.tm_min = 19;
+    t0.tm_sec = 28;
+    t0.tm_isdst = -1;
+    const std::int64_t ms0 = static_cast<std::int64_t>(std::mktime(&t0)) * 1000 + 999;
+    CHECK(pcrec::BaseName(ms0, "") == "2026-10-08_17-19-28");
+    CHECK(pcrec::CsvName(pcrec::BaseName(ms0, "опыт 3"), 2) == "2026-10-08_17-19-28_опыт 3_PC_D2.CSV");
+    CHECK(pcrec::XlsxName(pcrec::BaseName(ms0, "")) == "2026-10-08_17-19-28_PC.xlsx");
+}
+
 int main(int argc, char** argv)
 {
     testutil::Init(argc, argv);
@@ -380,5 +504,7 @@ int main(int argc, char** argv)
     TestCodec();
     TestDownload();
     TestText();
+    TestSamples();
+    TestPcRow();
     return TestSummary();
 }

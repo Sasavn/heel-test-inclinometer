@@ -53,7 +53,7 @@ inline ImFont* fontMono = nullptr;  // терминал, diag
 
 // Все знаки интерфейса вне латиницы и кириллицы.
 inline constexpr const char* kSymbols =
-    "°±×÷·—–‒«»„“”‘’…•‰−≈≠≤≥→←↑↓↔↻⇪⇩⇧◉●○◔◕◐◑▲▼△▽▶◀■□▪▫▤▥⚙⚠⚡✓✔✗✕✖⌨☰★☆⏏№µΔα";
+    "°±×÷·—–‒«»„“”‘’…•‰−≈≠≤≥→←↑↓↔↻⇪⇩⇧◉●○◔◕◐◑▲▼△▽▶◀■□▪▫▤▥⚙⚠⚡✓✔✗✕✖⌨☰★☆⏏№µΔαθ²∑";
 
 inline bool FontResource(int id, void** data, int* size)
 {

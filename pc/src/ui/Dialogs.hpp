@@ -1,7 +1,9 @@
 #pragma once
 // Окна Windows: выбор папки (IFileOpenDialog, Vista+), выбор файла (GetOpenFileNameW), открыть папку в Проводнике.
 // Строки — UTF-8. Вызываются только по нажатию кнопки (стенд снимков их не вызывает).
+#include <cwchar>
 #include <string>
+#include <vector>
 
 #include "../core/TextUtil.hpp"
 
@@ -80,6 +82,42 @@ inline bool PickFile(std::string& path, const wchar_t* filter, const wchar_t* ti
     return true;
 #else
     (void) path;
+    (void) filter;
+    (void) title;
+    return false;
+#endif
+}
+
+// Несколько файлов сразу (Ctrl/Shift в окне выбора); dir — папка, с которой открыть окно.
+inline bool PickFiles(std::vector<std::string>& paths, const std::string& dir, const wchar_t* filter, const wchar_t* title)
+{
+#ifdef _WIN32
+    std::vector<wchar_t> buf(1 << 16, L'\0');
+    const std::wstring init = text::Widen(dir);
+    OPENFILENAMEW ofn{};
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner = GetActiveWindow();
+    ofn.lpstrFilter = filter;
+    ofn.lpstrFile = buf.data();
+    ofn.nMaxFile = static_cast<DWORD>(buf.size());
+    ofn.lpstrInitialDir = init.empty() ? nullptr : init.c_str();
+    ofn.lpstrTitle = title;
+    ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR | OFN_HIDEREADONLY | OFN_ALLOWMULTISELECT |
+                OFN_EXPLORER;
+    if (!GetOpenFileNameW(&ofn))
+        return false;
+    // Один файл — полный путь; несколько — папка, затем имена, каждое с \0, в конце \0\0
+    paths.clear();
+    const std::wstring first = buf.data();
+    const wchar_t* p = buf.data() + first.size() + 1;
+    if (!*p)
+        paths.push_back(text::Narrow(first));
+    for (; *p; p += std::wcslen(p) + 1)
+        paths.push_back(text::Narrow(first + L"\\" + p));
+    return !paths.empty();
+#else
+    (void) paths;
+    (void) dir;
     (void) filter;
     (void) title;
     return false;

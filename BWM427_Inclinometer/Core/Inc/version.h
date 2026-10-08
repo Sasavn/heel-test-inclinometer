@@ -5,6 +5,6 @@
 #ifndef VERSION_H_
 #define VERSION_H_
 
-#define FW_VERSION "1.4.1"
+#define FW_VERSION "1.5"
 
 #endif /* VERSION_H_ */

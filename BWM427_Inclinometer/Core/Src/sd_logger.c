@@ -102,23 +102,9 @@ static char* put_u32(char *p, uint32_t v) {
 
 static const uint32_t s_pow10[] = { 1u, 10u, 100u, 1000u };
 
-// v * 10^dec (dec 0..3), округлённое к ближайшему целому — то же, что
-// printf("%.*f"): произведение точное (24 бита мантиссы float * 10^dec),
-// на точной половине — к чётному. Без printf: быстро, без кучи и одинаково
-// на МК и в host-тестах.
-static int32_t to_scaled(float v, uint8_t dec) {
-	double a = (v < 0.0f) ? -(double) v : (double) v;
-	if (!(a < 1.0e6)) {
-		a = 999999.0; // NaN или переполнение — в норме не бывает
-	}
-	double prod = a * (double) s_pow10[dec];
-	uint32_t q = (uint32_t) prod;
-	double frac = prod - (double) q;
-	if (frac > 0.5 || (frac == 0.5 && (q & 1u))) {
-		q++;
-	}
-	return (v < 0.0f) ? -(int32_t) q : (int32_t) q;
-}
+// Округление в целые — sd_to_scaled() (sd_logger.h): без printf, быстро, без
+// кучи и одинаково на МК, в host-тестах и в строках R команды samples
+#define to_scaled sd_to_scaled
 
 // Целое v / 10^dec с dec знаками после десятичной ЗАПЯТОЙ: (-46, 2) -> "-0,46"
 static char* put_scaled(char *p, int32_t v, uint8_t dec) {

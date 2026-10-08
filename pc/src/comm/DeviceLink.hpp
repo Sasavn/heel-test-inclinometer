@@ -7,6 +7,11 @@
 // Порядок: одна команда «в полёте»; её ответ — строки до OK…/ERR… (строки S и шапка потока — отдельно, в любой
 // момент). Подключение: порт открылся -> через 200 мс ver (до трёх попыток) -> ответ «BWM427…» — прибор наш
 // (stream N, status), иначе порт отвергается. Связь зависла (3 команды подряд без ответа) — порт переоткрывается.
+//
+// Запись на ПК (прошивка 1.5): SetSamples(true) — прибору «samples on» (и снова после каждого переподключения:
+// прибор выключает samples при открытии и закрытии порта), строки R (в любой момент, как S) — в очередь, интерфейс
+// забирает их TakeSamples(). Прошивка старше 1.5 (по ver или ответу «ERR unknown command») — samples не шлётся,
+// LinkSnapshot::samplesSupport = −1.
 #include <atomic>
 #include <condition_variable>
 #include <cstdint>
@@ -57,6 +62,14 @@ struct Request
 
 using RequestPtr = std::shared_ptr<Request>;
 
+// Отсчёт датчика из строки R (samples) с метками приёма.
+struct RxSample
+{
+    proto::RawSample s;
+    std::int64_t linkMs = 0; // время связи (NowMs)
+    std::int64_t wallMs = 0; // часы ПК, мс с 1970 (Date/Time строки CSV)
+};
+
 enum class LinkState
 {
     Off,       // отключено пользователем
@@ -104,6 +117,16 @@ struct LinkSnapshot
     bool busy = false;           // есть команды в очереди / в полёте
     bool pollPaused = false;
     bool getActive = false;
+
+    // Запись на ПК (samples, прошивка 1.5)
+    bool samplesWanted = false;
+    bool samplesOn = false;            // прибор подтвердил «OK samples on»
+    int samplesSupport = 0;            // 1 — есть, −1 — нет (прошивка до 1.5), 0 — неизвестно
+    std::string samplesMsg;            // ошибка последней команды samples
+    std::uint64_t samplesRx = 0;       // строк R принято всего
+    std::int64_t samplesAtMs = 0;      // последняя строка R
+    std::uint64_t samplesDropped = 0;  // прибор не смог отправить (из ответа samples)
+    std::uint64_t samplesOverflow = 0; // не забраны интерфейсом и выброшены (очередь переполнена)
 };
 
 class DeviceLink
@@ -136,6 +159,11 @@ public:
     static constexpr int kPausedStreamMs = 500;
     // Быстрее опрашивать status (смена адреса — ждём итог): до момента untilMs, период periodMs.
     void FastPoll(std::int64_t untilMs, int periodMs = 300);
+    // Запись на ПК: включить / выключить отсчёты samples (on — очередь отсчётов очищается).
+    void SetSamples(bool on);
+    // Забрать принятые отсчёты (дописываются в out). Возвращает их число.
+    std::size_t TakeSamples(std::vector<RxSample>& out);
+    static constexpr std::size_t kMaxQueuedSamples = 200000; // ~1 ч при 2 × 25 Гц, если интерфейс не забирает
 
     LinkSnapshot Snapshot() const;
     bool IsConnected() const { return state_.load() == LinkState::Connected; }
@@ -156,6 +184,7 @@ private:
     void FailAll(const std::string& why, bool linkLost);
     void AfterReply(const RequestPtr& r, std::int64_t now);
     void LogLocked(char kind, const std::string& text, Origin origin, std::int64_t now);
+    int SamplesSupportLocked() const;
 
     std::unique_ptr<IConnection> conn_;
     History history_;
@@ -204,6 +233,16 @@ private:
     bool probeOurs_ = false;  // в ответе на ver была строка BWM427…
     bool probeStray_ = false; // до неё — хвост чужой передачи (строки D/E/G/F, лишний OK)
     bool rejectForeign_ = false;
+    // samples
+    bool samplesWanted_ = false;
+    bool samplesOn_ = false;
+    bool samplesOffPending_ = false; // выключить (включали мы)
+    int samplesSupported_ = 0;       // по ответу на samples: 1 / −1, 0 — по версии
+    RequestPtr samplesReq_;
+    std::int64_t samplesRetryAt_ = 0, samplesOnAt_ = 0, samplesAt_ = 0;
+    std::uint64_t samplesRx_ = 0, samplesSession_ = 0, samplesDropped_ = 0, samplesOverflow_ = 0;
+    std::string samplesMsg_;
+    std::vector<RxSample> samplesQueue_;
 
     std::deque<TermLine> term_;
     std::uint64_t termSeq_ = 0;

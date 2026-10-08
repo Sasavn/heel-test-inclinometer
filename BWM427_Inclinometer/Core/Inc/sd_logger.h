@@ -36,6 +36,25 @@ bool sd_logger_file_name(uint8_t i, char out[SD_NAME_LEN]);
 
 // --- Чистые функции (host-тесты) ---
 
+// v * 10^dec (dec 0..3), округлённое к ближайшему целому — то же, что
+// printf("%.*f"): произведение точное (24 бита мантиссы float * 10^dec),
+// на точной половине — к чётному. Так округляются числа в CSV на карте и в
+// строках R команды samples (usb_cli_ext.c) — значения на ПК совпадают с картой.
+static inline int32_t sd_to_scaled(float v, uint8_t dec) {
+	static const uint32_t pow10[] = { 1u, 10u, 100u, 1000u };
+	double a = (v < 0.0f) ? -(double) v : (double) v;
+	if (!(a < 1.0e6)) {
+		a = 999999.0; // NaN или переполнение — в норме не бывает
+	}
+	double prod = a * (double) pow10[dec];
+	uint32_t q = (uint32_t) prod;
+	double frac = prod - (double) q;
+	if (frac > 0.5 || (frac == 0.5 && (q & 1u))) {
+		q++;
+	}
+	return (v < 0.0f) ? -(int32_t) q : (int32_t) q;
+}
+
 // Строка CSV: Date;Time;RawX;RawY;OffsetX;OffsetY;CalcX;CalcY;BatV;Ms + '\n',
 // дробная часть через запятую (столбцы — см. sd_logger.c).
 // Возвращает длину без '\0' (не больше SD_ROW_MAX - 1).

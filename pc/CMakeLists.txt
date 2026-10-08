@@ -60,9 +60,11 @@ endif()
 add_library(krenomer_ui STATIC
     src/ui/App.cpp
     src/ui/AppMeasure.cpp
+    src/ui/AppRecord.cpp
     src/ui/AppDiag.cpp
     src/ui/AppSettings.cpp
     src/ui/AppFiles.cpp
+    src/ui/AppProcess.cpp
     src/ui/AppFirmware.cpp
     src/ui/AppTerminal.cpp)
 target_include_directories(krenomer_ui PUBLIC src ${CSerialPort_INCLUDE_DIR})
@@ -103,10 +105,10 @@ if(WIN32)
 endif()
 
 # Тесты: протокол (разбор потока, JSON status, base64/CRC, файлы), связь с прибором-имитатором, перепрошивка
-# (демо dfu-util), стенд снимков экрана без окна и видеокарты (ui_shots).
+# (демо dfu-util), обработка опыта кренования (process_test), стенд снимков экрана без окна и видеокарты (ui_shots).
 if(KRENOMER_BUILD_TESTS)
     enable_testing()
-    foreach(_t protocol_test link_test firmware_test)
+    foreach(_t protocol_test link_test firmware_test process_test)
         add_executable(${_t} tests/${_t}.cpp)
         target_include_directories(${_t} PRIVATE src tests)
         target_link_libraries(${_t} PRIVATE krenomer_core)

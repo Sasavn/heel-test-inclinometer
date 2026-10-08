@@ -23,6 +23,12 @@ std::string LowerAscii(std::string s)
     return s;
 }
 
+std::int64_t WallMs()
+{
+    return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch())
+        .count();
+}
+
 } // namespace
 
 DeviceLink::DeviceLink(std::unique_ptr<IConnection> conn, bool threaded) : conn_(std::move(conn))
@@ -200,6 +206,29 @@ void DeviceLink::Step(std::int64_t now)
                 lastStreamCmd_ = now;
                 streamDirty_ = false;
             }
+            // Запись на ПК: samples on (после каждого подключения) / off. Сторож: включено, датчик по потоку
+            // отвечает, а строк R нет 5 с — включить ещё раз.
+            if (!samplesReq_ && SamplesSupportLocked() >= 0 && now >= samplesRetryAt_)
+            {
+                bool sensorOk = false;
+                if (haveSample_ && now - sampleAt_ < 2000)
+                    for (const auto& d : sample_.sens)
+                        sensorOk = sensorOk || d.st == 'O';
+                const bool stale = samplesOn_ && sensorOk && now - std::max(samplesAt_, samplesOnAt_) > 5000;
+                const char* cmd = samplesWanted_ && (!samplesOn_ || stale) ? "samples on"
+                                  : !samplesWanted_ && samplesOn_ && samplesOffPending_ ? "samples off"
+                                                                                        : nullptr;
+                if (cmd)
+                {
+                    samplesReq_ = std::make_shared<Request>();
+                    samplesReq_->cmd = cmd;
+                    samplesReq_->origin = Origin::Internal;
+                    samplesReq_->timeoutMs = 2000;
+                    queue_.push_back(samplesReq_);
+                    if (stale && samplesWanted_)
+                        LogLocked('!', "строк R нет 5 с — samples on ещё раз", Origin::Internal, now);
+                }
+            }
         }
 
         // Следующая команда
@@ -242,6 +271,12 @@ void DeviceLink::OnOpened(std::int64_t now)
     sampleTimes_.clear();
     consecutiveTimeouts_ = 0;
     expectAbortReply_ = false;
+    // Прибор выключает samples при открытии порта; прошивка может быть другой (после перепрошивки)
+    samplesOn_ = false;
+    samplesOffPending_ = false;
+    samplesSupported_ = 0;
+    samplesRetryAt_ = 0;
+    samplesMsg_.clear();
     LogLocked('!', "порт " + conn_->PortName() + " открыт — проверка прибора (ver)", Origin::Internal, now);
 }
 
@@ -252,6 +287,8 @@ void DeviceLink::OnClosed(std::int64_t now, const std::string& why)
     FailAll("связь с прибором потеряна", true);
     probe_.reset();
     expectAbortReply_ = false;
+    samplesOn_ = false;
+    samplesOffPending_ = false;
     state_ = conn_->Enabled() ? LinkState::Searching : LinkState::Off;
 }
 
@@ -379,6 +416,50 @@ void DeviceLink::AfterReply(const RequestPtr& r, std::int64_t now)
             haveVer_ = true;
         }
     }
+    else if (cmd == "samples")
+    {
+        if (r == samplesReq_)
+            samplesReq_.reset();
+        bool on = false;
+        std::uint64_t dropped = 0;
+        if (r->ok && proto::ParseSamplesReply(r->final, on, dropped))
+        {
+            samplesSupported_ = 1;
+            if (on)
+                samplesOnAt_ = now;
+            if (on && !samplesOn_)
+                samplesSession_ = 0;
+            if (!on && samplesOn_ && samplesSession_)
+                LogLocked('<', "(" + std::to_string(samplesSession_) + " строк R)", r->origin, now);
+            samplesOn_ = on;
+            if (!on)
+                samplesOffPending_ = false;
+            samplesDropped_ = dropped;
+            samplesMsg_.clear();
+        }
+        else if (proto::StartsWith(r->final, "ERR unknown command"))
+        {
+            samplesSupported_ = -1;
+            samplesOn_ = false;
+            samplesMsg_ = "в прошивке прибора нет команды samples — нужна прошивка 1.5 или новее";
+            LogLocked('!', "запись на ПК: " + samplesMsg_, Origin::Internal, now);
+        }
+        else
+        {
+            samplesMsg_ = r->final;
+            samplesRetryAt_ = now + 3000;
+        }
+    }
+}
+
+int DeviceLink::SamplesSupportLocked() const
+{
+    if (samplesSupported_ != 0)
+        return samplesSupported_;
+    if (!haveVer_)
+        return 0;
+    const auto v = proto::VersionAtLeast(ver_.version, proto::kSamplesMajor, proto::kSamplesMinor);
+    return !v ? 0 : *v ? 1 : -1;
 }
 
 void DeviceLink::HandleLine(const std::string& line, std::int64_t now)
@@ -416,6 +497,28 @@ void DeviceLink::HandleLine(const std::string& line, std::int64_t now)
         else
             badLines_++;
         LogLocked('S', line, Origin::Internal, now);
+        return;
+    }
+    // Отсчёты samples: для записи на ПК — в очередь (в журнал не пишутся: до 50 строк в секунду); включены вручную
+    // (терминал) — в журнал, как поток
+    if (proto::IsSampleLine(line))
+    {
+        proto::RawSample s;
+        if (!proto::ParseSampleLine(line, s))
+        {
+            badLines_++;
+            LogLocked('S', line, Origin::Internal, now);
+            return;
+        }
+        samplesRx_++;
+        samplesSession_++;
+        samplesAt_ = now;
+        if (!samplesWanted_)
+            LogLocked('S', line, Origin::Internal, now);
+        else if (samplesQueue_.size() < kMaxQueuedSamples)
+            samplesQueue_.push_back({s, now, WallMs()});
+        else
+            samplesOverflow_++;
         return;
     }
     if (expectAbortReply_ && (line == "OK aborted" || line == "OK nothing to abort"))
@@ -605,6 +708,28 @@ void DeviceLink::FastPoll(std::int64_t untilMs, int periodMs)
     fastPollMs_ = periodMs;
 }
 
+void DeviceLink::SetSamples(bool on)
+{
+    std::lock_guard lock(m_);
+    if (on == samplesWanted_)
+        return;
+    samplesWanted_ = on;
+    samplesRetryAt_ = 0;
+    samplesOffPending_ = !on;
+    if (on)
+        samplesQueue_.clear();
+    cv_.notify_one();
+}
+
+std::size_t DeviceLink::TakeSamples(std::vector<RxSample>& out)
+{
+    std::lock_guard lock(m_);
+    const std::size_t n = samplesQueue_.size();
+    out.insert(out.end(), samplesQueue_.begin(), samplesQueue_.end());
+    samplesQueue_.clear();
+    return n;
+}
+
 LinkSnapshot DeviceLink::Snapshot() const
 {
     std::lock_guard lock(m_);
@@ -641,6 +766,14 @@ LinkSnapshot DeviceLink::Snapshot() const
     s.busy = inFlight_ != nullptr || !queue_.empty();
     s.pollPaused = pollPaused_;
     s.getActive = inFlight_ && inFlight_->sink;
+    s.samplesWanted = samplesWanted_;
+    s.samplesOn = samplesOn_;
+    s.samplesSupport = s.state == LinkState::Connected ? SamplesSupportLocked() : 0;
+    s.samplesMsg = samplesMsg_;
+    s.samplesRx = samplesRx_;
+    s.samplesAtMs = samplesAt_;
+    s.samplesDropped = samplesDropped_;
+    s.samplesOverflow = samplesOverflow_;
     return s;
 }
 

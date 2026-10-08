@@ -1,11 +1,13 @@
 #pragma once
 // Окно программы: шапка (связь, порт, демо), меню слева и страницы — «Измерение», «Диагностика», «Настройки»,
-// «Файлы на карте», «Прошивка», «Терминал». Состояние страниц — здесь; отрисовка — App*.cpp.
+// «Файлы на карте», «Обработка», «Прошивка», «Терминал». Состояние страниц — здесь; отрисовка — App*.cpp.
 //
 // Поток интерфейса не ждёт прибор никогда: команды уходят в очередь DeviceLink, результат проверяется в следующих
 // кадрах; скачивание файлов и перепрошивка — конечные автоматы, которые двигает Tick() (и при свёрнутом окне).
+#include <atomic>
 #include <cstdint>
 #include <ctime>
+#include <future>
 #include <map>
 #include <memory>
 #include <string>
@@ -14,13 +16,15 @@
 #include "../comm/DeviceLink.hpp"
 #include "../comm/SimDevice.hpp"
 #include "../core/Download.hpp"
+#include "../core/HeelData.hpp"
+#include "../core/PcRecorder.hpp"
 #include "../core/PcSettings.hpp"
 #include "../fw/Firmware.hpp"
 
 namespace ui
 {
 
-inline constexpr const char* kAppVersion = "1.1";
+inline constexpr const char* kAppVersion = "1.2";
 
 enum class Page
 {
@@ -30,6 +34,7 @@ enum class Page
     Files,
     Firmware,
     Terminal,
+    Process, // «Обработка» (опыт кренования по файлам)
     Count
 };
 
@@ -98,6 +103,21 @@ public:
             diag_.diagReq = link_->Send("diag", Origin::App, 4000);
     }
     void ShowDemoPanel(bool on) { demoPanel_ = on; }
+    // Запись на ПК (AppRecord.cpp)
+    bool StartPcRecording();
+    void StopPcRecording();
+    bool PcRecording() const { return pcrec_.rec && pcrec_.rec->Running(); }
+    void SetRecordDir(const std::string& dir, bool xlsx);
+    void SetRecordLabel(const std::string& label);
+    const pcrec::Recorder* PcRecorder() const { return pcrec_.rec.get(); }
+    // Обработка (AppProcess.cpp)
+    void ProcessOpen(const std::string& dir); // папка с файлами замеров -> чтение в фоне
+    bool ProcessBusy() const;                 // идёт чтение или сохранение отчёта
+    void ProcessSetArm(int number, double arm);
+    void ProcessShowPost(int post) { proc_.show = post; }
+    void ProcessSaveReport();
+    const heel::Summary& ProcessSummary() const { return proc_.sum; }
+    std::size_t ProcessMeasurements() const { return proc_.meas.size(); }
 
 private:
     // Каркас
@@ -135,6 +155,21 @@ private:
     void TickSettings();
     void TickFiles();
     void TickDiag();
+    void RecordCard(float w, bool full); // «Запись на ПК» на странице «Измерение»
+    void TickRecord();
+    void PageProcess();
+    void TickProcess();
+    heel::Settings ProcSettings() const;
+    void ProcLoad();      // прочитать файлы (выбранные или все *.CSV папки) в фоне
+    void ProcRegroup(bool quiet = false); // замеры и посты заново (после чтения, смены постов; quiet — без журнала)
+    void ProcRecompute(); // окно, h, итог
+    void ProcLog(const std::string& s);
+    void ProcParams(float w);
+    void ProcTable(float w, float h);
+    void ProcResult(float w, float h);
+    void ProcPlots(float w, float h);
+    void ProcPanes(int post, float w, float h, bool stacked, bool forExport);
+    void ProcExportPage(int post, float w, float h);
 
     AppOptions opt_;
     PcSettings settings_;
@@ -233,6 +268,17 @@ private:
         std::string summary;
     } dl_;
 
+    // Запись на ПК
+    struct
+    {
+        std::unique_ptr<pcrec::Recorder> rec;
+        char dir[1024] = {};
+        char label[96] = {};
+        bool linkLost = false;   // связь пропала во время записи (перерыв)
+        bool converting = false; // ждём книгу .xlsx
+        std::vector<RxSample> buf;
+    } pcrec_;
+
     // Прошивка
     struct
     {
@@ -260,6 +306,29 @@ private:
         bool scrollToEnd = true;
         bool focusInput = false;
     } term_;
+
+    // Обработка
+    struct
+    {
+        char dir[1024] = {};                                  // папка с файлами замеров
+        std::vector<std::string> picked;                      // выбранные файлы (пусто — все *.CSV папки)
+        std::string outDir;                                   // папка прочитанных файлов — туда отчёт
+        std::shared_ptr<const std::vector<heel::File>> files; // прочитанные файлы
+        std::vector<heel::Measurement> meas;
+        heel::Summary sum;
+        std::map<int, int> postOf;                            // датчик (heel::SensorKey) -> пост: 0, 1, -1 — нет
+        std::vector<int> keys;                                // датчики прочитанных файлов
+        std::map<int, double> arm;                            // плечо, заданное в таблице: замер -> |l|, м
+        std::map<int, bool> off;                              // замеры, снятые с расчёта
+        std::vector<std::string> log;                         // журнал (коротко)
+        std::future<heel::Loaded> load;
+        std::shared_ptr<std::atomic<int>> loadDone;
+        int loadTotal = 0;
+        std::future<std::vector<std::string>> save; // отчёт: строки для журнала
+        bool saveRequested = false;                 // картинки графиков — в Tick, между кадрами
+        int show = 0;                               // графики: 0 — нос, 1 — корма
+        bool opened = false, dirty = false, logScroll = false;
+    } proc_;
 };
 
 } // namespace ui

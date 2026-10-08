@@ -25,6 +25,12 @@ struct PcSettings
     bool overwriteFiles = false;
     bool termShowStream = false;
     bool termShowPolls = false;
+    std::string recordDir;    // «Запись на ПК»: "" — та же папка, что для файлов с карты
+    bool recordXlsx = true;   // «Запись на ПК»: также книга .xlsx по остановке
+    // «Обработка»: папка ("" — папка файлов с карты) и исходные данные опыта кренования
+    std::string procDir;
+    double heelD = 1500.0, heelP = 15.0, heelL = 4.5, heelWinS = 30.0, heelThr = 0.1; // т, т, м, с, °
+    int heelAxis = 0;         // ось угла: 0 — X (датчики поперёк судна), 1 — Y
 
     static std::filesystem::path Dir()
     {
@@ -47,6 +53,7 @@ struct PcSettings
     }
 
     std::string DownloadDirOrDefault() const { return downloadDir.empty() ? DefaultDownloadDir() : downloadDir; }
+    std::string RecordDirOrDefault() const { return recordDir.empty() ? DownloadDirOrDefault() : recordDir; }
 
     void Load(const std::filesystem::path& file = Dir() / L"krenomer.ini")
     {
@@ -84,6 +91,24 @@ struct PcSettings
         overwriteFiles = flag("overwrite_files", overwriteFiles);
         termShowStream = flag("term_show_stream", termShowStream);
         termShowPolls = flag("term_show_polls", termShowPolls);
+        if (kv.count("record_dir"))
+            recordDir = kv["record_dir"];
+        recordXlsx = flag("record_xlsx", recordXlsx);
+        auto real = [&](const char* k, double def, double lo, double hi) {
+            const auto it = kv.find(k);
+            if (it == kv.end())
+                return def;
+            const double v = std::strtod(it->second.c_str(), nullptr);
+            return v < lo || v > hi ? def : v;
+        };
+        if (kv.count("proc_dir"))
+            procDir = kv["proc_dir"];
+        heelD = real("heel_d", heelD, 0.001, 1e7);
+        heelP = real("heel_p", heelP, 0.0, 1e6);
+        heelL = real("heel_l", heelL, 0.0, 1000.0);
+        heelWinS = real("heel_window_s", heelWinS, 1.0, 3600.0);
+        heelThr = real("heel_threshold", heelThr, 0.0, 10.0);
+        heelAxis = num("heel_axis", heelAxis, 0, 1);
     }
 
     void Save(const std::filesystem::path& file = Dir() / L"krenomer.ini") const
@@ -106,6 +131,12 @@ struct PcSettings
             out << "overwrite_files=" << (overwriteFiles ? 1 : 0) << "\n";
             out << "term_show_stream=" << (termShowStream ? 1 : 0) << "\n";
             out << "term_show_polls=" << (termShowPolls ? 1 : 0) << "\n";
+            out << "record_dir=" << recordDir << "\n";
+            out << "record_xlsx=" << (recordXlsx ? 1 : 0) << "\n";
+            out << "proc_dir=" << procDir << "\n";
+            out.precision(12);
+            out << "heel_d=" << heelD << "\nheel_p=" << heelP << "\nheel_l=" << heelL << "\n";
+            out << "heel_window_s=" << heelWinS << "\nheel_threshold=" << heelThr << "\nheel_axis=" << heelAxis << "\n";
             if (!out)
                 return;
         }

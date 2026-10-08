@@ -22,6 +22,7 @@ App::App(AppOptions opt) : opt_(opt), updater_(nullptr, nullptr)
     set_.streamMs = settings_.streamMs;
     std::snprintf(files_.dir, sizeof(files_.dir), "%s", settings_.DownloadDirOrDefault().c_str());
     std::snprintf(fw_.path, sizeof(fw_.path), "%s", settings_.firmwarePath.c_str());
+    std::snprintf(pcrec_.dir, sizeof(pcrec_.dir), "%s", settings_.RecordDirOrDefault().c_str());
 #ifdef _WIN32
     dfuReal_ = std::make_unique<fw::RealDfuBackend>();
 #endif
@@ -30,10 +31,12 @@ App::App(AppOptions opt) : opt_(opt), updater_(nullptr, nullptr)
 
 App::~App()
 {
+    StopPcRecording(); // дописать файлы записи на ПК (и .xlsx — деструктор Recorder дождётся)
     if (opt_.useSettingsFile)
     {
         settings_.downloadDir = files_.dir == settings_.DefaultDownloadDir() ? "" : files_.dir;
         settings_.firmwarePath = fw_.path;
+        settings_.recordDir = pcrec_.dir == settings_.DownloadDirOrDefault() ? "" : pcrec_.dir;
         settings_.Save();
     }
     updater_.Cancel();
@@ -86,6 +89,11 @@ void App::StartDemo(bool on)
         Notify("Дождитесь окончания скачивания / перепрошивки", 2);
         return;
     }
+    if (PcRecording())
+    {
+        Notify("Идёт запись на ПК — сначала остановите её", 2);
+        return;
+    }
     MakeLink(on);
     Notify(on ? "Демо-режим: подключён имитатор прибора" : "Демо-режим выключен — поиск прибора на USB", 0);
 }
@@ -119,6 +127,8 @@ void App::Tick()
     TickFiles();
     TickSettings();
     TickDiag();
+    TickRecord();
+    TickProcess();
     toasts_.erase(std::remove_if(toasts_.begin(), toasts_.end(), [&](const Toast& t) { return now > t.until; }),
                   toasts_.end());
 }
@@ -281,12 +291,13 @@ void App::RenderTopBar(float h)
     }
     ImGui::SameLine(0, S(8));
     const bool off = snap_.state == LinkState::Off;
-    if (Button(off ? "Подключить" : "Отключить", BtnKind::Normal, ImVec2(connW, 0), updater_.Busy() || dl_.running,
-               "Идёт скачивание или перепрошивка"))
+    const bool busy = updater_.Busy() || dl_.running || PcRecording();
+    const char* busyWhy = PcRecording() ? "Идёт запись на ПК — сначала остановите её" : "Идёт скачивание или перепрошивка";
+    if (Button(off ? "Подключить" : "Отключить", BtnKind::Normal, ImVec2(connW, 0), busy, busyWhy))
         link_->SetEnabled(off);
     ImGui::SameLine(0, S(8));
     if (Button(snap_.demo ? "Выйти из демо" : "Демо-режим", snap_.demo ? BtnKind::Primary : BtnKind::Normal,
-               ImVec2(demoW, 0), updater_.Busy() || dl_.running, "Идёт скачивание или перепрошивка"))
+               ImVec2(demoW, 0), busy, busyWhy))
         StartDemo(!snap_.demo);
     if (ImGui::IsItemHovered() && !snap_.demo)
         ImGui::SetTooltip("Имитатор прибора: все страницы работают без железа");
@@ -315,6 +326,7 @@ void App::RenderSidebar(float w, float h)
     static const Item items[] = {
         {Page::Measure, "◉", "Измерение"},     {Page::Diag, "⚡", "Диагностика"},
         {Page::Settings, "⚙", "Настройки"},    {Page::Files, "▤", "Файлы на карте"},
+        {Page::Process, "∑", "Обработка"},
         {Page::Firmware, "⇪", "Прошивка"},     {Page::Terminal, "⌨", "Терминал"},
     };
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, S(4)));
@@ -342,7 +354,7 @@ void App::RenderSidebar(float w, float h)
             badge = "⇩";
         if (it.page == Page::Firmware && updater_.Busy())
             badge = "●";
-        if (it.page == Page::Measure && Recording())
+        if (it.page == Page::Measure && (Recording() || PcRecording()))
         {
             badge = "●";
             bc = pal.err;
@@ -424,6 +436,7 @@ void App::RenderPage()
     case Page::Files: PageFiles(); break;
     case Page::Firmware: PageFirmware(); break;
     case Page::Terminal: PageTerminal(); break;
+    case Page::Process: PageProcess(); break;
     default: break;
     }
 }

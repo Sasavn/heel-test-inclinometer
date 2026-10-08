@@ -6,7 +6,9 @@
 //  - status — одна строка JSON (поля — ParseStatus и pc/README.md);
 //  - ver — «BWM427 inclinometer firmware v1.3, build Oct  7 2026 20:46:12» и «HAL …, UID …»;
 //  - files — строки «F,<имя>,<байт>,<ГГГГ-ММ-ДД ЧЧ:ММ>», итог «OK <число>»;
-//  - get — «G,<имя>,<размер>,<смещение>», «D,<base64>», «E,<байт>,<crc32>», «OK» (Download.hpp).
+//  - get — «G,<имя>,<размер>,<смещение>», «D,<base64>», «E,<байт>,<crc32>», «OK» (Download.hpp);
+//  - samples on|off (с прошивки 1.5) — «OK samples on, dropped N»; пока включено, после каждого цикла опроса строка
+//    «R,<адрес>,<n>,<t_ms>,<RawX>,<RawY>,<OffsetX>,<OffsetY>,<BatV>» на каждый свежий отсчёт (в любой момент, как S).
 #include <charconv>
 #include <limits>
 #include <cmath>
@@ -472,6 +474,99 @@ inline VersionInfo ParseVer(const std::vector<std::string>& lines)
             v.details = l;
     }
     return v;
+}
+
+// Версия прошивки не ниже major.minor: «1.5», «1.5.2», «2.0» >= 1.5; «1.4.1», «» (старые без номера) — нет.
+// Номер не разобран («dev») — std::nullopt (неизвестно).
+inline std::optional<bool> VersionAtLeast(std::string_view v, int major, int minor)
+{
+    if (v.empty())
+        return false;
+    const auto parts = Split(v, '.');
+    const std::int64_t ma = ToInt(parts[0]);
+    const std::int64_t mi = parts.size() > 1 ? ToInt(parts[1]) : 0;
+    if (ma < 0 || mi < 0)
+        return std::nullopt;
+    return ma != major ? ma > major : mi >= minor;
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// samples: отсчёты датчиков для записи на ПК (прошивка 1.5)
+// ---------------------------------------------------------------------------------------------------------------
+
+inline constexpr int kSamplesMajor = 1, kSamplesMinor = 5; // первая прошивка с командой samples
+
+// «R,2,1234,567890,-46,-17,-458,0,118» — все числа целые, округлены прибором как в CSV на карте (sd_to_scaled).
+struct RawSample
+{
+    int addr = 0;            // Modbus-адрес датчика
+    std::uint32_t n = 0;     // номер ответа датчика (ok_count): +1 на отсчёт, по нему видны пропуски
+    std::uint32_t tMs = 0;   // HAL_GetTick() ответа (переполняется через 49,7 сут)
+    std::int32_t rawX = 0, rawY = 0; // ответ датчика, сотые градуса (регистр − 10000)
+    std::int32_t offX = 0, offY = 0; // ноль, тысячные градуса
+    std::int32_t batV = 0;           // АКБ, десятые вольта
+};
+
+inline bool IsSampleLine(std::string_view s)
+{
+    return StartsWith(s, "R,");
+}
+
+// Строка R -> отсчёт. Лишние поля в конце (новая прошивка) пропускаются; не число / вне диапазона — false.
+inline bool ParseSampleLine(std::string_view line, RawSample& out)
+{
+    if (!IsSampleLine(line))
+        return false;
+    while (!line.empty() && (line.back() == '\r' || line.back() == ' '))
+        line.remove_suffix(1);
+    const auto v = Split(line.substr(2), ',');
+    if (v.size() < 8)
+        return false;
+    std::int64_t x[8];
+    for (int i = 0; i < 8; i++)
+    {
+        const std::string_view f = v[static_cast<std::size_t>(i)];
+        const auto r = std::from_chars(f.data(), f.data() + f.size(), x[i]);
+        if (f.empty() || r.ec != std::errc{} || r.ptr != f.data() + f.size())
+            return false;
+    }
+    constexpr std::int64_t kU32 = 0xFFFFFFFFLL, kI32 = 0x7FFFFFFFLL;
+    if (x[0] < 1 || x[0] > 247 || x[1] < 0 || x[1] > kU32 || x[2] < 0 || x[2] > kU32)
+        return false;
+    for (int i = 3; i < 8; i++)
+        if (x[i] < -kI32 || x[i] > kI32)
+            return false;
+    RawSample s;
+    s.addr = static_cast<int>(x[0]);
+    s.n = static_cast<std::uint32_t>(x[1]);
+    s.tMs = static_cast<std::uint32_t>(x[2]);
+    s.rawX = static_cast<std::int32_t>(x[3]);
+    s.rawY = static_cast<std::int32_t>(x[4]);
+    s.offX = static_cast<std::int32_t>(x[5]);
+    s.offY = static_cast<std::int32_t>(x[6]);
+    s.batV = static_cast<std::int32_t>(x[7]);
+    out = s;
+    return true;
+}
+
+// Ответ «OK samples on, dropped 12» / «OK samples off, dropped 0». false — не такой ответ.
+inline bool ParseSamplesReply(std::string_view line, bool& on, std::uint64_t& dropped)
+{
+    constexpr std::string_view p = "OK samples ";
+    if (!StartsWith(line, p))
+        return false;
+    line.remove_prefix(p.size());
+    if (StartsWith(line, "on"))
+        on = true, line.remove_prefix(2);
+    else if (StartsWith(line, "off"))
+        on = false, line.remove_prefix(3);
+    else
+        return false;
+    dropped = 0;
+    constexpr std::string_view d = ", dropped ";
+    if (StartsWith(line, d))
+        ToU64(line.substr(d.size()), dropped);
+    return true;
 }
 
 // ---------------------------------------------------------------------------------------------------------------

@@ -15,6 +15,7 @@
 #include "bwm427.h"
 #include "sd_logger.h"
 #include "settings.h"
+#include "usb_cli_ext.h"
 #include <string.h>
 
 app_state_t g_app;
@@ -153,6 +154,11 @@ __attribute__((weak)) void ui_task(void) {
 }
 
 __attribute__((weak)) void ui_input_tick_1ms(void) {
+}
+
+// Строки R для записи на ПК (usb_cli_ext.c; в host-тестах логики его нет)
+__attribute__((weak)) void usb_cli_ext_samples(const bool fresh[APP_SENSOR_COUNT]) {
+	(void) fresh;
 }
 
 /* ------------------------------------------------------------------------ */
@@ -1075,6 +1081,7 @@ static void poll_task(uint32_t now) {
 	poll_start(now);
 	if (cycle_done) {
 		sd_logger_write_cycle(fresh);
+		usb_cli_ext_samples(fresh);
 	}
 	if (s_rate_valid && now - s_rate_last_ms > APP_RATE_TIMEOUT_MS) {
 		s_rate_valid = false;
