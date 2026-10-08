@@ -710,7 +710,11 @@ void usb_cli_ext_task(uint32_t now) {
 		ext_line("%s", rec ? "ERR aborted: recording started" : "ERR aborted: card removed");
 		return;
 	}
-	if ((now - s_xf_ms) > CLI_EXT_STALL_MS) {
+	// Со знаком: now берётся в начале прохода суперцикла, а команда files/get
+	// ставит s_xf_ms = HAL_GetTick() позже (f_open читает карту миллисекунды) —
+	// now бывает меньше s_xf_ms, и беззнаковая разность давала ~4e9 мс
+	// (прошивка 1.4 обрывала get на прибор после первого сектора).
+	if ((int32_t) (now - s_xf_ms) > (int32_t) CLI_EXT_STALL_MS) {
 		xf_close();
 		ext_line("ERR aborted: host does not read");
 		return;

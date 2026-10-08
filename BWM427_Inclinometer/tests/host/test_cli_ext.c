@@ -1021,6 +1021,28 @@ static void test_get(void) {
 	CHECK(strcmp(last_line(), "ERR aborted: card removed") == 0 && s_open_files == 0);
 	g_app.sd_state = SD_READY;
 
+	// Как в суперцикле прибора: usb_cli_task(now) берёт now в начале прохода, а
+	// команда (f_open читает карту) идёт миллисекунды, так что остаток прохода
+	// вызывает usb_cli_ext_task со временем РАНЬШЕ начала передачи. Прошивка 1.4
+	// считала это «хост не читает» и обрывала get/files после первой порции.
+	for (int k = 0; k < 2; k++) {
+		tx_reset();
+		uint32_t pass_start = fake_tick;
+		fake_tick += 3; // команда заняла 3 мс
+		CHECK(run(k ? "files" : "get 2026-10-07_M007_D2.CSV"));
+		usb_cli_ext_task(pass_start);
+		split_lines();
+		CHECK(strncmp(last_line(), "ERR", 3) != 0);
+		pump(100000, 1);
+		CHECK(strncmp(last_line(), "OK", 2) == 0 && s_open_files == 0 && s_open_dirs == 0);
+		if (!k) {
+			get_result_t rr;
+			parse_get(&rr);
+			CHECK(rr.ok && rr.len == size && memcmp(rr.data, data, size) == 0);
+			free(rr.data);
+		}
+	}
+
 	// Хост не забирает данные: передача ждёт, через 5 с — прервана
 	tx_reset();
 	CHECK(run("get 2026-10-07_M007_D2.CSV"));
