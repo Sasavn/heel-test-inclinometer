@@ -34,13 +34,39 @@ namespace fs = std::filesystem;
 namespace
 {
 
-// Папка для файлов стенда (видна на снимках): KRENOMER_SHOTS_DIR, иначе %TEMP%. Для снимков в README
-// — короткий нейтральный путь (например, subst-диск), без имени пользователя.
+// Папка для файлов стенда: KRENOMER_SHOTS_DIR, иначе %TEMP%. На снимках вместо неё — «D:\Кренование» (ShownPaths).
 fs::path ShotsWorkDir()
 {
     if (const wchar_t* e = _wgetenv(L"KRENOMER_SHOTS_DIR"); e && *e)
         return fs::path(e);
     return fs::temp_directory_path();
+}
+
+// Пути на снимках: настоящие папки (стенд, %TEMP%, исходники, профиль пользователя) показываются как
+// «D:\Кренование\…» (или KRENOMER_SHOTS_SHOW_DIR) — снимки идут в публичный README. Файлы пишутся по настоящим путям.
+std::vector<std::pair<std::string, std::string>> ShownPaths(const fs::path& work)
+{
+    std::wstring root = L"D:\\Кренование";
+    if (const wchar_t* e = _wgetenv(L"KRENOMER_SHOTS_SHOW_DIR"); e && *e)
+        root = e;
+    const std::string shown = text::PathToUtf8(fs::path(root));
+    std::vector<std::pair<std::string, std::string>> map;
+    auto add = [&](const fs::path& p, const char* sub) {
+        std::error_code ec;
+        std::string s = text::PathToUtf8(fs::weakly_canonical(p, ec).make_preferred());
+        while (s.size() > 3 && (s.back() == '\\' || s.back() == '/'))
+            s.pop_back();
+        if (s.size() > 3)
+            map.push_back({s, shown + sub});
+    };
+    add(work, "");
+    add(fs::temp_directory_path(), "");
+    add(fs::path(KRENOMER_SOURCE_DIR) / "..", "\\diplom_project");
+    for (const auto& [var, sub] : {std::pair{L"APPDATA", "\\Настройки"}, std::pair{L"LOCALAPPDATA", "\\Программы"},
+                                   std::pair{L"USERPROFILE", "\\Пользователь"}})
+        if (const wchar_t* e = _wgetenv(var); e && *e)
+            add(fs::path(e), sub);
+    return map;
 }
 
 const unsigned char* g_tex = nullptr;
@@ -308,6 +334,7 @@ int main(int argc, char** argv)
         ui::AppOptions o{false, false, false};
         o.noHardware = true; // настоящие COM-порты ПК не трогаем
         ui::App app(o);
+        app.SetShownPaths(ShownPaths(ShotsWorkDir()));
         Stand st{&app};
         st.Run(1500);
         st.Shot("00_not_connected");
@@ -319,6 +346,7 @@ int main(int argc, char** argv)
     // 2. Демо-режим
     const std::time_t simStart = std::time(nullptr);
     ui::App app(ui::AppOptions{false, true, false, simStart, 7});
+    app.SetShownPaths(ShownPaths(ShotsWorkDir()));
     Stand st{&app};
     SECTION("измерение");
     st.Run(95000);
@@ -556,6 +584,79 @@ int main(int argc, char** argv)
         fs::copy_file(dir / L"Отчет_Кренование.xlsx", fs::path(g_out) / "18_process_report.xlsx",
                       fs::copy_options::overwrite_existing, ec);
         st.Shot("18_process_saved", true);
+    }
+
+    SECTION("обработка: весь опыт одной записью (синтетика как у руководителя), старые форматы");
+    {
+        // Синтетическая запись прошивки 1.5: 10 положений груза по 40–60 с, качка, всплески на переносах
+        const fs::path dir = ShotsWorkDir() / L"Опыт одной записью";
+        fs::remove_all(dir, ec);
+        fs::create_directories(dir, ec);
+        fs::copy_file(testutil::TestDataDir() / "continuous" / "2026-10-09_M020_D2.CSV", dir / "2026-10-09_M020_D2.CSV",
+                      fs::copy_options::overwrite_existing, ec);
+        auto wait = [&] {
+            for (int i = 0; i < 3000 && app.ProcessBusy(); i++)
+            {
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                st.Run(50);
+            }
+        };
+        app.SetPage(ui::Page::Process);
+        CHECK(app.ProcessAxis() == 0); // по умолчанию — X
+        st.Run(7000);                  // уведомление о прошлом отчёте погасло
+        app.ProcessOpen(text::PathToUtf8(dir));
+        wait();
+        st.Run(300);
+        CHECK(app.ProcessContinuous()); // режим выбран сам: в записи больше трёх положений
+        CHECK_MSG(app.ProcessPositions().size() == 10, "положений %zu", app.ProcessPositions().size());
+        // Плечи переноса от начального положения: l = h·D·tg Δθ / P при h = 0,8 м (D = 1500 т, P = 15 т)
+        const double arms[10] = {0, 4.19, 8.41, 11.24, 14.83, 3.49, 8.41, 13.39, 17.0, 0.42};
+        for (int i = 1; i < 10; i++)
+            app.ProcessSetPositionArm(i, arms[i]);
+        app.ProcessSelectPosition(3);
+        st.Run(300);
+        const auto& ps = app.ProcessPositionsSummary();
+        CHECK_MSG(ps.n == 9, "учтено положений %d", ps.n); // 10 − начальное
+        CHECK_RANGE(ps.ls.h, 0.75, 0.85, "h по МНК (непрерывная запись)");
+        st.Shot("19_process_continuous", true);
+        ui::ApplyTheme(true, 1.f);
+        ImPlot::StyleColorsDark();
+        st.Shot("19_process_continuous_dark", true);
+        ui::ApplyTheme(false, 1.f);
+        ImPlot::StyleColorsLight();
+        st.size = ImVec2(1024, 700);
+        st.Shot("19_process_continuous_1024x700");
+        st.size = ImVec2(1280, 800);
+        app.ProcessSelectPosition(-1);
+        app.ProcessSaveReport();
+        st.Run(100);
+        wait();
+        for (const wchar_t* f : {L"Отчет_Кренование.xlsx", L"График_Нос.png"})
+            CHECK_MSG(fs::file_size(dir / f, ec) > 10000, "нет файла отчёта %s", text::PathToUtf8(f).c_str());
+        fs::copy_file(dir / L"График_Нос.png", fs::path(g_out) / "19_process_continuous_export.png",
+                      fs::copy_options::overwrite_existing, ec);
+        fs::copy_file(dir / L"Отчет_Кренование.xlsx", fs::path(g_out) / "19_process_continuous_report.xlsx",
+                      fs::copy_options::overwrite_existing, ec);
+
+        // Файлы старых прошивок и после Excel: всё понято, непонятное — в журнале
+        const fs::path old = ShotsWorkDir() / L"Старые файлы";
+        fs::remove_all(old, ec);
+        fs::create_directories(old, ec);
+        const fs::path src = testutil::TestDataDir() / "old";
+        for (const auto& e : fs::recursive_directory_iterator(src, ec))
+            if (e.is_regular_file(ec)) // из подпапок — с её именем впереди (analyzer_M_001.CSV)
+                fs::copy_file(e.path(),
+                              old / (e.path().parent_path() == src ? e.path().filename()
+                                                                   : fs::path(e.path().parent_path().filename().wstring() +
+                                                                              L"_" + e.path().filename().wstring())),
+                              fs::copy_options::overwrite_existing, ec);
+        st.Run(7000);
+        app.ProcessOpen(text::PathToUtf8(old));
+        wait();
+        st.Run(300);
+        CHECK(!app.ProcessContinuous());
+        CHECK_MSG(app.ProcessMeasurements() == 8, "замеров %zu", app.ProcessMeasurements());
+        st.Shot("20_process_old_files", true);
     }
 
     SECTION("о программе");

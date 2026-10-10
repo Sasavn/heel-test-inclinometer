@@ -19,6 +19,8 @@
 #include "core/Heel.hpp"
 #include "core/HeelData.hpp"
 #include "core/HeelReport.hpp"
+#include "core/PcSettings.hpp"
+#include "core/Plateaus.hpp"
 #include "core/Png.hpp"
 #include "core/TextUtil.hpp"
 #include "core/Xlsx.hpp"
@@ -428,18 +430,23 @@ void TestGroupingAndReport()
     WriteText(dir / "rs485_sweep.csv", "a,b\n1,2\n");
     WriteText(dir / "2026-10-08_M004_D2.CSV", "Date;Time;Foo\n1;2;3\n");
     WriteText(dir / "notes.txt", "-");
+    WriteText(dir / "report.xlsx", "PK");
     std::string err;
     const auto paths = heel::ListCsv(dir, &err);
     CHECK(err.empty());
-    CHECK_MSG(paths.size() == 8, "CSV в папке: %zu", paths.size());
+    CHECK_MSG(paths.size() == 9, "CSV и TXT в папке: %zu", paths.size());
     std::atomic<int> done{0};
     const heel::Loaded loaded = heel::LoadAll(paths, text::PathToUtf8(dir), &done);
-    CHECK(done.load() == 8);
+    CHECK(done.load() == 9);
     const auto& files = loaded.files;
     std::vector<std::string> notes;
     auto ms = heel::Group(files, {}, &notes);
     CHECK_MSG(ms.size() == 3, "замеров %zu", ms.size());
-    CHECK_MSG(notes.size() == 3, "заметок %zu", notes.size()); // Д4 без поста, rs485 не по образцу, M004 без углов
+    CHECK_MSG(notes.size() == 4, "заметок %zu", notes.size()); // Д4 без поста; rs485, notes.txt, M004 — не понял формат
+    bool understood = false;
+    for (const auto& n : notes)
+        understood |= n == "не понял формат: rs485_sweep.csv, первая строка: «a,b» — пропущен";
+    CHECK(understood);
     auto fileName = [&](const heel::Measurement& m, int post) {
         return m.post[post].file >= 0 ? files[static_cast<std::size_t>(m.post[post].file)].name : std::string("-");
     };
@@ -461,7 +468,7 @@ void TestGroupingAndReport()
         CHECK(fileName(sw[0], 0) == "2026-10-08_M001_D3.CSV" && fileName(sw[0], 1) == "2026-10-08_M001_D2.CSV");
         CHECK(fileName(sw[1], 0) == "2026-10-08_M002_D4.CSV" && fileName(sw[1], 1) == "2026-10-08_M002_D2.CSV");
     }
-    CHECK(notes.size() == 2);
+    CHECK(notes.size() == 3); // rs485, notes.txt, M004 — не понял формат
     // Два датчика на один пост: второй не учитывается, с заметкой
     notes.clear();
     auto dup = heel::Group(files, {{3, 0}}, &notes);
@@ -583,21 +590,22 @@ void TestPcRuns()
     WriteText(dir / "2026-10-08_17-19-28_PC_D2.CSV", Settling(0.0, 1.0));
     WriteText(dir / "2026-10-08_17-19-28_PC_D3.CSV", Settling(0.0, 1.01));
     WriteText(dir / "2026-10-08_M005_D2.CSV", Settling(0.0, 3.0));
-    WriteText(dir / "2026-10-08_17-30-00_PC_DX.CSV", Settling(0.0, 3.0)); // не адрес — не по образцу
+    WriteText(dir / "2026-10-08_17-30-00_PC_DX.CSV", Settling(0.0, 3.0)); // не адрес — отдельная запись по имени
     const auto loaded = heel::LoadAll(heel::ListCsv(dir), text::PathToUtf8(dir));
     std::vector<std::string> notes;
     auto ms = heel::Group(loaded.files, {}, &notes);
-    CHECK_MSG(ms.size() == 3, "замеров %zu", ms.size());
-    CHECK(notes.size() == 1);
-    if (ms.size() == 3)
+    CHECK_MSG(ms.size() == 4, "замеров %zu", ms.size());
+    CHECK(notes.empty());
+    if (ms.size() == 4)
     {
         CHECK(ms[0].number == 5 && ms[0].label == "5");
         CHECK(ms[1].number == 1001 && ms[1].label == "17:19:28" && ms[1].post[0].file >= 0 && ms[1].post[1].file >= 0);
         CHECK(ms[2].number == 1002 && ms[2].label == "17:25:00 опыт 3" && ms[2].post[1].file < 0);
+        CHECK(ms[3].number == 2001 && ms[3].label == "2026-10-08_17-30-00_PC_DX" && ms[3].post[0].file >= 0);
         heel::Settings s;
         s.axis = 1;
         const auto sum = heel::Compute(s, loaded.files, ms);
-        CHECK(sum.n == 4);
+        CHECK(sum.n == 5);
         CHECK_NEAR(ms[2].post[0].st.mean, -2.0, 1e-9, "запись на ПК: крен");
         const auto sheets = heel::BuildReport(s, loaded.files, ms, sum, {});
         CHECK(sheets[0].rows[2][2].kind == xlsx::Cell::Kind::Text && sheets[0].rows[2][2].text == "17:19:28");
@@ -605,6 +613,311 @@ void TestPcRuns()
     }
     CHECK(heel::PcRunLabel("2026-10-08_17-19-28") == "17:19:28");
     CHECK(heel::PcRunLabel("что-то") == "что-то");
+}
+
+// Файлы прежних прошивок и после Excel (tests/data/old, make_test_data.py): формат по содержимому, значения.
+void TestOldFormats()
+{
+    SECTION("старые форматы: исходная прошивка, 1.0–1.3, без шапки, выдернутая карта, анализатор, Excel");
+    const fs::path old = testutil::TestDataDir() / "old";
+    struct Case
+    {
+        const wchar_t* file;
+        csvlog::Format format;
+        std::size_t rows;
+        int axis;
+        double mean;
+        char sep;
+    };
+    const Case cases[] = {
+        {L"M_001.CSV", csvlog::Format::FwOld, 300, 1, 2.4525, ','},
+        {L"M_002_1.CSV", csvlog::Format::FwOld, 400, 1, -2.314325, ','},
+        {L"M_002_2.CSV", csvlog::Format::FwOld, 400, 1, -2.2826175, ','},
+        {L"2026-10-07_M004_D2.CSV", csvlog::Format::Fw13, 350, 0, 1.731874285714286, ','},
+        {L"M_006_1.CSV", csvlog::Format::FwOld, 200, 1, 1.10511, ','},
+        {L"M_007_1.CSV", csvlog::Format::FwOld, 150, 1, -0.8724133333333333, ','},
+        {L"analyzer/M_001.CSV", csvlog::Format::Analyzer, 100, 0, 2.44833, ','},
+        {L"excel/опыт 3 (Excel).csv", csvlog::Format::FwOld, 1500, 1, 3.217386, ';'},
+        {L"excel/опыт 4.txt", csvlog::Format::FwOld, 180, 1, -1.6450444444444445, '\t'},
+    };
+    for (const Case& c : cases)
+    {
+        const std::string name = text::PathToUtf8(c.file);
+        csvlog::Log log;
+        CHECK_MSG(csvlog::ReadFile(old / c.file, log), "%s: %s", name.c_str(), log.error.c_str());
+        CHECK_MSG(log.format == c.format, "%s: формат %s", name.c_str(), csvlog::FormatName(log.format));
+        CHECK_MSG(log.rows.size() == c.rows, "%s: строк %zu", name.c_str(), log.rows.size());
+        CHECK_MSG(log.sep == c.sep, "%s: разделитель", name.c_str());
+        const auto st = heel::TailStats(log, c.axis, 1e9);
+        CHECK_NEAR(st.mean, c.mean, 1e-9, name.c_str());
+        CHECK_MSG(log.Duration() > 9.0, "%s: длительность %.2f с", name.c_str(), log.Duration());
+    }
+    {
+        csvlog::Log log;
+        csvlog::ReadFile(old / "M_002_1.CSV", log);
+        CHECK(log.time == csvlog::TimeSource::Time && log.rows[0].day == csvlog::DaysFromCivil(2026, 6, 1));
+        CHECK_NEAR(log.rows[0].offY, -0.212, 1e-12, "OffsetY старой прошивки");
+        CHECK_NEAR(log.rows.back().t, 39.9, 1e-9, "t по Time (10 строк в секунде)");
+        csvlog::ReadFile(old / "M_006_1.CSV", log);
+        CHECK(log.headerless && log.hasRaw && log.hasOffset && !log.hasMs);
+        csvlog::ReadFile(old / "M_007_1.CSV", log);
+        CHECK(log.nulBytes && log.skipped == 1);
+        csvlog::ReadFile(old / L"excel/опыт 3 (Excel).csv", log);
+        CHECK(log.decimalComma && log.time == csvlog::TimeSource::Time);
+        CHECK_NEAR(log.rows.back().t, 149.9, 1e-6, "Time без секунд: шаг по числу строк в минуте");
+        CHECK_NEAR(log.rows[600].t, 60.0, 1e-6, "вторая минута");
+        csvlog::ReadFile(old / L"excel/опыт 4.txt", log);
+        CHECK(log.utf16 && log.decimalComma);
+        CHECK(!csvlog::ReadFile(old / "readme.txt", log));
+        CHECK(log.error == "не понял формат" && log.firstLine == "Здесь файлы старой прошивки.");
+        CHECK(csvlog::Details(log).empty());
+    }
+
+    SECTION("старые форматы: папка — замеры по именам M_NNN.CSV, M_NNN_k.CSV, другие имена — отдельные записи");
+    {
+        std::string err;
+        bool sub = true;
+        const auto paths = heel::ListCsv(old, &err, &sub);
+        CHECK(err.empty() && !sub && paths.size() == 7);
+        const auto loaded = heel::LoadAll(paths, text::PathToUtf8(old));
+        std::vector<std::string> notes;
+        const auto ms = heel::Group(loaded.files, {}, &notes);
+        CHECK_MSG(ms.size() == 5, "замеров %zu", ms.size());
+        CHECK_MSG(notes.size() == 1 && notes[0].rfind("не понял формат: readme.txt", 0) == 0, "заметок %zu", notes.size());
+        if (ms.size() == 5)
+        {
+            CHECK(ms[0].number == 1 && ms[0].post[0].file >= 0 && ms[0].post[1].file < 0); // M_001.CSV — датчик 1, нос
+            CHECK(ms[1].number == 2 && ms[1].post[0].file >= 0 && ms[1].post[1].file >= 0);
+            CHECK(ms[2].number == 4 && ms[3].number == 6 && ms[4].number == 7);
+        }
+        // Папка Excel: имена не по образцу — каждая запись своя, подпись — имя файла
+        const auto ex = heel::LoadAll(heel::ListCsv(old / "excel"), "");
+        notes.clear();
+        const auto me = heel::Group(ex.files, {}, &notes);
+        CHECK(me.size() == 2 && notes.empty());
+        if (me.size() == 2)
+            CHECK(me[0].number == 2001 && me[0].label == "опыт 3 (Excel)" && me[1].label == "опыт 4");
+        // В самой папке файлов нет — берутся из подпапок
+        const fs::path dir = fs::temp_directory_path() / L"krenomer_process_test_подпапки";
+        std::error_code ec;
+        fs::remove_all(dir, ec);
+        fs::create_directories(dir / "карта", ec);
+        fs::copy_file(old / "M_001.CSV", dir / "карта" / "M_001.CSV", ec);
+        const auto inSub = heel::ListCsv(dir, &err, &sub);
+        CHECK(sub && inSub.size() == 1);
+    }
+}
+
+// Синтетическая непрерывная запись: n ступенек (уровни, по dur с), качка и шум, всплески на переносах.
+void MakeSteps(const std::vector<double>& levels, double dur, double amp, double period, std::vector<double>& t,
+               std::vector<double>& v, unsigned seed)
+{
+    std::mt19937 rng(seed);
+    std::normal_distribution<double> noise(0.0, 0.02);
+    t.clear();
+    v.clear();
+    const double total = dur * static_cast<double>(levels.size());
+    for (double x = 0.0; x < total; x += 0.1)
+    {
+        const std::size_t k = std::min(levels.size() - 1, static_cast<std::size_t>(x / dur));
+        const double e = x - static_cast<double>(k) * dur; // с от переноса
+        double y = levels[k] + amp * std::sin(2 * heel::kPi * x / period) + noise(rng);
+        if (k > 0 && e < 2.0)
+            y += 3.0 * std::sin(heel::kPi * e / 2.0); // всплеск 2 с
+        t.push_back(x);
+        v.push_back(y);
+    }
+}
+
+void TestPlateaus()
+{
+    SECTION("положения груза: ступеньки с качкой и всплесками, слияние, короткие участки, Measure");
+    {
+        const std::vector<double> lv = {0.0, 2.0, 4.0, -1.0, -3.5};
+        std::vector<double> t, v;
+        MakeSteps(lv, 45.0, 0.6, 8.0, t, v, 3);
+        const auto ps = plateau::Detect(t, v, plateau::Params{});
+        CHECK_MSG(ps.size() == lv.size(), "положений %zu", ps.size());
+        for (std::size_t i = 0; i < ps.size() && i < lv.size(); i++)
+        {
+            CHECK_NEAR(ps[i].mean, lv[i], 0.1, "уровень ступеньки");
+            CHECK_MSG(ps[i].t0 >= 45.0 * static_cast<double>(i) + 2.0 && ps[i].t1 <= 45.0 * static_cast<double>(i + 1),
+                      "участок %zu: %.1f…%.1f с — захватил перенос", i + 1, ps[i].t0, ps[i].t1);
+            CHECK_MSG(ps[i].Duration() > 25.0, "участок %zu короткий: %.1f с", i + 1, ps[i].Duration());
+            CHECK(ps[i].sd > 0.3 && ps[i].sd < 0.6); // качка входит в СКО
+        }
+        // Перепад меньше minStep — одно положение; качка с большим периодом и размахом — не делит ступеньку
+        MakeSteps({1.0, 1.2, 5.0}, 40.0, 0.9, 14.0, t, v, 4);
+        const auto merged = plateau::Detect(t, v, plateau::Params{});
+        CHECK_MSG(merged.size() == 2, "положений %zu", merged.size());
+        if (merged.size() == 2)
+            CHECK_NEAR(merged[1].mean, 5.0, 0.15, "уровень после слияния");
+        // Ступенька короче minLen — не положение
+        MakeSteps({0.0, 3.0, 6.0}, 8.0, 0.1, 8.0, t, v, 5);
+        CHECK(plateau::Detect(t, v, plateau::Params{}).empty());
+        CHECK(plateau::Detect({}, {}, plateau::Params{}).empty());
+        CHECK(plateau::Detect({0, 1}, {1, 1}, plateau::Params{}).empty());
+        // Measure: среднее, СКО, NaN пропускаются
+        const auto m = plateau::Measure({0, 1, 2, 3, 4}, {1, 2, std::nan(""), 4, 100}, 0.5, 3.5);
+        CHECK(m.n == 2);
+        CHECK_NEAR(m.mean, 3.0, 1e-12, "Measure: среднее");
+        CHECK_NEAR(m.sd, std::sqrt(2.0), 1e-12, "Measure: СКО");
+        const auto f = plateau::MedianFilter({0, 1, 2, 3, 4}, {0, 0, 9, 0, 0}, 2.0);
+        CHECK(f.size() == 5 && f[2] == 0.0); // одиночный всплеск — мимо медианы
+    }
+
+    SECTION("непрерывная запись (синтетика как у руководителя): 10 положений, уровни ±0,1° от истины");
+    {
+        csvlog::Log log;
+        const fs::path file = testutil::TestDataDir() / "continuous" / "2026-10-09_M020_D2.CSV";
+        CHECK(csvlog::ReadFile(file, log));
+        CHECK_MSG(log.rows.size() > 5000 && log.format == csvlog::Format::Fw14, "строк %zu", log.rows.size());
+        CHECK_NEAR(log.rows[0].offX, 2.701, 1e-12, "OffsetX");
+        CHECK_NEAR(log.rows[0].offY, -0.819, 1e-12, "OffsetY");
+        CHECK_NEAR(log.rows[0].batV, 11.6, 1e-12, "BatV");
+        // Истина
+        struct Truth
+        {
+            double t0, t1, level;
+        };
+        std::vector<Truth> truth;
+        {
+            std::ifstream in(testutil::TestDataDir() / "continuous" / "truth.txt");
+            std::string line;
+            while (std::getline(in, line))
+            {
+                int n = 0;
+                Truth tr{};
+                if (!line.empty() && line[0] != '#' &&
+                    std::sscanf(line.c_str(), "%d;%lf;%lf;%lf", &n, &tr.t0, &tr.t1, &tr.level) == 4)
+                    truth.push_back(tr);
+            }
+        }
+        CHECK(truth.size() == 10);
+        std::vector<double> t, v;
+        heel::Series(log, 0, t, v);
+        const auto ps = plateau::Detect(t, v, plateau::Params{});
+        CHECK_MSG(ps.size() == truth.size(), "положений %zu из %zu", ps.size(), truth.size());
+        for (std::size_t i = 0; i < ps.size() && i < truth.size(); i++)
+        {
+            std::printf("    положение %2zu: %6.1f…%6.1f с, %+8.3f° ± %.3f (истина %+7.3f°, %6.1f…%6.1f с)\n", i + 1,
+                        ps[i].t0, ps[i].t1, ps[i].mean, ps[i].sd, truth[i].level, truth[i].t0, truth[i].t1);
+            CHECK_NEAR(ps[i].mean, truth[i].level, 0.1, "уровень положения");
+            CHECK_MSG(ps[i].t0 >= truth[i].t0 && ps[i].t1 <= truth[i].t1 + 0.2, "положение %zu вне ступеньки", i + 1);
+            CHECK_MSG(ps[i].Duration() >= 0.6 * (truth[i].t1 - truth[i].t0), "положение %zu: только %.1f с", i + 1,
+                      ps[i].Duration());
+        }
+        // По Y ступенек нет — положений нет; Y и CalcY = RawY − OffsetY
+        heel::Series(log, 1, t, v);
+        CHECK(plateau::Detect(t, v, plateau::Params{}).size() <= 1);
+    }
+}
+
+void TestContinuous()
+{
+    SECTION("непрерывная запись: Δθ от начального положения, h по положениям, МНК h = 0,8 м");
+    {
+        const double D = 1500, P = 15, h = 0.8, theta0 = 0.3; // начальный крен 0,3° — вычитается
+        const double arms[] = {0.0, 2.0, 4.0, 6.0, -2.0, -4.0};
+        std::vector<heel::Point> pts;
+        std::vector<bool> use;
+        for (int i = 0; i < 6; i++)
+        {
+            pts.push_back({i + 1, 0, theta0 + std::atan(P * arms[i] / (D * h)) / kDeg, std::fabs(arms[i])});
+            use.push_back(true);
+        }
+        pts.push_back({7, 0, 50.0, 3.0}); // не в расчёте
+        use.push_back(false);
+        const auto r = heel::SolvePositions(pts, use, D, P, 0.1);
+        CHECK(r.points.size() == 7);
+        CHECK(r.points[0].reference && r.points[0].dTheta == 0.0 && !r.points[0].counted);
+        CHECK(!r.points[6].counted && r.points[6].note == "не в расчёте");
+        CHECK(r.n == 5);
+        for (int i = 1; i < 6; i++)
+        {
+            CHECK_NEAR(r.points[static_cast<std::size_t>(i)].h, h, 1e-9, "h положения");
+            CHECK_NEAR(r.points[static_cast<std::size_t>(i)].dTheta, std::atan(P * arms[i] / (D * h)) / kDeg, 1e-9, "Δθ");
+        }
+        CHECK_NEAR(r.h, h, 1e-9, "среднее h");
+        CHECK_NEAR(r.ls.h, h, 1e-9, "h по МНК");
+        // Первое положение снято — начальным становится второе
+        use[0] = false;
+        const auto r2 = heel::SolvePositions(pts, use, D, P, 0.1);
+        CHECK(r2.points[1].reference && !r2.points[0].counted && r2.n == 4);
+    }
+
+    SECTION("непрерывная запись: папка -> режим, положения, крен, отчёт");
+    {
+        const fs::path dir = testutil::TestDataDir() / "continuous";
+        heel::Settings s; // ось X по умолчанию
+        CHECK(s.axis == 0);
+        const auto loaded = heel::LoadAll(heel::ListCsv(dir), text::PathToUtf8(dir), nullptr, &s);
+        CHECK(loaded.files.size() == 2); // CSV и truth.txt (не замер)
+        const auto ms = heel::Group(loaded.files, {});
+        CHECK(ms.size() == 1);
+        CHECK(heel::SuggestRecord(loaded.files, ms) == 0);
+        CHECK(heel::LongestRecord(loaded.files, ms) == 0);
+        if (ms.size() == 1)
+        {
+            auto pos = heel::FindPositions(s, loaded.files, ms[0]);
+            CHECK_MSG(pos.size() == 10, "положений %zu", pos.size());
+            for (std::size_t i = 0; i < pos.size(); i++)
+                pos[i].arm = 2.0 * static_cast<double>(i);
+            pos[3].use = false;
+            const auto sum = heel::ComputePositions(s, loaded.files, ms[0], pos);
+            CHECK(sum.measurements == 9);
+            if (pos.size() == 10)
+            {
+                CHECK(pos[0].res[0].reference && std::isnan(pos[0].st[1].mean));
+                CHECK_NEAR(pos[1].res[0].dTheta, pos[1].st[0].mean - pos[0].st[0].mean, 1e-12, "Δθ");
+                CHECK_NEAR(pos[1].res[0].h, heel::Height(s.P, 2.0, s.D, pos[1].res[0].dTheta), 1e-12, "h положения 2");
+                CHECK(!pos[3].res[0].counted && pos[3].res[0].note == "не в расчёте");
+                CHECK(sum.n == 8); // 10 − начальное − снятое
+            }
+            const auto sheets = heel::BuildPositionsReport(s, loaded.files, ms[0], pos, sum, {});
+            CHECK(sheets.size() == 2 && sheets[0].name == "Положения" && sheets[1].name == "Сырые_данные");
+            if (sheets.size() == 2)
+            {
+                CHECK(sheets[0].rows.size() > 12 && sheets[0].rows[1][0].num == 1.0);
+                CHECK(sheets[0].rows[2][9].kind == xlsx::Cell::Kind::Number); // Δθ
+                CHECK(sheets[1].rows.size() == 1 + loaded.files[ms[0].post[0].file >= 0 ? static_cast<std::size_t>(ms[0].post[0].file) : 0].log.rows.size());
+                bool inPos = false;
+                for (const auto& row : sheets[1].rows)
+                    inPos |= row[0].kind == xlsx::Cell::Kind::Number && row[0].num == 10.0;
+                CHECK(inPos);
+            }
+        }
+        // Папка коротких замеров — «файл = замер»
+        const auto shortSet = heel::LoadAll({testutil::TestDataDir() / "2026-10-08_M019_D2.CSV"}, "", nullptr, &s);
+        CHECK(heel::SuggestRecord(shortSet.files, heel::Group(shortSet.files, {})) == -1);
+    }
+}
+
+void TestSettings()
+{
+    SECTION("настройки: ось по умолчанию X, выбор запоминается; ось из файла программы 1.2 не берётся");
+    const fs::path dir = fs::temp_directory_path() / L"krenomer_process_test_настройки";
+    std::error_code ec;
+    fs::remove_all(dir, ec);
+    fs::create_directories(dir, ec);
+    const fs::path ini = dir / "krenomer.ini";
+    PcSettings def;
+    CHECK(def.heelAxis == 0);
+    // Файл 1.2: heel_axis=1 без отметки версии — ось X
+    WriteText(ini, "heel_d=1200\nheel_axis=1\n");
+    PcSettings old;
+    old.Load(ini);
+    CHECK(old.heelAxis == 0 && old.heelD == 1200.0);
+    // Выбор Y — сохраняется и читается
+    PcSettings s;
+    s.heelAxis = 1;
+    s.heelPlateauS = 15;
+    s.heelStep = 0.7;
+    s.Save(ini);
+    PcSettings back;
+    back.Load(ini);
+    CHECK(back.heelAxis == 1 && back.heelPlateauS == 15.0 && back.heelStep == 0.7);
+    CHECK(ReadBytes(ini).find("heel_axis_v=2") != std::string::npos);
 }
 
 void TestDeflate()
@@ -665,6 +978,10 @@ int main(int argc, char** argv)
     TestMath();
     TestGroupingAndReport();
     TestPcRuns();
+    TestOldFormats();
+    TestPlateaus();
+    TestContinuous();
+    TestSettings();
     TestDeflate();
     return TestSummary();
 }

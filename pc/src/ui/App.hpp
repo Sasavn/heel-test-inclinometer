@@ -24,7 +24,7 @@
 namespace ui
 {
 
-inline constexpr const char* kAppVersion = "1.2";
+inline constexpr const char* kAppVersion = "1.3";
 
 enum class Page
 {
@@ -74,6 +74,10 @@ public:
     }
 
     // --- Для стенда снимков и тестов ---
+    // Пути на экране и в отчётах: начало «из» заменяется на «в» (стенд снимков для README показывает нейтральные
+    // папки вместо настоящих). Файлы пишутся по настоящим путям. В обычной программе список пуст.
+    void SetShownPaths(std::vector<std::pair<std::string, std::string>> map) { shownPaths_ = std::move(map); }
+    std::string Shown(const std::string& s) const;
     void SetPage(Page p) { page_ = p; }
     Page GetPage() const { return page_; }
     DeviceLink& Link() { return *link_; }
@@ -118,6 +122,13 @@ public:
     void ProcessSaveReport();
     const heel::Summary& ProcessSummary() const { return proc_.sum; }
     std::size_t ProcessMeasurements() const { return proc_.meas.size(); }
+    bool ProcessContinuous() const { return proc_.mode == 1 && proc_.rec >= 0; } // «одна запись — весь опыт»
+    void ProcessSetMode(int mode);                                              // 0 — файл = замер, 1 — запись
+    const std::vector<heel::Position>& ProcessPositions() const { return proc_.pos; }
+    const heel::Summary& ProcessPositionsSummary() const { return proc_.posSum; }
+    void ProcessSetPositionArm(int index, double arm);
+    void ProcessSelectPosition(int index) { proc_.sel = index; }
+    int ProcessAxis() const { return settings_.heelAxis; }
 
 private:
     // Каркас
@@ -170,6 +181,22 @@ private:
     void ProcPlots(float w, float h);
     void ProcPanes(int post, float w, float h, bool stacked, bool forExport);
     void ProcExportPage(int post, float w, float h);
+    // Непрерывная запись (одна запись — весь опыт)
+    bool ProcCont() const { return proc_.mode == 1 && proc_.rec >= 0 && proc_.rec < static_cast<int>(proc_.meas.size()); }
+    void ProcChooseMode(bool fromLoad); // режим и запись: по содержимому (если не выбран вручную)
+    void ProcFindPositions();           // положения заново (поиск по основному посту записи)
+    void ProcSortPositions();
+    void ProcPositions(float w, float h);
+    void ProcSeriesCard(float w, float h);
+    void ProcModeSwitch(float right);
+    void ProcSeriesPlot(int post, float w, float h, bool forExport);
+    void ProcExportSeries(int post, float w, float h);
+    int ProcShownPost() const;
+    void SaveSettingsSoon(); // настройки — в файл через ~1 с (не только при выходе)
+    void SaveSettingsNow();
+    // Поле пути: как InputText, а при подмене путей (стенд) — показ подменённого пути без правки.
+    bool PathInput(const char* id, char* buf, std::size_t size, int flags = 0);
+    std::vector<std::pair<std::string, std::string>> shownPaths_;
 
     AppOptions opt_;
     PcSettings settings_;
@@ -328,7 +355,16 @@ private:
         bool saveRequested = false;                 // картинки графиков — в Tick, между кадрами
         int show = 0;                               // графики: 0 — нос, 1 — корма
         bool opened = false, dirty = false, logScroll = false;
+        // Непрерывная запись
+        int mode = 0;                     // 0 — файл = замер, 1 — одна запись — весь опыт
+        bool modeUser = false;            // режим выбран вручную (иначе — по содержимому при каждом чтении)
+        int rec = -1;                     // запись (индекс в meas)
+        std::vector<heel::Position> pos;  // положения груза (найдены или поправлены вручную)
+        heel::Summary posSum;
+        int sel = -1;                     // выбранное положение: его границы двигаются на графике
+        bool posEdited = false;           // положения правились руками
     } proc_;
+    std::int64_t settingsSaveAt_ = 0;     // SaveSettingsSoon: когда записать (0 — не нужно)
 };
 
 } // namespace ui

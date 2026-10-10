@@ -10,6 +10,22 @@
 и новее): углы и качка обоих датчиков с графиками, диагностика шины, настройки,
 скачивание замеров с карты и обновление прошивки — без запоминания команд.
 
+## Скачать
+
+**Программа для ПК** (один файл, без установки, Windows 7 SP1 и новее):
+
+- [**krenomer-x64.exe**](https://github.com/Sasavn/heel-test-inclinometer/releases/latest/download/krenomer-x64.exe) — для 64-битной Windows (почти все современные компьютеры);
+- [krenomer-x86.exe](https://github.com/Sasavn/heel-test-inclinometer/releases/latest/download/krenomer-x86.exe) — для 32-битной Windows.
+
+Как узнать разрядность: «Пуск» → «Параметры» → «Система» → «О программе»,
+строка «Тип системы» (на Windows 7 — «Панель управления» → «Система»): «64-разрядная
+операционная система» — берите x64, «32-разрядная» — x86. Не уверены — берите x64:
+если Windows 32-битная, она просто не запустит файл.
+
+**Прошивка прибора:** [bwm427-fw.bin](https://github.com/Sasavn/heel-test-inclinometer/releases/latest/download/bwm427-fw.bin)
+— заливается из программы (вкладка «Прошивка»). Все версии и контрольные суммы —
+на странице [Releases](https://github.com/Sasavn/heel-test-inclinometer/releases/latest).
+
 <p align="center">
   <img src="docs/img/main_recording_dark.png" alt="Главный экран: идёт запись, качка по оси Y датчика Д2, тёмная тема" width="320">
   <img src="docs/img/main_light.png" alt="Главный экран: запись остановлена, качка по оси X датчика Д3, светлая тема" width="320">
@@ -25,6 +41,7 @@
 
 ## Содержание
 
+- [Скачать](#скачать)
 - [Возможности](#возможности)
 - [Железо и распиновка](#железо-и-распиновка)
 - [Архитектура](#архитектура)

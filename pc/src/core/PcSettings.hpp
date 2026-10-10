@@ -31,6 +31,7 @@ struct PcSettings
     std::string procDir;
     double heelD = 1500.0, heelP = 15.0, heelL = 4.5, heelWinS = 30.0, heelThr = 0.1; // т, т, м, с, °
     int heelAxis = 0;         // ось угла: 0 — X (датчики поперёк судна), 1 — Y
+    double heelPlateauS = 10.0, heelStep = 0.5; // непрерывная запись: положение не короче, с; перепад не меньше, °
 
     static std::filesystem::path Dir()
     {
@@ -108,7 +109,12 @@ struct PcSettings
         heelL = real("heel_l", heelL, 0.0, 1000.0);
         heelWinS = real("heel_window_s", heelWinS, 1.0, 3600.0);
         heelThr = real("heel_threshold", heelThr, 0.0, 10.0);
-        heelAxis = num("heel_axis", heelAxis, 0, 1);
+        // Ось: только выбор, сохранённый программой 1.3+ (heel_axis_v=2). Программа 1.2 сохраняла ось лишь при
+        // закрытии окна и без отметки версии; такое значение не берётся — по умолчанию X.
+        if (num("heel_axis_v", 0, 0, 100) >= 2)
+            heelAxis = num("heel_axis", heelAxis, 0, 1);
+        heelPlateauS = real("heel_plateau_s", heelPlateauS, 2.0, 600.0);
+        heelStep = real("heel_step", heelStep, 0.05, 20.0);
     }
 
     void Save(const std::filesystem::path& file = Dir() / L"krenomer.ini") const
@@ -137,6 +143,7 @@ struct PcSettings
             out.precision(12);
             out << "heel_d=" << heelD << "\nheel_p=" << heelP << "\nheel_l=" << heelL << "\n";
             out << "heel_window_s=" << heelWinS << "\nheel_threshold=" << heelThr << "\nheel_axis=" << heelAxis << "\n";
+            out << "heel_axis_v=2\nheel_plateau_s=" << heelPlateauS << "\nheel_step=" << heelStep << "\n";
             if (!out)
                 return;
         }

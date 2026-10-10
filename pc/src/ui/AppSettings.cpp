@@ -547,7 +547,7 @@ void App::SettingsPcCard()
     {
         CardTitle("Программа на ПК");
         if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("Файл настроек программы: %s", text::PathToUtf8(PcSettings::Dir() / L"krenomer.ini").c_str());
+            ImGui::SetTooltip("Файл настроек программы: %s", Shown(text::PathToUtf8(PcSettings::Dir() / L"krenomer.ini")).c_str());
         ImGui::AlignTextToFramePadding();
         ImGui::TextUnformatted("Оформление");
         ImGui::SameLine(S(150));

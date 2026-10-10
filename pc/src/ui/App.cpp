@@ -2,6 +2,7 @@
 #include "App.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cstring>
 
 #include <imgui.h>
@@ -32,15 +33,62 @@ App::App(AppOptions opt) : opt_(opt), updater_(nullptr, nullptr)
 App::~App()
 {
     StopPcRecording(); // дописать файлы записи на ПК (и .xlsx — деструктор Recorder дождётся)
-    if (opt_.useSettingsFile)
-    {
-        settings_.downloadDir = files_.dir == settings_.DefaultDownloadDir() ? "" : files_.dir;
-        settings_.firmwarePath = fw_.path;
-        settings_.recordDir = pcrec_.dir == settings_.DownloadDirOrDefault() ? "" : pcrec_.dir;
-        settings_.Save();
-    }
+    SaveSettingsNow();
     updater_.Cancel();
     link_.reset();
+}
+
+std::string App::Shown(const std::string& s) const
+{
+    std::string out = s;
+    for (const auto& [from, to] : shownPaths_)
+    {
+        if (from.empty())
+            continue;
+        std::string alt = from; // тот же путь с «/»
+        std::replace(alt.begin(), alt.end(), '\\', '/');
+        for (const std::string* f : {static_cast<const std::string*>(&from), static_cast<const std::string*>(&alt)})
+            for (std::size_t pos = out.find(*f); pos != std::string::npos; pos = out.find(*f, pos + to.size()))
+                out.replace(pos, f->size(), to);
+    }
+    return out;
+}
+
+bool App::PathInput(const char* id, char* buf, std::size_t size, int flags)
+{
+    if (shownPaths_.empty())
+        return ImGui::InputText(id, buf, size, flags);
+    char shown[1024];
+    std::snprintf(shown, sizeof(shown), "%s", Shown(buf).c_str());
+    ImGui::InputText(id, shown, sizeof(shown), ImGuiInputTextFlags_ReadOnly);
+    return false;
+}
+
+void App::SaveSettingsNow()
+{
+    settingsSaveAt_ = 0;
+    if (!opt_.useSettingsFile)
+        return;
+    settings_.downloadDir = files_.dir == settings_.DefaultDownloadDir() ? "" : files_.dir;
+    settings_.firmwarePath = fw_.path;
+    settings_.recordDir = pcrec_.dir == settings_.DownloadDirOrDefault() ? "" : pcrec_.dir;
+    settings_.Save();
+}
+
+namespace
+{
+std::int64_t SteadyMs()
+{
+    return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch())
+        .count();
+}
+} // namespace
+
+// Выбор, который должен пережить закрытие программы (ось, D, P, …), — в файл через ~1 с, а не только при выходе:
+// программу могут закрыть снятием задачи или выключением ПК.
+void App::SaveSettingsSoon()
+{
+    settingsSaveAt_ = SteadyMs() + 1000;
 }
 
 void App::MakeLink(bool demo)
@@ -129,6 +177,8 @@ void App::Tick()
     TickDiag();
     TickRecord();
     TickProcess();
+    if (settingsSaveAt_ && SteadyMs() >= settingsSaveAt_)
+        SaveSettingsNow();
     toasts_.erase(std::remove_if(toasts_.begin(), toasts_.end(), [&](const Toast& t) { return now > t.until; }),
                   toasts_.end());
 }

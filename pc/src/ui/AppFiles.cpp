@@ -63,7 +63,7 @@ void App::StartDownload()
     fs::create_directories(text::PathFromUtf8(files_.dir), ec);
     if (!fs::is_directory(text::PathFromUtf8(files_.dir), ec))
     {
-        Notify(std::string("Не удалось создать папку ") + files_.dir, 2);
+        Notify(std::string("Не удалось создать папку ") + Shown(files_.dir), 2);
         return;
     }
     dl_.running = true;
@@ -420,7 +420,7 @@ void App::PageFiles()
         ImGui::SetNextItemWidth(W - S(120) - S(320) - S(28));
         if (dl_.running)
             ImGui::BeginDisabled();
-        ImGui::InputText("##dir", files_.dir, sizeof(files_.dir));
+        PathInput("##dir", files_.dir, sizeof(files_.dir));
         ImGui::SameLine(0, S(8));
         if (Button("Выбрать…", BtnKind::Normal, ImVec2(S(130), 0)))
         {

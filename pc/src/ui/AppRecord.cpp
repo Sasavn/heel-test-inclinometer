@@ -166,7 +166,7 @@ bool App::StartPcRecording()
     pcrec_.linkLost = false;
     pcrec_.converting = false;
     link_->SetSamples(true);
-    link_->Log('!', "запись на ПК: " + pcrec_.rec->Base() + "_PC_D*.CSV, папка " + pcrec_.dir);
+    link_->Log('!', "запись на ПК: " + pcrec_.rec->Base() + "_PC_D*.CSV, папка " + Shown(pcrec_.dir));
     return true;
 }
 
@@ -303,7 +303,7 @@ void App::RecordCard(float w, bool full)
         {
             status = (full ? "✓ записано: " : "✓ ") + ResultText(*r, now);
             c = r->Error().empty() ? pal.ok : pal.err;
-            tip = "Последняя запись на ПК — папка " + text::PathToUtf8(r->Opts().dir) + ":\n" + FileList(*r);
+            tip = "Последняя запись на ПК — папка " + Shown(text::PathToUtf8(r->Opts().dir)) + ":\n" + FileList(*r);
             if (!r->XlsxError().empty())
                 tip += "\nКнига .xlsx: " + r->XlsxError();
             if (!r->Error().empty())
@@ -333,7 +333,7 @@ void App::RecordCard(float w, bool full)
                     SetRecordDir(d, settings_.recordXlsx);
             }
             if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("Папка записи: %s", pcrec_.dir);
+                ImGui::SetTooltip("Папка записи: %s", Shown(pcrec_.dir).c_str());
         }
         ImGui::SameLine(0, gap);
         const std::string whyTip = why.empty() ? std::string() : "Нельзя: " + why;
@@ -341,7 +341,7 @@ void App::RecordCard(float w, bool full)
                    !why.empty(), whyTip.c_str()))
             StartPcRecording();
         if (why.empty() && ImGui::IsItemHovered())
-            ImGui::SetTooltip("Каждый отсчёт обоих датчиков — строкой в CSV (файл на датчик) в папке\n%s", pcrec_.dir);
+            ImGui::SetTooltip("Каждый отсчёт обоих датчиков — строкой в CSV (файл на датчик) в папке\n%s", Shown(pcrec_.dir).c_str());
     }
     else
     {
@@ -427,9 +427,9 @@ void App::RecordCard(float w, bool full)
             const float tail = ButtonWidth("Выбрать…") + ButtonWidth(openLabel) + ImGui::CalcTextSize("Метка").x +
                                labelW + ImGui::CalcTextSize("(?)").x + 4 * gap + S(12) + S(4);
             ImGui::SetNextItemWidth(std::max(S(120), inner - ImGui::GetCursorPosX() + padX - tail));
-            ImGui::InputText("##recdir", pcrec_.dir, sizeof(pcrec_.dir));
+            PathInput("##recdir", pcrec_.dir, sizeof(pcrec_.dir));
             if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("%s", pcrec_.dir);
+                ImGui::SetTooltip("%s", Shown(pcrec_.dir).c_str());
             ImGui::SameLine(0, gap);
             if (Button("Выбрать…", BtnKind::Normal))
             {
@@ -461,7 +461,7 @@ void App::RecordCard(float w, bool full)
                 if (!d.fileName.empty())
                     files += (files.empty() ? "" : ", ") + d.fileName;
             std::string line = files.empty() ? std::string("Файлы появятся с первыми отсчётами") : "Файлы: " + files;
-            line += " · папка " + text::PathToUtf8(r->Opts().dir);
+            line += " · папка " + Shown(text::PathToUtf8(r->Opts().dir));
             if (r->Opts().xlsx)
                 line += " · книга .xlsx — после остановки";
             std::string err = r->Error();

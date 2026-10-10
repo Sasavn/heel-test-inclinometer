@@ -116,7 +116,7 @@ void App::PageFirmware()
         if (updater_.Busy())
             ImGui::BeginDisabled();
         ImGui::SetNextItemWidth(colW - S(28) - S(130) - S(8));
-        ImGui::InputText("##fwpath", fw_.path, sizeof(fw_.path));
+        PathInput("##fwpath", fw_.path, sizeof(fw_.path));
         ImGui::SameLine(0, S(8));
         if (Button("Выбрать…", BtnKind::Normal, ImVec2(S(130), 0)))
         {
@@ -149,7 +149,7 @@ void App::PageFirmware()
     {
         CardTitle("Программа dfu-util");
         if (!fw_.dfuPath.empty())
-            TextColored(pal.ok, "✓ %s", fw_.dfuPath.c_str());
+            TextColored(pal.ok, "✓ %s", Shown(fw_.dfuPath).c_str());
         else
         {
             TextColored(pal.err, "✗ dfu-util.exe не найден");
@@ -160,7 +160,7 @@ void App::PageFirmware()
         {
             FontScope f(fontSmall);
             for (const auto& s : fw_.dfuSearched)
-                Muted("%s", s.c_str());
+                Muted("%s", Shown(s).c_str());
             ImGui::TreePop();
         }
     }

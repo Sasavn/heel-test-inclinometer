@@ -11,6 +11,10 @@
 // Свободный член b поглощает начальный крен (неточный ноль датчика), который сдвигает «поточечные» h. Если у всех
 // точек одно и то же x, прямая проводится через начало координат (b = 0).
 // Углы — в градусах, l — в метрах, D и P — в тоннах (единицы D и P сокращаются).
+//
+// Непрерывная запись (один файл — весь опыт, SolvePositions): точки — положения груза с уровнем крена; первое
+// учтённое положение поста — начальное (ноль), у остальных θ = Δθ = уровень − уровень начального, l — плечо переноса
+// от начального положения; дальше — те же h по точкам, среднее и МНК (Solve).
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -40,6 +44,8 @@ struct PointResult
     std::string note;      // почему не учтена
     double x = kNaN;       // ±P·l/D, м (абсцисса МНК)
     double tanTheta = kNaN;
+    double dTheta = kNaN;  // непрерывная запись: Δθ от начального положения, °
+    bool reference = false; // непрерывная запись: начальное положение поста (ноль)
 };
 
 // Прямая y = k·x + b по МНК.
@@ -171,6 +177,64 @@ inline Result Solve(const std::vector<Point>& in, double D, double P, double thr
         }
     }
     r.ls = FitLine(xs, ys);
+    return r;
+}
+
+// Непрерывная запись: in — положения (thetaDeg — уровень крена положения, arm — плечо от начального), по постам;
+// use[i] = false — положение не в расчёте. Начальное по посту — первое учтённое с данными. Результат — по входу.
+inline Result SolvePositions(const std::vector<Point>& in, const std::vector<bool>& use, double D, double P,
+                             double thresholdDeg)
+{
+    double ref[2] = {kNaN, kNaN};
+    int refIdx[2] = {-1, -1};
+    for (std::size_t i = 0; i < in.size(); i++)
+    {
+        const int post = in[i].post == 1 ? 1 : 0;
+        if (refIdx[post] < 0 && (i >= use.size() || use[i]) && std::isfinite(in[i].thetaDeg))
+        {
+            refIdx[post] = static_cast<int>(i);
+            ref[post] = in[i].thetaDeg;
+        }
+    }
+    std::vector<Point> pts;
+    std::vector<std::size_t> where;
+    for (std::size_t i = 0; i < in.size(); i++)
+    {
+        const int post = in[i].post == 1 ? 1 : 0;
+        if ((i < use.size() && !use[i]) || refIdx[post] == static_cast<int>(i))
+            continue;
+        Point p = in[i];
+        p.thetaDeg = in[i].thetaDeg - ref[post];
+        pts.push_back(p);
+        where.push_back(i);
+    }
+    const Result s = Solve(pts, D, P, thresholdDeg);
+    Result r;
+    r.points.resize(in.size());
+    for (std::size_t i = 0; i < in.size(); i++)
+    {
+        const int post = in[i].post == 1 ? 1 : 0;
+        if (i < use.size() && !use[i])
+            r.points[i].note = "не в расчёте";
+        else if (refIdx[post] == static_cast<int>(i))
+        {
+            r.points[i].reference = true;
+            r.points[i].dTheta = 0.0;
+            r.points[i].note = "начальное положение (ноль)";
+        }
+        else if (!std::isfinite(in[i].thetaDeg))
+            r.points[i].note = "нет данных";
+    }
+    for (std::size_t k = 0; k < where.size(); k++)
+    {
+        PointResult& o = r.points[where[k]];
+        o = s.points[k];
+        o.dTheta = pts[k].thetaDeg;
+    }
+    r.h = s.h;
+    r.sd = s.sd;
+    r.n = s.n;
+    r.ls = s.ls;
     return r;
 }
 

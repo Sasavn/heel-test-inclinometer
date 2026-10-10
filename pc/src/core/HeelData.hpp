@@ -3,10 +3,16 @@
 // -> установившийся крен каждого файла (среднее за последние N с, СКО, число точек) -> точки для heel::Solve
 // (Heel.hpp) -> h по замерам и постам, итог.
 //
-// Имена файлов: «ГГГГ-ММ-ДД_MNNN_Dk.CSV» (прошивка 1.4+, k — Modbus-адрес датчика), старые «M_NNN_k.CSV» (k — 1 нос,
-// 2 корма у исходной прошивки) и записи на ПК «ГГГГ-ММ-ДД_ЧЧ-ММ-СС[_метка]_PC_Dk.CSV» (одна запись — один замер;
-// номера 1001, 1002, … по времени начала, в таблице — время и метка). Пост датчика по умолчанию: Д2 — нос, Д3 —
-// корма; старые 1 — нос, 2 — корма (меняется в интерфейсе).
+// Читаются ВСЕ *.CSV и *.TXT папки (или выбранные файлы): формат узнаётся по содержимому (CsvLog.hpp), а имя только
+// группирует файлы в замеры. Имена: «ГГГГ-ММ-ДД_MNNN_Dk.CSV» (прошивка 1.0+, k — Modbus-адрес датчика), старые
+// «M_NNN_k.CSV» (k — 1 нос, 2 корма у исходной прошивки) и «M_NNN.CSV» (самая первая прошивка, один датчик), записи
+// на ПК «ГГГГ-ММ-ДД_ЧЧ-ММ-СС[_метка]_PC_Dk.CSV» (одна запись — один замер; номера 1001, 1002, … по времени начала,
+// в таблице — время и метка). Файл с другим именем, но понятным содержимым — отдельная запись (номера 2001, 2002, …,
+// в таблице — имя файла). Пост датчика по умолчанию: Д2 — нос, Д3 — корма; старые 1 — нос, 2 — корма; без номера
+// датчика — нос (меняется в интерфейсе).
+//
+// Непрерывная запись (один файл — весь опыт): положения груза ищет Plateaus.hpp по основному посту записи; крен
+// каждого поста на участке положения, Δθ от начального положения, h по положениям — heel::SolvePositions (Heel.hpp).
 #include <algorithm>
 #include <atomic>
 #include <cmath>
@@ -18,6 +24,7 @@
 
 #include "CsvLog.hpp"
 #include "Heel.hpp"
+#include "Plateaus.hpp"
 #include "Protocol.hpp"
 #include "TextUtil.hpp"
 
@@ -36,6 +43,16 @@ struct Settings
     double windowS = 30.0;    // крен — среднее за последние N с файла
     double thresholdDeg = 0.1; // |θ| не больше — замер на этом посту не учитывается
     int axis = 0;             // 0 — CalcX, 1 — CalcY
+    double minPlateauS = 10.0; // непрерывная запись: положение не короче, с
+    double minStepDeg = 0.5;   // непрерывная запись: перепад крена между положениями не меньше, °
+
+    plateau::Params Plateau() const
+    {
+        plateau::Params p;
+        p.minLenS = minPlateauS;
+        p.minStepDeg = minStepDeg;
+        return p;
+    }
 };
 
 // Файл замера.
@@ -44,14 +61,18 @@ struct File
     std::string name;            // имя файла
     std::filesystem::path path;
     int number = -1;             // номер замера из имени; -1 — имя не по образцу (или запись на ПК)
-    int sensor = -1;             // ключ датчика (SensorKey)
+    int sensor = -1;             // ключ датчика (SensorKey); kNoSensor — в имени нет
     std::string pcRun;           // запись на ПК: «ГГГГ-ММ-ДД_ЧЧ-ММ-СС[_метка]» (номер дают по порядку)
+    std::string other;           // имя не по образцу: имя без расширения (отдельная запись, номер — по порядку)
     csvlog::Log log;
+    int plateaus = 0;            // положений груза в файле (Plateaus.hpp, ось и параметры — при чтении)
 
-    bool Measurement() const { return number >= 0 || !pcRun.empty(); }
+    bool Measurement() const { return number >= 0 || !pcRun.empty() || !other.empty(); }
 };
 
-inline constexpr int kPcRunBase = 1000; // номера замеров для записей на ПК: 1001, 1002, …
+inline constexpr int kPcRunBase = 1000;    // номера замеров для записей на ПК: 1001, 1002, …
+inline constexpr int kOtherBase = 2000;    // номера для файлов с другими именами: 2001, 2002, …
+inline constexpr int kNoSensor = 0;        // ключ датчика, если в имени его нет
 
 // «2026-10-08_17-19-28_опыт 3» -> «17:19:28 опыт 3»
 inline std::string PcRunLabel(const std::string& run)
@@ -74,8 +95,18 @@ inline int SensorKey(int addr, bool oldName)
 
 inline std::string SensorName(int key)
 {
+    if (key == kNoSensor)
+        return "датчик ?";
     return key >= 100 ? "датчик " + std::to_string(key - 100) + " (M_NNN_" + std::to_string(key - 100) + ")"
                       : "Д" + std::to_string(key);
+}
+
+// Короткое имя датчика для заголовков: «Д2», «M_1», «датчик ?».
+inline std::string SensorShort(int key)
+{
+    if (key == kNoSensor)
+        return "датчик ?";
+    return key >= 100 ? "M_" + std::to_string(key - 100) : "Д" + std::to_string(key);
 }
 
 // Пост по умолчанию: 0 — нос, 1 — корма, -1 — не учитывать.
@@ -83,6 +114,7 @@ inline int DefaultPost(int key)
 {
     switch (key)
     {
+    case kNoSensor: return kBow;
     case 2: return kBow;
     case 3: return kStern;
     case 101: return kBow;
@@ -91,61 +123,115 @@ inline int DefaultPost(int key)
     }
 }
 
-// Файлы *.CSV в папке (без подпапок), по имени.
-inline std::vector<std::filesystem::path> ListCsv(const std::filesystem::path& dir, std::string* err = nullptr)
+// Файлы *.CSV и *.TXT в папке, по имени. Если в самой папке таких нет — в её подпапках (на один уровень; *sub = true).
+inline std::vector<std::filesystem::path> ListCsv(const std::filesystem::path& dir, std::string* err = nullptr,
+                                                  bool* sub = nullptr)
 {
     std::vector<std::filesystem::path> out;
     std::error_code ec;
+    if (sub)
+        *sub = false;
     if (!std::filesystem::is_directory(dir, ec))
     {
         if (err)
             *err = "папки нет";
         return out;
     }
-    for (std::filesystem::directory_iterator it(dir, ec), end; !ec && it != end; it.increment(ec))
-    {
-        if (!it->is_regular_file(ec))
-            continue;
-        std::string ext = text::PathToUtf8(it->path().extension());
-        for (auto& c : ext)
-            c = static_cast<char>((c >= 'a' && c <= 'z') ? c - 'a' + 'A' : c);
-        if (ext == ".CSV")
-            out.push_back(it->path());
-    }
-    if (ec && err)
+    auto scan = [&](const std::filesystem::path& d, std::vector<std::filesystem::path>* dirs) {
+        std::error_code e;
+        for (std::filesystem::directory_iterator it(d, e), end; !e && it != end; it.increment(e))
+        {
+            if (dirs && it->is_directory(e))
+            {
+                dirs->push_back(it->path());
+                continue;
+            }
+            if (!it->is_regular_file(e))
+                continue;
+            std::string ext = text::PathToUtf8(it->path().extension());
+            for (auto& c : ext)
+                c = static_cast<char>((c >= 'a' && c <= 'z') ? c - 'a' + 'A' : c);
+            if (ext == ".CSV" || ext == ".TXT")
+                out.push_back(it->path());
+        }
+        return !e;
+    };
+    std::vector<std::filesystem::path> dirs;
+    if (!scan(dir, &dirs) && err)
         *err = "не удалось прочитать папку";
+    if (out.empty() && !dirs.empty())
+    {
+        std::sort(dirs.begin(), dirs.end());
+        for (const auto& d : dirs)
+            scan(d, nullptr);
+        if (sub)
+            *sub = !out.empty();
+    }
     std::sort(out.begin(), out.end());
     return out;
 }
 
-inline File LoadFile(const std::filesystem::path& p)
+// Номер замера и датчик — по имени файла (если имя по одному из образцов).
+inline void NameInfo(File& f)
 {
-    File f;
-    f.path = p;
-    f.name = text::PathToUtf8(p.filename());
     proto::FileEntry e;
     e.name = f.name;
     proto::ParseMeasurementName(e);
     f.number = e.measurement;
     const bool oldName = f.name.size() > 2 && (f.name[0] == 'M' || f.name[0] == 'm') && f.name[1] == '_';
     f.sensor = e.sensorAddr >= 0 ? SensorKey(e.sensorAddr, oldName) : -1;
-    if (f.number < 0 && f.name.size() > 4)
+    std::string up;
+    for (const char c : f.name)
+        up += static_cast<char>((c >= 'a' && c <= 'z') ? c - 'a' + 'A' : c);
+    const bool csv = up.size() > 4 && up.compare(up.size() - 4, 4, ".CSV") == 0;
+    // «M_NNN.CSV» — самая первая прошивка (один датчик): датчик 1
+    if (f.number < 0 && csv && up.size() == 9 && up.compare(0, 2, "M_") == 0 &&
+        proto::AllDigits(std::string_view(up).substr(2, 3)))
+    {
+        f.number = static_cast<int>(proto::ToInt(std::string_view(up).substr(2, 3)));
+        f.sensor = SensorKey(1, true);
+    }
+    if (f.number < 0 && csv)
     {
         // Запись на ПК: «…_PC_Dk.CSV»
-        std::string up;
-        for (const char c : f.name)
-            up += static_cast<char>((c >= 'a' && c <= 'z') ? c - 'a' + 'A' : c);
         const std::size_t pc = up.rfind("_PC_D");
         const std::size_t end = up.size() - 4;
-        if (up.compare(end, 4, ".CSV") == 0 && pc != std::string::npos && pc > 0 && pc + 5 < end &&
+        if (pc != std::string::npos && pc > 0 && pc + 5 < end &&
             proto::AllDigits(std::string_view(up).substr(pc + 5, end - pc - 5)))
         {
             f.pcRun = f.name.substr(0, pc);
             f.sensor = SensorKey(static_cast<int>(proto::ToInt(std::string_view(up).substr(pc + 5, end - pc - 5))), false);
         }
     }
-    if (f.Measurement())
-        csvlog::ReadFile(p, f.log);
+}
+
+// Прочитать файл: формат — по содержимому; имя не по образцу, но файл понятный — отдельная запись.
+inline File LoadFile(const std::filesystem::path& p, const Settings* s = nullptr)
+{
+    File f;
+    f.path = p;
+    f.name = text::PathToUtf8(p.filename());
+    NameInfo(f);
+    csvlog::ReadFile(p, f.log);
+    if (f.number < 0 && f.pcRun.empty())
+    {
+        f.other = text::PathToUtf8(p.stem());
+        if (f.other.empty())
+            f.other = f.name;
+        f.sensor = kNoSensor;
+    }
+    if (s && f.log.error.empty())
+    {
+        std::vector<double> t, v;
+        t.reserve(f.log.rows.size());
+        v.reserve(f.log.rows.size());
+        for (const auto& r : f.log.rows)
+        {
+            t.push_back(r.t);
+            v.push_back(r.Calc(s->axis));
+        }
+        f.plateaus = static_cast<int>(plateau::Detect(t, v, s->Plateau()).size());
+    }
     return f;
 }
 
@@ -155,15 +241,16 @@ struct Loaded
     std::string folder; // куда сохранять отчёт
 };
 
-// Прочитать файлы (поток интерфейса не ждёт: вызывается из std::async). done — сколько прочитано.
+// Прочитать файлы (поток интерфейса не ждёт: вызывается из std::async). done — сколько прочитано; s — ось и
+// параметры поиска положений (для выбора режима «одна запись — весь опыт»), nullptr — не искать.
 inline Loaded LoadAll(const std::vector<std::filesystem::path>& paths, const std::string& folder,
-                      std::atomic<int>* done = nullptr)
+                      std::atomic<int>* done = nullptr, const Settings* s = nullptr)
 {
     Loaded r;
     r.folder = folder;
     for (const auto& p : paths)
     {
-        r.files.push_back(LoadFile(p));
+        r.files.push_back(LoadFile(p, s));
         if (done)
             done->fetch_add(1);
     }
@@ -275,20 +362,27 @@ inline std::vector<Measurement> Group(const std::vector<File>& files, const std:
     int k = kPcRunBase;
     for (auto& [run, n] : pcNum)
         n = ++k;
+    std::map<int, int> otherNum; // файлы с другими именами (понятные по содержимому): по порядку
+    k = kOtherBase;
+    for (std::size_t i = 0; i < files.size(); i++)
+        if (!files[i].other.empty() && files[i].log.error.empty())
+            otherNum[static_cast<int>(i)] = ++k;
     for (std::size_t i = 0; i < files.size(); i++)
     {
         const File& f = files[i];
-        if (!f.Measurement())
-        {
-            note(f.name + ": имя не по образцу …_MNNN_Dk.CSV / M_NNN_k.CSV / …_PC_Dk.CSV — пропущен");
-            continue;
-        }
-        const int number = f.pcRun.empty() ? f.number : pcNum[f.pcRun];
         if (!f.log.error.empty())
         {
-            note(f.name + ": " + f.log.error + " — пропущен");
+            if (f.log.error == "не понял формат")
+                note("не понял формат: " + f.name + ", первая строка: «" + f.log.firstLine + "» — пропущен");
+            else
+                note(f.name + ": " + f.log.error + " — пропущен");
             continue;
         }
+        if (!f.Measurement())
+            continue;
+        const int number = !f.pcRun.empty()   ? pcNum[f.pcRun]
+                           : !f.other.empty() ? otherNum[static_cast<int>(i)]
+                                              : f.number;
         const auto it = postOf.find(f.sensor);
         const int post = it != postOf.end() ? it->second : DefaultPost(f.sensor);
         if (post < 0 || post > 1)
@@ -298,7 +392,7 @@ inline std::vector<Measurement> Group(const std::vector<File>& files, const std:
         }
         Measurement& m = byNum[number];
         m.number = number;
-        m.label = f.pcRun.empty() ? std::to_string(number) : PcRunLabel(f.pcRun);
+        m.label = !f.pcRun.empty() ? PcRunLabel(f.pcRun) : !f.other.empty() ? f.other : std::to_string(number);
         PostData& pd = m.post[post];
         if (pd.file >= 0)
         {
@@ -357,4 +451,143 @@ inline Summary Compute(const Settings& s, const std::vector<File>& files, std::v
     return sum;
 }
 
+// ---------------------------------------------------------------------------------------------------------------
+// Непрерывная запись: один файл (на пост) — весь опыт, положения груза — участки установившегося крена
+// ---------------------------------------------------------------------------------------------------------------
+
+struct Position
+{
+    double t0 = kNaN, t1 = kNaN; // участок, с от начала записи
+    bool use = true;             // в расчёте
+    double arm = kNaN;           // |l| — плечо переноса от начального положения, м; NaN — L
+    plateau::Span st[2];         // крен поста на участке (нос, корма)
+    PointResult res[2];          // Δθ, h, учтено ли, почему нет
+};
+
+// Время и угол по оси axis — отдельными рядами (для Plateaus.hpp).
+inline void Series(const csvlog::Log& log, int axis, std::vector<double>& t, std::vector<double>& v)
+{
+    t.clear();
+    v.clear();
+    t.reserve(log.rows.size());
+    v.reserve(log.rows.size());
+    for (const auto& r : log.rows)
+    {
+        t.push_back(r.t);
+        v.push_back(r.Calc(axis));
+    }
+}
+
+// Основной пост записи — по нему ищутся положения: нос, а без носового файла — корма; -1 — файлов нет.
+inline int MainPost(const Measurement& m)
+{
+    return m.post[0].file >= 0 ? 0 : m.post[1].file >= 0 ? 1 : -1;
+}
+
+// Положения груза в записи m (Plateaus.hpp по основному посту).
+inline std::vector<Position> FindPositions(const Settings& s, const std::vector<File>& files, const Measurement& m)
+{
+    std::vector<Position> out;
+    const int mp = MainPost(m);
+    if (mp < 0)
+        return out;
+    std::vector<double> t, v;
+    Series(files[static_cast<std::size_t>(m.post[mp].file)].log, s.axis, t, v);
+    for (const plateau::Span& sp : plateau::Detect(t, v, s.Plateau()))
+    {
+        Position p;
+        p.t0 = sp.t0;
+        p.t1 = sp.t1;
+        out.push_back(p);
+    }
+    return out;
+}
+
+// Крен постов на участках, Δθ от начального положения, h по положениям, итог и МНК (heel::SolvePositions).
+inline Summary ComputePositions(const Settings& s, const std::vector<File>& files, const Measurement& m,
+                                std::vector<Position>& pos)
+{
+    Summary sum;
+    std::vector<Point> pts;
+    std::vector<bool> use;
+    std::vector<std::pair<std::size_t, int>> where;
+    for (int p = 0; p < 2; p++)
+    {
+        std::vector<double> t, v;
+        if (m.post[p].file >= 0)
+            Series(files[static_cast<std::size_t>(m.post[p].file)].log, s.axis, t, v);
+        for (std::size_t i = 0; i < pos.size(); i++)
+        {
+            Position& ps = pos[i];
+            ps.res[p] = PointResult{};
+            ps.st[p] = plateau::Span{};
+            if (m.post[p].file < 0)
+                continue;
+            ps.st[p] = plateau::Measure(t, v, std::min(ps.t0, ps.t1), std::max(ps.t0, ps.t1));
+            Point pt;
+            pt.number = static_cast<int>(i) + 1;
+            pt.post = p;
+            pt.thetaDeg = ps.st[p].mean;
+            pt.arm = std::isfinite(ps.arm) ? std::fabs(ps.arm) : s.L;
+            pts.push_back(pt);
+            use.push_back(ps.use);
+            where.push_back({i, p});
+        }
+    }
+    for (const Position& ps : pos)
+        sum.measurements += ps.use ? 1 : 0;
+    const Result r = SolvePositions(pts, use, s.D, s.P, s.thresholdDeg);
+    for (std::size_t k = 0; k < where.size(); k++)
+        pos[where[k].first].res[where[k].second] = r.points[k];
+    sum.h = r.h;
+    sum.sd = r.sd;
+    sum.n = r.n;
+    sum.ls = r.ls;
+    return sum;
+}
+
+// Какой режим подходит файлам: индекс записи (в ms) с наибольшим числом положений груза у основного поста — если их
+// не меньше трёх (один файл — весь опыт); -1 — «файл = замер».
+inline int SuggestRecord(const std::vector<File>& files, const std::vector<Measurement>& ms)
+{
+    int best = -1, bestN = 2;
+    double bestDur = 0;
+    for (std::size_t i = 0; i < ms.size(); i++)
+    {
+        const int mp = MainPost(ms[i]);
+        if (mp < 0)
+            continue;
+        const File& f = files[static_cast<std::size_t>(ms[i].post[mp].file)];
+        const double dur = f.log.Duration();
+        if (f.plateaus > bestN || (f.plateaus == bestN && best >= 0 && dur > bestDur))
+        {
+            best = static_cast<int>(i);
+            bestN = f.plateaus;
+            bestDur = dur;
+        }
+    }
+    return best;
+}
+
+// Самая длинная запись (для режима «одна запись — весь опыт», выбранного вручную); -1 — записей нет.
+inline int LongestRecord(const std::vector<File>& files, const std::vector<Measurement>& ms)
+{
+    int best = -1;
+    double bestDur = -1;
+    for (std::size_t i = 0; i < ms.size(); i++)
+    {
+        const int mp = MainPost(ms[i]);
+        if (mp < 0)
+            continue;
+        const double dur = files[static_cast<std::size_t>(ms[i].post[mp].file)].log.Duration();
+        if (dur > bestDur)
+        {
+            best = static_cast<int>(i);
+            bestDur = dur;
+        }
+    }
+    return best;
+}
+
 } // namespace heel
+
