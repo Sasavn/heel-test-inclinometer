@@ -355,8 +355,8 @@ void App::TickProcess()
                     if (f.log.skipped)
                         ProcLog(Fmt("%s: пропущено строк %d (оборваны?)", f.name.c_str(), f.log.skipped));
                     // Необычный вид файла (без шапки, после Excel, UTF-16, нули в хвосте) — сказать, как понят
-                    if (f.log.headerless || f.log.utf16 || f.log.nulBytes || f.log.format == csvlog::Format::FwOld ||
-                        f.log.format == csvlog::Format::Analyzer || (f.log.sep != ';' && f.log.decimalComma) ||
+                    if (f.log.headerless || f.log.utf16 || f.log.nulBytes || f.log.fromXlsx || f.log.format == csvlog::Format::FwOld ||
+                        f.log.format == csvlog::Format::Analyzer || f.log.format == csvlog::Format::Angles || (f.log.sep != ';' && f.log.decimalComma) ||
                         (f.log.sep == ';' && f.log.format != csvlog::Format::Fw14))
                         ProcLog(Fmt("%s: %s (%s), %d строк, %.0f с", f.name.c_str(), csvlog::FormatName(f.log.format),
                                     csvlog::Details(f.log).c_str(), static_cast<int>(f.log.rows.size()), f.log.Duration()));
@@ -1465,10 +1465,10 @@ void App::ProcPositions(float w, float h)
                             }
                         }
                         if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenOverlapped) && std::isfinite(st.mean))
-                            ImGui::SetTooltip("Средний крен на участке %.1f…%.1f с (%.1f с): %s, СКО %.3f°, точек %d\n"
-                                              "Δθ от начального положения: %s",
+                            ImGui::SetTooltip("Средний крен на участке %.1f…%.1f с (%.1f с): %s, СКО %.3f°, точек %d"
+                                              " (выбросов отброшено %d)\nΔθ от начального положения: %s",
                                               std::min(ps.t0, ps.t1), std::max(ps.t0, ps.t1), std::fabs(ps.t1 - ps.t0),
-                                              text::Angle(st.mean, 3).c_str(), st.sd, st.n,
+                                              text::Angle(st.mean, 3).c_str(), st.sd, st.n, st.rejected,
                                               text::Angle(res.dTheta, 3).c_str());
                         if (showDelta)
                         {
@@ -1677,10 +1677,12 @@ void App::ProcSeriesPlot(int post, float w, float h, bool forExport)
             ImPlot::PlotText(Fmt("%d", static_cast<int>(i) + 1).c_str(), 0.5 * (t0 + t1), lim.Y.Max,
                              ImVec2(0, S(11)));
         }
-        if (std::isfinite(st.mean) && ImPlot::PlotToPixels(t1, 0).x - ImPlot::PlotToPixels(t0, 0).x > S(46))
+        if (std::isfinite(st.mean))
         {
             FontScope fs(fontSmall);
-            ImPlot::PlotText(text::Angle(st.mean, 2).c_str(), 0.5 * (t0 + t1), lim.Y.Max, ImVec2(0, S(28)));
+            const std::string lv = text::Angle(st.mean, 2);
+            if (ImPlot::PlotToPixels(t1, 0).x - ImPlot::PlotToPixels(t0, 0).x > ImGui::CalcTextSize(lv.c_str()).x + S(4))
+                ImPlot::PlotText(lv.c_str(), 0.5 * (t0 + t1), lim.Y.Max, ImVec2(0, S(28)));
         }
         ImPlot::PopStyleColor();
     }

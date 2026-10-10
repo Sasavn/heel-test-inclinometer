@@ -13,8 +13,14 @@
 //  3. В каждом куске — уровень (медиана сглаженного ряда) и «устоявшиеся» точки: сглаженный ряд ближе tol к уровню
 //     (tol = max(tolDeg, 0,15 × меньший перепад к соседям)). Край куска до первой и после последней такой точки —
 //     переход (груз едет, всплеск), отбрасывается; ещё edgeS с с каждого края — запас на хвост всплеска.
-//  4. Участки короче minLenS отбрасываются; соседние участки с уровнями ближе minStepDeg сливаются.
-//  5. Среднее и СКО участка — по исходным (не сглаженным) отсчётам: качка входит в СКО, среднее по целым качаниям.
+//  4. Выбросы (всплески — люди ходят, стук по датчику): отсчёт дальше от медианы участка, чем
+//     max(outlierK × 1,4826 × MAD, outlierMinDeg). Выброс в первых / последних (smoothS/2 + edgeS) с участка —
+//     начало перехода: край участка переносится за него (ещё 1 с запаса).
+//  5. Участки короче minLenS отбрасываются; соседние участки с уровнями ближе minStepDeg сливаются.
+//  6. Среднее и СКО участка — по исходным (не сглаженным) отсчётам без выбросов: качка входит в СКО (Measure).
+//
+// Проверено на синтетике (tests/data/continuous) и на настоящей записи руководителя (tests/data/real, прошивка 1.5,
+// 5400 строк, 10 Гц): без п. 4 всплески внутри положений сдвигали уровень (0,25° вместо 0,14°) и растягивали СКО.
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
@@ -28,49 +34,119 @@ inline constexpr double kNaN = std::numeric_limits<double>::quiet_NaN();
 
 struct Params
 {
-    double minLenS = 10.0;    // участок (положение) не короче, с
-    double minStepDeg = 0.5;  // перепад между соседними положениями не меньше, °
-    double smoothS = 12.0;    // окно скользящей медианы, с (порядка периода качки)
-    double tolDeg = 0.25;     // допуск «устоявшегося» крена от уровня, ° (не меньше)
-    double edgeS = 2.0;       // запас на краях участка, с
+    double minLenS = 10.0;      // участок (положение) не короче, с
+    double minStepDeg = 0.5;    // перепад между соседними положениями не меньше, °
+    double smoothS = 12.0;      // окно скользящей медианы, с (порядка периода качки)
+    double tolDeg = 0.25;       // допуск «устоявшегося» крена от уровня, ° (не меньше)
+    double edgeS = 2.0;         // запас на краях участка, с
 };
+
+inline constexpr double kOutlierK = 5.0;      // выброс: дальше медианы на 5 «сигм» по MAD…
+inline constexpr double kOutlierMinDeg = 1.0; // …и не меньше чем на 1°
 
 // Участок записи и крен на нём.
 struct Span
 {
-    double t0 = kNaN, t1 = kNaN; // с от начала записи
-    double mean = kNaN, sd = kNaN; // °
-    int n = 0;                   // отсчётов
+    double t0 = kNaN, t1 = kNaN;   // с от начала записи
+    double mean = kNaN, sd = kNaN; // ° (без выбросов)
+    int n = 0;                     // отсчётов в расчёте
+    int rejected = 0;              // выбросов отброшено
 
     double Duration() const { return t1 - t0; }
 };
 
-// Среднее, СКО (выборочное) и число отсчётов на [t0, t1]; NaN в v пропускаются.
+namespace detail
+{
+
+inline double Median(std::vector<double> x)
+{
+    if (x.empty())
+        return kNaN;
+    const std::size_t m = x.size() / 2;
+    std::nth_element(x.begin(), x.begin() + static_cast<std::ptrdiff_t>(m), x.end());
+    double med = x[m];
+    if (x.size() % 2 == 0)
+        med = 0.5 * (med + *std::max_element(x.begin(), x.begin() + static_cast<std::ptrdiff_t>(m)));
+    return med;
+}
+
+// Медиана и порог выброса по отсчётам; порог — бесконечность, если отсчётов меньше 5.
+inline void OutlierBand(const std::vector<double>& x, double& med, double& thr)
+{
+    med = Median(x);
+    thr = std::numeric_limits<double>::infinity();
+    if (x.size() < 5)
+        return;
+    std::vector<double> dev(x.size());
+    for (std::size_t i = 0; i < x.size(); i++)
+        dev[i] = std::fabs(x[i] - med);
+    thr = std::max(kOutlierK * 1.4826 * Median(std::move(dev)), kOutlierMinDeg);
+}
+
+} // namespace detail
+
+// Среднее, СКО (выборочное) и число отсчётов на [t0, t1] без выбросов (см. п. 4); NaN в v пропускаются.
 inline Span Measure(const std::vector<double>& t, const std::vector<double>& v, double t0, double t1)
 {
     Span s;
     s.t0 = t0;
     s.t1 = t1;
     const std::size_t n = std::min(t.size(), v.size());
-    double sum = 0;
+    std::vector<double> x;
     for (std::size_t i = 0; i < n; i++)
         if (t[i] >= t0 && t[i] <= t1 && std::isfinite(v[i]))
+            x.push_back(v[i]);
+    if (x.empty())
+        return s;
+    double med = 0, thr = 0;
+    detail::OutlierBand(x, med, thr);
+    double sum = 0;
+    for (const double y : x)
+        if (std::fabs(y - med) <= thr)
         {
-            sum += v[i];
+            sum += y;
             s.n++;
         }
-    if (s.n == 0)
-        return s;
+        else
+            s.rejected++;
     s.mean = sum / s.n;
     if (s.n >= 2)
     {
         double q = 0;
-        for (std::size_t i = 0; i < n; i++)
-            if (t[i] >= t0 && t[i] <= t1 && std::isfinite(v[i]))
-                q += (v[i] - s.mean) * (v[i] - s.mean);
+        for (const double y : x)
+            if (std::fabs(y - med) <= thr)
+                q += (y - s.mean) * (y - s.mean);
         s.sd = std::sqrt(q / (s.n - 1));
     }
     return s;
+}
+
+// Края участка [t0, t1] — за выбросы в первых / последних win с (начало и конец перехода).
+inline void TrimOutlierEdges(const std::vector<double>& t, const std::vector<double>& v, double& t0, double& t1,
+                             double win)
+{
+    const std::size_t n = std::min(t.size(), v.size());
+    std::vector<double> x;
+    for (std::size_t i = 0; i < n; i++)
+        if (t[i] >= t0 && t[i] <= t1 && std::isfinite(v[i]))
+            x.push_back(v[i]);
+    double med = 0, thr = 0;
+    detail::OutlierBand(x, med, thr);
+    if (!std::isfinite(thr))
+        return;
+    double headLast = kNaN, tailFirst = kNaN;
+    for (std::size_t i = 0; i < n; i++)
+        if (t[i] >= t0 && t[i] <= t1 && std::isfinite(v[i]) && std::fabs(v[i] - med) > thr)
+        {
+            if (t[i] <= t0 + win)
+                headLast = t[i];
+            if (t[i] >= t1 - win && !std::isfinite(tailFirst))
+                tailFirst = t[i];
+        }
+    if (std::isfinite(headLast))
+        t0 = headLast + 1.0;
+    if (std::isfinite(tailFirst))
+        t1 = tailFirst - 1.0;
 }
 
 // Скользящая медиана за windowS с (окно по центру, по времени). t — по возрастанию.
@@ -101,23 +177,6 @@ inline std::vector<double> MedianFilter(const std::vector<double>& t, const std:
     }
     return out;
 }
-
-namespace detail
-{
-
-inline double Median(std::vector<double> x)
-{
-    if (x.empty())
-        return kNaN;
-    const std::size_t m = x.size() / 2;
-    std::nth_element(x.begin(), x.begin() + static_cast<std::ptrdiff_t>(m), x.end());
-    double med = x[m];
-    if (x.size() % 2 == 0)
-        med = 0.5 * (med + *std::max_element(x.begin(), x.begin() + static_cast<std::ptrdiff_t>(m)));
-    return med;
-}
-
-} // namespace detail
 
 // Положения (участки установившегося крена) по порядку времени.
 inline std::vector<Span> Detect(const std::vector<double>& tIn, const std::vector<double>& vIn, const Params& p)
@@ -218,7 +277,9 @@ inline std::vector<Span> Detect(const std::vector<double>& tIn, const std::vecto
             }
         if (first > last)
             continue;
-        const double t0 = t[first] + p.edgeS, t1 = t[last] - p.edgeS;
+        double t0 = t[first] + p.edgeS, t1 = t[last] - p.edgeS;
+        if (t1 > t0)
+            TrimOutlierEdges(t, v, t0, t1, 0.5 * p.smoothS + p.edgeS);
         if (t1 - t0 < p.minLenS)
             continue;
         raw.push_back(Measure(t, v, t0, t1));

@@ -430,7 +430,7 @@ void TestGroupingAndReport()
     WriteText(dir / "rs485_sweep.csv", "a,b\n1,2\n");
     WriteText(dir / "2026-10-08_M004_D2.CSV", "Date;Time;Foo\n1;2;3\n");
     WriteText(dir / "notes.txt", "-");
-    WriteText(dir / "report.xlsx", "PK");
+    WriteText(dir / L"Отчет_Кренование.xlsx", "PK"); // свой отчёт — не читается
     std::string err;
     const auto paths = heel::ListCsv(dir, &err);
     CHECK(err.empty());
@@ -893,6 +893,119 @@ void TestContinuous()
     }
 }
 
+// Книги Excel как источник: своя (Xlsx.hpp, со сжатием и без), как пишет Excel (общие строки, даты числами —
+// часть книги руководителя), openpyxl (inlineStr, данные на втором листе); распаковка deflate; отбор книг в папке.
+void TestXlsxRead()
+{
+    SECTION("книги .xlsx: Xlsx.hpp, Excel (общие строки, даты числами), openpyxl (второй лист), inflate, папка");
+    {
+        // Своя книга: шапка 1.4+, Date и Time — строками
+        xlsx::Sheet sh("Замер");
+        sh.AddRow({xlsx::Text("Date"), xlsx::Text("Time"), xlsx::Text("CalcX"), xlsx::Text("CalcY"), xlsx::Text("Ms")});
+        for (int i = 0; i < 50; i++)
+            sh.AddRow({xlsx::Text("09.10.2026"), xlsx::Text(i < 25 ? "19:07:20" : "19:07:22"), xlsx::Num(1.0 + i * 0.01, 3),
+                       xlsx::Num(-0.5, 3), xlsx::Num(i * 100.0 + 55, 0)});
+        for (const bool packed : {false, true})
+        {
+            const std::string book = xlsx::Build({xlsx::Sheet("Пусто"), sh}, 0, packed);
+            csvlog::Log log;
+            CHECK_MSG(csvlog::ParseAny(book, log), "своя книга: %s %s", log.error.c_str(), log.firstLine.c_str());
+            CHECK(log.fromXlsx && log.sheet == "Замер" && log.rows.size() == 50 && log.time == csvlog::TimeSource::Ms);
+            if (log.rows.size() == 50)
+            {
+                CHECK_NEAR(log.rows[49].calcX, 1.49, 1e-12, "CalcX из книги");
+                CHECK_NEAR(log.rows[49].t, 4.955, 1e-12, "t по Ms");
+                CHECK(log.rows[0].day == csvlog::DaysFromCivil(2026, 10, 9) && log.rows[0].sec == 19 * 3600 + 7 * 60 + 20);
+            }
+        }
+        // Как пишет Excel: sharedStrings, Date и Time — числа (46304 и доля суток), deflate со своими кодами
+        csvlog::Log ex;
+        CHECK_MSG(csvlog::ReadFile(testutil::TestDataDir() / "xlsx" / "excel_100.xlsx", ex), "%s", ex.firstLine.c_str());
+        CHECK(ex.fromXlsx && ex.format == csvlog::Format::Fw14 && ex.rows.size() == 100);
+        if (ex.rows.size() == 100)
+        {
+            CHECK(ex.rows[0].day == csvlog::DaysFromCivil(2026, 10, 9));
+            CHECK(ex.rows[0].sec == 19 * 3600 + 7 * 60 + 20);
+            CHECK_NEAR(ex.rows[0].t, 0.055, 1e-12, "Ms первой строки");
+            CHECK_NEAR(ex.rows[0].calcX, -0.141, 1e-12, "CalcX первой строки");
+            CHECK_NEAR(ex.rows[0].offX, 2.701, 1e-12, "OffsetX");
+            CHECK_NEAR(heel::TailStats(ex, 0, 1e9).mean, -0.2319, 1e-9, "среднее CalcX 100 строк");
+        }
+        // openpyxl: первый лист — заметки, данные — на втором; inlineStr, Date — дата, Time — время
+        csvlog::Log op;
+        CHECK_MSG(csvlog::ReadFile(testutil::TestDataDir() / "xlsx" / L"опыт_openpyxl.xlsx", op), "%s", op.firstLine.c_str());
+        CHECK(op.fromXlsx && op.sheet == "Данные" && op.rows.size() == 200);
+        if (op.rows.size() == 200)
+        {
+            CHECK(op.rows[0].sec == 19 * 3600 + 7 * 60 + 20 && op.rows[0].day == csvlog::DaysFromCivil(2026, 10, 9));
+            CHECK_NEAR(heel::TailStats(op, 0, 1e9).mean, -0.0882, 1e-9, "среднее CalcX 200 строк");
+        }
+        // Не книга и испорченная книга — сообщение, не падение
+        csvlog::Log bad;
+        CHECK(!csvlog::ParseAny(std::string("PK\x03\x04", 4) + "мусор", bad) && bad.error == "не понял формат");
+        std::string cut = xlsx::Build({sh}, 0, true);
+        cut.resize(cut.size() / 2);
+        CHECK(!csvlog::ParseAny(cut, bad));
+        // Inflate: обратно то, что сжал Compress, и блок без сжатия
+        std::string text;
+        for (int i = 0; i < 5000; i++)
+            text += "<c r=\"A" + std::to_string(i) + "\"><v>" + std::to_string(i * 0.25) + "</v></c>";
+        const auto z = deflate::Compress(text);
+        std::vector<unsigned char> back;
+        CHECK(deflate::Inflate(z.data(), z.size(), back) && std::string(back.begin(), back.end()) == text);
+        const unsigned char stored[] = {0x01, 0x03, 0x00, 0xFC, 0xFF, 'a', 'b', 'c'};
+        CHECK(deflate::Inflate(stored, sizeof(stored), back) && back.size() == 3 && back[2] == 'c');
+        CHECK(!deflate::Inflate(z.data(), z.size() / 2, back));
+
+        // Папка: свои книги и копии CSV — мимо
+        const fs::path dir = fs::temp_directory_path() / L"krenomer_process_test_книги";
+        std::error_code ec;
+        fs::remove_all(dir, ec);
+        fs::create_directories(dir, ec);
+        for (const wchar_t* f : {L"A.CSV", L"A.xlsx", L"B_PC.xlsx", L"B_PC_D2.CSV", L"Отчет_Кренование.xlsx", L"C.xlsx"})
+            WriteText(dir / f, "x");
+        const auto paths = heel::ListCsv(dir);
+        std::vector<std::string> names;
+        for (const auto& p : paths)
+            names.push_back(text::PathToUtf8(p.filename()));
+        CHECK_MSG(names == std::vector<std::string>({"A.CSV", "B_PC_D2.CSV", "C.xlsx"}), "файлов %zu", names.size());
+        // Имя книги группируется так же, как CSV
+        fs::copy_file(testutil::TestDataDir() / "xlsx" / "excel_100.xlsx", dir / "2026-10-09_M020_D2.xlsx", ec);
+        const auto f = heel::LoadFile(dir / "2026-10-09_M020_D2.xlsx");
+        CHECK(f.number == 20 && f.sensor == 2 && f.other.empty() && f.log.error.empty());
+    }
+}
+
+// Настоящая запись руководителя (tests/data/real: Ms, CalcX, CalcY из его книги 2026-10-09_M020_D2.xlsx, прошивка
+// 1.5): положения груза по CalcX. На глаз (график): ~0 → ~3 → ~6 → ~8 → (провал ~2, ~5 — груз переставляли) → ~10,5 →
+// −2,5 → −6 → −9 → −12, всплески на переходах (67 с, 181 с, 380 с, 436 с).
+void TestRealRecord()
+{
+    SECTION("настоящая запись руководителя: положения по CalcX, всплески не внутри положений");
+    csvlog::Log log;
+    CHECK(csvlog::ReadFile(testutil::TestDataDir() / "real" / "2026-10-09_M020_D2.CSV", log));
+    CHECK_MSG(log.rows.size() == 5399 && log.time == csvlog::TimeSource::Ms, "строк %zu", log.rows.size());
+    std::vector<double> t, v;
+    heel::Series(log, 0, t, v);
+    const auto ps = plateau::Detect(t, v, plateau::Params{});
+    const double want[] = {0.14, 2.88, 5.68, 8.09, 5.06, 10.43, -2.66, -5.97, -9.09, -11.79};
+    CHECK_MSG(ps.size() == 10, "положений %zu", ps.size());
+    for (std::size_t i = 0; i < ps.size(); i++)
+    {
+        std::printf("    положение %2zu: %6.1f…%6.1f с (%5.1f с), %+8.3f° ± %.3f, выбросов %d\n", i + 1, ps[i].t0, ps[i].t1,
+                    ps[i].Duration(), ps[i].mean, ps[i].sd, ps[i].rejected);
+        if (i < 10)
+            CHECK_NEAR(ps[i].mean, want[i], 0.1, "уровень положения");
+        CHECK_MSG(ps[i].sd < 0.7, "положение %zu: СКО %.3f — всплеск внутри?", i + 1, ps[i].sd);
+        for (const double spike : {181.5, 380.5, 436.0})
+            CHECK_MSG(!(spike >= ps[i].t0 && spike <= ps[i].t1), "положение %zu захватило всплеск %.1f с", i + 1, spike);
+    }
+    // Режим по содержимому — «весь опыт одной записью»
+    heel::Settings s;
+    const auto loaded = heel::LoadAll({testutil::TestDataDir() / "real" / "2026-10-09_M020_D2.CSV"}, "", nullptr, &s);
+    CHECK(heel::SuggestRecord(loaded.files, heel::Group(loaded.files, {})) == 0);
+}
+
 void TestSettings()
 {
     SECTION("настройки: ось по умолчанию X, выбор запоминается; ось из файла программы 1.2 не берётся");
@@ -981,6 +1094,8 @@ int main(int argc, char** argv)
     TestOldFormats();
     TestPlateaus();
     TestContinuous();
+    TestXlsxRead();
+    TestRealRecord();
     TestSettings();
     TestDeflate();
     return TestSummary();

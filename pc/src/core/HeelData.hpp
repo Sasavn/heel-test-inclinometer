@@ -123,7 +123,9 @@ inline int DefaultPost(int key)
     }
 }
 
-// Файлы *.CSV и *.TXT в папке, по имени. Если в самой папке таких нет — в её подпапках (на один уровень; *sub = true).
+// Файлы *.CSV, *.TXT и *.XLSX в папке, по имени. Если в самой папке таких нет — в её подпапках (на один уровень;
+// *sub = true). Книги, которые пишет сама программа (Отчет_Кренование.xlsx, книга записи на ПК «…_PC.xlsx» рядом с её
+// CSV), и книга, у которой рядом есть CSV с тем же именем, не берутся — данные те же.
 inline std::vector<std::filesystem::path> ListCsv(const std::filesystem::path& dir, std::string* err = nullptr,
                                                   bool* sub = nullptr)
 {
@@ -151,7 +153,7 @@ inline std::vector<std::filesystem::path> ListCsv(const std::filesystem::path& d
             std::string ext = text::PathToUtf8(it->path().extension());
             for (auto& c : ext)
                 c = static_cast<char>((c >= 'a' && c <= 'z') ? c - 'a' + 'A' : c);
-            if (ext == ".CSV" || ext == ".TXT")
+            if (ext == ".CSV" || ext == ".TXT" || ext == ".XLSX")
                 out.push_back(it->path());
         }
         return !e;
@@ -168,22 +170,50 @@ inline std::vector<std::filesystem::path> ListCsv(const std::filesystem::path& d
             *sub = !out.empty();
     }
     std::sort(out.begin(), out.end());
-    return out;
+    // Книги Excel: свои отчёты и копии CSV — мимо
+    auto upper = [](std::string x) {
+        for (auto& c : x)
+            c = static_cast<char>((c >= 'a' && c <= 'z') ? c - 'a' + 'A' : c);
+        return x;
+    };
+    std::vector<std::string> csvStems;
+    for (const auto& q : out)
+        if (upper(text::PathToUtf8(q.extension())) == ".CSV")
+            csvStems.push_back(upper(text::PathToUtf8(q.stem())));
+    std::vector<std::filesystem::path> kept;
+    for (const auto& q : out)
+    {
+        if (upper(text::PathToUtf8(q.extension())) == ".XLSX")
+        {
+            const std::string name = text::PathToUtf8(q.filename());
+            const std::string stem = upper(text::PathToUtf8(q.stem()));
+            if (name.rfind("Отчет_Кренование", 0) == 0)
+                continue;
+            bool copy = false;
+            for (const auto& c : csvStems)
+                copy |= c == stem || (stem.size() > 3 && stem.compare(stem.size() - 3, 3, "_PC") == 0 &&
+                                      c.rfind(stem + "_D", 0) == 0);
+            if (copy)
+                continue;
+        }
+        kept.push_back(q);
+    }
+    return kept;
 }
 
 // Номер замера и датчик — по имени файла (если имя по одному из образцов).
 inline void NameInfo(File& f)
 {
     proto::FileEntry e;
-    e.name = f.name;
+    e.name = text::PathToUtf8(f.path.stem()) + ".CSV"; // и у .TXT / .XLSX — по тому же образцу имени
     proto::ParseMeasurementName(e);
     f.number = e.measurement;
     const bool oldName = f.name.size() > 2 && (f.name[0] == 'M' || f.name[0] == 'm') && f.name[1] == '_';
     f.sensor = e.sensorAddr >= 0 ? SensorKey(e.sensorAddr, oldName) : -1;
     std::string up;
-    for (const char c : f.name)
+    for (const char c : e.name)
         up += static_cast<char>((c >= 'a' && c <= 'z') ? c - 'a' + 'A' : c);
-    const bool csv = up.size() > 4 && up.compare(up.size() - 4, 4, ".CSV") == 0;
+    const bool csv = up.size() > 4;
     // «M_NNN.CSV» — самая первая прошивка (один датчик): датчик 1
     if (f.number < 0 && csv && up.size() == 9 && up.compare(0, 2, "M_") == 0 &&
         proto::AllDigits(std::string_view(up).substr(2, 3)))
@@ -199,7 +229,7 @@ inline void NameInfo(File& f)
         if (pc != std::string::npos && pc > 0 && pc + 5 < end &&
             proto::AllDigits(std::string_view(up).substr(pc + 5, end - pc - 5)))
         {
-            f.pcRun = f.name.substr(0, pc);
+            f.pcRun = e.name.substr(0, pc);
             f.sensor = SensorKey(static_cast<int>(proto::ToInt(std::string_view(up).substr(pc + 5, end - pc - 5))), false);
         }
     }

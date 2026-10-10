@@ -9,7 +9,8 @@
 // Терпимо к тому, что бывает с файлами после карты и Excel: BOM UTF-8, UTF-16 («Текст Юникод» из Excel), CRLF / LF / CR,
 // пустые строки, нули в хвосте (карту выдернули), строка «sep=;», разделитель «;», «,» или табуляция, десятичная
 // запятая или точка, поля в кавычках, единицы в шапке («CalcX (°)»), строки над шапкой, Time без секунд (Excel),
-// дата ГГГГ-ММ-ДД. Без шапки — столбцы угадываются по первой строке (число полей и вид даты/времени).
+// дата ГГГГ-ММ-ДД. Без шапки — столбцы угадываются по первой строке (число полей и вид даты/времени). Книга Excel
+// (.xlsx — файл пересохранили из Excel) читается XlsxRead.hpp и разбирается так же (ParseAny).
 // Недостающие столбцы — NaN (CalcX/Y без них — Raw − Offset). Время отсчёта t (с от начала записи): по Ms, а без Ms —
 // по Time (строки одной секунды — равномерно внутри неё; у Time без секунд — по минуте), без Time — 10 строк в секунду.
 // Строки, которые не разобрать (оборванная последняя строка при выдёргивании карты), пропускаются и считаются.
@@ -25,6 +26,8 @@
 #include <string_view>
 #include <vector>
 
+#include "XlsxRead.hpp"
+
 namespace csvlog
 {
 
@@ -37,6 +40,7 @@ enum class Format
     Fw13,     // Time с датой, Raw/Offset, Ms (наша прошивка 1.0–1.3)
     FwOld,    // то же без Ms (исходная прошивка Romero2207)
     Analyzer, // Time,CalcX,CalcY,BatV (тестовые файлы старого анализатора)
+    Angles,   // только углы и Ms, без Raw (выборка столбцов из файла прибора)
 };
 
 inline const char* FormatName(Format f)
@@ -47,6 +51,7 @@ inline const char* FormatName(Format f)
     case Format::Fw13: return "прошивка 1.0–1.3";
     case Format::FwOld: return "исходная прошивка";
     case Format::Analyzer: return "старый анализатор";
+    case Format::Angles: return "углы и Ms";
     default: return "неизвестный";
     }
 }
@@ -80,6 +85,8 @@ struct Log
     bool utf16 = false;       // файл в UTF-16 (Excel «Текст Юникод»)
     bool decimalComma = false; // числа с десятичной запятой
     bool nulBytes = false;    // нули в файле (хвост кластера после выдёргивания карты)
+    bool fromXlsx = false;    // книга Excel (.xlsx), лист sheet
+    std::string sheet;
     int skipped = 0;          // строк не разобрано
     std::string error;        // файл не прочитан (пусто — прочитан)
     std::string firstLine;    // первая непустая строка (для сообщения «не понял формат»), UTF-8, до 80 знаков
@@ -91,7 +98,12 @@ struct Log
 inline std::string Details(const Log& log)
 {
     std::string s;
-    auto add = [&](const char* x) { s += (s.empty() ? "" : ", ") + std::string(x); };
+    auto add = [&](const std::string& x) { s += (s.empty() ? "" : ", ") + x; };
+    if (log.fromXlsx)
+    {
+        add("книга Excel, лист «" + log.sheet + "»");
+        return s;
+    }
     if (log.sep == '\t')
         add("табуляция");
     else if (log.sep == ';')
@@ -552,7 +564,10 @@ inline bool Parse(std::string_view input, Log& log)
     log.hasMs = idx[cMs] >= 0;
     log.hasDate = idx[cDate] >= 0;
     log.hasTime = idx[cTime] >= 0;
-    log.format = log.hasDate ? Format::Fw14 : !log.hasRaw ? Format::Analyzer : log.hasMs ? Format::Fw13 : Format::FwOld;
+    log.format = log.hasDate ? Format::Fw14
+                 : !log.hasRaw ? (log.hasMs ? Format::Angles : Format::Analyzer)
+                 : log.hasMs   ? Format::Fw13
+                               : Format::FwOld;
 
     int need = 0; // столбцов в строке — не меньше
     for (const int i : idx)
@@ -704,6 +719,33 @@ inline bool Parse(std::string_view input, Log& log)
     return true;
 }
 
+// Содержимое файла: текст CSV или книга Excel .xlsx (по подписи ZIP) — первый лист со столбцами углов.
+inline bool ParseAny(std::string_view bytes, Log& log)
+{
+    if (!xlsxread::IsZip(bytes))
+        return Parse(bytes, log);
+    std::vector<xlsxread::Sheet> sheets;
+    std::string err;
+    if (!xlsxread::ToCsv(bytes, sheets, &err))
+    {
+        log = Log{};
+        log.error = "не понял формат";
+        log.firstLine = err;
+        return false;
+    }
+    for (const auto& sh : sheets)
+        if (Parse(sh.csv, log))
+        {
+            log.fromXlsx = true;
+            log.sheet = sh.name;
+            return true;
+        }
+    Parse(sheets.front().csv, log); // первая строка первого листа — для сообщения
+    log.error = "не понял формат";
+    log.firstLine = "книга Excel: " + log.firstLine;
+    return false;
+}
+
 inline bool ReadFile(const std::filesystem::path& path, Log& log)
 {
     std::ifstream in(path, std::ios::binary);
@@ -714,7 +756,7 @@ inline bool ReadFile(const std::filesystem::path& path, Log& log)
         return false;
     }
     const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-    return Parse(text, log);
+    return ParseAny(text, log);
 }
 
 } // namespace csvlog

@@ -657,6 +657,25 @@ int main(int argc, char** argv)
         CHECK(!app.ProcessContinuous());
         CHECK_MSG(app.ProcessMeasurements() == 8, "замеров %zu", app.ProcessMeasurements());
         st.Shot("20_process_old_files", true);
+
+        // Настоящая запись руководителя (tests/data/real: Ms, CalcX, CalcY из его книги), плечи не заданы (= L)
+        const fs::path real = ShotsWorkDir() / L"Опыт руководителя";
+        fs::remove_all(real, ec);
+        fs::create_directories(real, ec);
+        fs::copy_file(testutil::TestDataDir() / "real" / "2026-10-09_M020_D2.CSV", real / "2026-10-09_M020_D2.CSV",
+                      fs::copy_options::overwrite_existing, ec);
+        st.Run(7000);
+        app.ProcessOpen(text::PathToUtf8(real));
+        wait();
+        st.Run(300);
+        CHECK(app.ProcessContinuous());
+        CHECK_MSG(app.ProcessPositions().size() == 10, "положений %zu", app.ProcessPositions().size());
+        st.Shot("21_process_real", true);
+        app.ProcessSaveReport();
+        st.Run(100);
+        wait();
+        fs::copy_file(real / L"График_Нос.png", fs::path(g_out) / "21_process_real_export.png",
+                      fs::copy_options::overwrite_existing, ec);
     }
 
     SECTION("о программе");
