@@ -27,6 +27,20 @@ namespace heel
 inline constexpr double kNaN = std::numeric_limits<double>::quiet_NaN();
 inline constexpr double kPi = 3.14159265358979323846;
 
+// Единицы ввода. Большое судно: D и P — т, плечи — м. Малое судно (модель, длина до ~5 м): D и P — кг, плечи — мм.
+// Расчёт ведётся в т и м: Solve получает уже переведённые величины (ToTonnes, ToMetres); h — всегда в метрах.
+struct Units
+{
+    bool model = false;
+
+    double MassToT() const { return model ? 0.001 : 1.0; } // т в единице массы
+    double ArmToM() const { return model ? 0.001 : 1.0; }  // м в единице плеча
+    double ToTonnes(double v) const { return v * MassToT(); }
+    double ToMetres(double v) const { return v * ArmToM(); }
+    const char* Mass() const { return model ? "кг" : "т"; }
+    const char* Arm() const { return model ? "мм" : "м"; }
+};
+
 // Вход: одна точка — замер на одном посту.
 struct Point
 {
@@ -185,11 +199,11 @@ inline Result Solve(const std::vector<Point>& in, double D, double P, double thr
 inline Result SolvePositions(const std::vector<Point>& in, const std::vector<bool>& use, double D, double P,
                              double thresholdDeg)
 {
-    double ref[2] = {kNaN, kNaN};
-    int refIdx[2] = {-1, -1};
+    double ref[8] = {kNaN, kNaN, kNaN, kNaN, kNaN, kNaN, kNaN, kNaN};
+    int refIdx[8] = {-1, -1, -1, -1, -1, -1, -1, -1};
     for (std::size_t i = 0; i < in.size(); i++)
     {
-        const int post = in[i].post == 1 ? 1 : 0;
+        const int post = std::clamp(in[i].post, 0, 7);
         if (refIdx[post] < 0 && (i >= use.size() || use[i]) && std::isfinite(in[i].thetaDeg))
         {
             refIdx[post] = static_cast<int>(i);
@@ -200,7 +214,7 @@ inline Result SolvePositions(const std::vector<Point>& in, const std::vector<boo
     std::vector<std::size_t> where;
     for (std::size_t i = 0; i < in.size(); i++)
     {
-        const int post = in[i].post == 1 ? 1 : 0;
+        const int post = std::clamp(in[i].post, 0, 7);
         if ((i < use.size() && !use[i]) || refIdx[post] == static_cast<int>(i))
             continue;
         Point p = in[i];
@@ -213,7 +227,7 @@ inline Result SolvePositions(const std::vector<Point>& in, const std::vector<boo
     r.points.resize(in.size());
     for (std::size_t i = 0; i < in.size(); i++)
     {
-        const int post = in[i].post == 1 ? 1 : 0;
+        const int post = std::clamp(in[i].post, 0, 7);
         if (i < use.size() && !use[i])
             r.points[i].note = "не в расчёте";
         else if (refIdx[post] == static_cast<int>(i))

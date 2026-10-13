@@ -7,6 +7,7 @@
 //  - «Положения»: строка на положение груза и пост (начало, конец, длительность, крен ± СКО, Δθ от начального, l, h,
 //    примечание), итоговое среднее h, МНК, исходные данные (D, P, L, ось, порог, параметры поиска положений);
 //  - «Сырые_данные»: все строки записи + номер положения, в которое попала строка.
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <string>
@@ -19,7 +20,17 @@ namespace heel
 {
 
 inline constexpr const char* kReportName = "Отчет_Кренование.xlsx";
-inline constexpr const char* kPlotName[2] = {"График_Нос.png", "График_Корма.png"};
+// Имя картинки поста: «График_Нос.png», «Положения_Мидель.png» (знаки, недопустимые в имени файла, — «_»).
+inline std::string PlotFileName(const char* prefix, const std::string& post)
+{
+    std::string s = std::string(prefix) + "_";
+    for (const char c : post)
+        s += (c == '\\' || c == '/' || c == ':' || c == '*' || c == '?' || c == '"' || c == '<' || c == '>' || c == '|' ||
+              static_cast<unsigned char>(c) < 0x20)
+                 ? '_'
+                 : c;
+    return s + ".png";
+}
 // Строк в «Сырые_данные» не больше (у Excel предел 1 048 576; книга собирается в памяти — у 32-битной программы
 // на сотни тысяч строк её может не хватить).
 inline constexpr std::size_t kRawMaxRows = 300000;
@@ -99,13 +110,14 @@ inline std::vector<xlsx::Sheet> BuildReport(const Settings& s, const std::vector
     using xlsx::Num;
     using xlsx::Text;
     xlsx::Sheet res("Результаты");
-    res.AddRow({Text("Файл"), Text("Пост"), Text("Замер"), Text("Плечо l (м)"), Text("Средний крен (°)"), Text("СКО (°)"),
+    const std::string armU = std::string("Плечо l (") + s.units.Arm() + ")";
+    res.AddRow({Text("Файл"), Text("Пост"), Text("Замер"), Text(armU), Text("Средний крен (°)"), Text("СКО (°)"),
                 Text("Точек"), Text("h (м)"), Text("АКБ (В)"), Text("Примечание")});
     for (const Measurement& m : ms)
     {
         if (!m.use)
             continue;
-        for (int p = 0; p < 2; p++)
+        for (int p = 0; p < kMaxPosts; p++)
         {
             const PostData& pd = m.post[p];
             if (pd.file < 0)
@@ -114,8 +126,8 @@ inline std::vector<xlsx::Sheet> BuildReport(const Settings& s, const std::vector
             std::string note = pd.res.counted ? std::string() : pd.res.note;
             if (pd.st.whole)
                 note += std::string(note.empty() ? "" : "; ") + "файл короче окна — среднее по всему файлу";
-            res.AddRow({Text(f.name), Text(kPostName[p]), m.number > kPcRunBase ? Text(m.label) : Num(m.number, 0),
-                        Num(std::isfinite(m.arm) ? std::fabs(m.arm) : s.L, 3), Num(pd.st.mean, 3), Num(pd.st.sd, 3),
+            res.AddRow({Text(f.name), Text(s.PostName(p)), m.number > kPcRunBase ? Text(m.label) : Num(m.number, 0),
+                        Num(std::isfinite(m.arm) ? std::fabs(m.arm) : s.L, s.units.model ? 1 : 3), Num(pd.st.mean, 3), Num(pd.st.sd, 3),
                         Num(pd.st.n, 0), pd.res.counted ? Num(pd.res.h, 3) : xlsx::Empty(), Num(pd.batV, 1), Text(note)});
         }
     }
@@ -130,9 +142,10 @@ inline std::vector<xlsx::Sheet> BuildReport(const Settings& s, const std::vector
     detail::AutoWidths(res); // по таблице; подписи исходных данных ниже — в широкий столбец A
     res.AddRow(std::vector<xlsx::Cell>{});
     res.AddRow({Text("Исходные данные")});
-    res.AddRow({Text("Водоизмещение D (т)"), Num(s.D, 1)});
-    res.AddRow({Text("Масса кренящего груза P (т)"), Num(s.P, 2)});
-    res.AddRow({Text("Плечо переноса L по умолчанию (м)"), Num(s.L, 3)});
+    res.AddRow({Text("Судно"), Text(s.units.model ? "малое (модель): D и P — кг, плечи — мм" : "большое: D и P — т, плечи — м")});
+    res.AddRow({Text(std::string("Водоизмещение D (") + s.units.Mass() + ")"), Num(s.D, s.units.model ? 3 : 1)});
+    res.AddRow({Text(std::string("Масса кренящего груза P (") + s.units.Mass() + ")"), Num(s.P, s.units.model ? 4 : 3)});
+    res.AddRow({Text(std::string("Плечо переноса L по умолчанию (") + s.units.Arm() + ")"), Num(s.L, s.units.model ? 1 : 3)});
     res.AddRow({Text("Крен — среднее за последние (с)"), Num(s.windowS, 0)});
     res.AddRow({Text("Ось угла"), Text(AxisName(s.axis))});
     res.AddRow({Text("Порог крена |θ| (°)"), Num(s.thresholdDeg, 2)});
@@ -154,7 +167,7 @@ inline std::vector<xlsx::Sheet> BuildReport(const Settings& s, const std::vector
     {
         if (!m.use)
             continue;
-        for (int p = 0; p < 2; p++)
+        for (int p = 0; p < kMaxPosts; p++)
         {
             const PostData& pd = m.post[p];
             if (pd.file < 0)
@@ -168,7 +181,7 @@ inline std::vector<xlsx::Sheet> BuildReport(const Settings& s, const std::vector
                     skipped++;
                     continue;
                 }
-                raw.AddRow({m.number > kPcRunBase ? Text(m.label) : Num(m.number, 0), Text(kPostName[p]), Text(sensor),
+                raw.AddRow({m.number > kPcRunBase ? Text(m.label) : Num(m.number, 0), Text(s.PostName(p)), Text(sensor),
                             r.day >= 0 ? Text(csvlog::DateText(r.day)) : xlsx::Empty(),
                             r.sec >= 0 ? Text(csvlog::ClockText(r.sec)) : xlsx::Empty(), Num(r.t, 3), Num(r.rawX, 2), Num(r.rawY, 2), Num(r.offX, 3),
                             Num(r.offY, 3), Num(r.calcX, 3), Num(r.calcY, 3), Num(r.batV, 1)});
@@ -178,6 +191,36 @@ inline std::vector<xlsx::Sheet> BuildReport(const Settings& s, const std::vector
     if (skipped && warning)
         *warning = "в листе «Сырые_данные» не поместилось строк: " + std::to_string(skipped) + " (предел программы — " +
                    std::to_string(kRawMaxRows) + ")";
+    // Посты (датчики заменяют вески) — сравнение между собой, если их больше одного
+    {
+        std::vector<int> used;
+        for (int p = 0; p < kMaxPosts; p++)
+            for (const Measurement& m : ms)
+                if (m.use && m.post[p].file >= 0 && std::find(used.begin(), used.end(), p) == used.end())
+                    used.push_back(p);
+        std::sort(used.begin(), used.end());
+        if (used.size() > 1)
+        {
+            xlsx::Sheet cmp("Сравнение постов");
+            std::vector<xlsx::Cell> h = {Text("Замер")};
+            for (const int p : used)
+                h.push_back(Text("Крен " + s.PostName(p) + " (°)"));
+            h.push_back(Text("Расхождение (°)"));
+            cmp.AddRow(h);
+            for (const Measurement& m : ms)
+            {
+                if (!m.use)
+                    continue;
+                std::vector<xlsx::Cell> r = {m.number > kPcRunBase ? Text(m.label) : Num(m.number, 0)};
+                for (const int p : used)
+                    r.push_back(m.post[p].file >= 0 ? Num(m.post[p].st.mean, 3) : xlsx::Empty());
+                r.push_back(Num(m.Spread(), 3));
+                cmp.AddRow(r);
+            }
+            detail::AutoWidths(cmp);
+            return {std::move(res), std::move(raw), std::move(cmp)};
+        }
+    }
     return {std::move(res), std::move(raw)};
 }
 
@@ -189,54 +232,77 @@ inline std::vector<xlsx::Sheet> BuildPositionsReport(const Settings& s, const st
     using xlsx::Num;
     using xlsx::Text;
     xlsx::Sheet res("Положения");
-    res.AddRow({Text("Положение"), Text("В расчёте"), Text("Начало (с)"), Text("Конец (с)"), Text("Длительность (с)"),
-                Text("Пост"), Text("Крен (°)"), Text("СКО (°)"), Text("Точек"), Text("Δθ (°)"), Text("Плечо l (м)"),
-                Text("h (м)"), Text("Примечание")});
+    const bool mm = s.units.model;
+    const std::size_t cols = mm ? 16 : 15, cH = 13, cNote = cols - 1;
+    {
+        std::vector<xlsx::Cell> h = {Text("Положение"), Text("В расчёте"), Text("Начало (с)"), Text("Конец (с)"),
+                                     Text("Длительность (с)"), Text("Пост"), Text("Крен, среднее (°)"), Text("СКО (°)"),
+                                     Text("Точек"), Text("Крен по методу (°)"), Text("Δθ (°)"),
+                                     Text(std::string("Плечо l (") + s.units.Arm() + ")"), Text("Окно метода (с)"),
+                                     Text("h (м)")};
+        if (mm)
+            h.push_back(Text("h (мм)"));
+        h.push_back(Text("Примечание"));
+        res.AddRow(h);
+    }
     for (std::size_t i = 0; i < pos.size(); i++)
     {
         const Position& p = pos[i];
-        for (int post = 0; post < 2; post++)
+        for (int post = 0; post < kMaxPosts; post++)
         {
             if (m.post[post].file < 0)
                 continue;
             const PointResult& r = p.res[post];
+            const filt::Estimate& e = p.est[post];
             const double t0 = std::min(p.t0, p.t1), t1 = std::max(p.t0, p.t1);
-            res.AddRow({Num(static_cast<double>(i + 1), 0), Text(p.use ? "да" : "нет"), Num(t0, 1), Num(t1, 1),
-                        Num(t1 - t0, 1), Text(kPostName[post]), Num(p.st[post].mean, 3), Num(p.st[post].sd, 3),
-                        Num(p.st[post].n, 0), Num(r.dTheta, 3),
-                        r.reference ? xlsx::Empty() : Num(std::isfinite(p.arm) ? std::fabs(p.arm) : s.L, 3),
-                        r.counted ? Num(r.h, 3) : xlsx::Empty(), Text(r.counted ? std::string() : r.note)});
+            std::vector<xlsx::Cell> row = {
+                Num(static_cast<double>(i + 1), 0), Text(p.use ? "да" : "нет"), Num(t0, 1), Num(t1, 1), Num(t1 - t0, 1),
+                Text(s.PostName(post)), Num(p.st[post].mean, 3), Num(p.st[post].sd, 3), Num(p.st[post].n, 0),
+                Num(p.Level(post), 3), Num(r.dTheta, 3),
+                r.reference ? xlsx::Empty() : Num(std::isfinite(p.arm) ? std::fabs(p.arm) : s.L, mm ? 1 : 3),
+                std::isfinite(e.winT0) ? Text(detail::Num(e.winT0, 1) + "…" + detail::Num(e.winT1, 1)) : xlsx::Empty(),
+                r.counted ? Num(r.h, 3) : xlsx::Empty()};
+            if (mm)
+                row.push_back(r.counted ? Num(r.h * 1000.0, 1) : xlsx::Empty());
+            row.push_back(Text(r.counted ? std::string() : r.note));
+            res.AddRow(row);
         }
     }
     res.AddRow(std::vector<xlsx::Cell>{});
-    std::vector<xlsx::Cell> total(13, xlsx::Empty());
+    std::vector<xlsx::Cell> total(cols, xlsx::Empty());
     total[0] = Text("ИТОГОВОЕ СРЕДНЕЕ ЗНАЧЕНИЕ:");
     total[8] = Num(sum.n, 0);
-    total[11] = Num(sum.h, 3);
-    total[12] = Text(sum.n ? "среднее h по " + std::to_string(sum.n) + " значениям (положение × пост)" +
-                                 (std::isfinite(sum.sd) ? ", СКО " + detail::Num(sum.sd, 3) + " м" : std::string())
-                           : std::string("нет учтённых значений"));
+    total[cH] = Num(sum.h, 3);
+    if (mm)
+        total[cH + 1] = Num(sum.h * 1000.0, 1);
+    total[cNote] = Text(sum.n ? "среднее h по " + std::to_string(sum.n) + " значениям (положение × пост)" +
+                                    (std::isfinite(sum.sd) ? ", СКО " + detail::Num(sum.sd, 3) + " м" : std::string())
+                              : std::string("нет учтённых значений"));
     res.AddRow(total);
-    std::vector<xlsx::Cell> ls(13, xlsx::Empty());
+    std::vector<xlsx::Cell> ls(cols, xlsx::Empty());
     ls[0] = Text("По МНК:");
     ls[8] = Num(sum.ls.n, 0);
-    ls[11] = Num(sum.ls.h, 3);
-    ls[12] = Text(FitText(sum.ls));
+    ls[cH] = Num(sum.ls.h, 3);
+    if (mm)
+        ls[cH + 1] = Num(sum.ls.h * 1000.0, 1);
+    ls[cNote] = Text(FitText(sum.ls));
     res.AddRow(ls);
     detail::AutoWidths(res);
     res.AddRow(std::vector<xlsx::Cell>{});
     res.AddRow({Text("Исходные данные")});
     std::string files1;
-    for (int post = 0; post < 2; post++)
+    for (int post = 0; post < kMaxPosts; post++)
         if (m.post[post].file >= 0)
             files1 += (files1.empty() ? "" : ", ") + files[static_cast<std::size_t>(m.post[post].file)].name + " (" +
-                      kPostName[post] + ")";
+                      s.PostName(post) + ")";
     res.AddRow({Text("Запись (весь опыт одним файлом)"), Text(files1)});
-    res.AddRow({Text("Водоизмещение D (т)"), Num(s.D, 1)});
-    res.AddRow({Text("Масса кренящего груза P (т)"), Num(s.P, 2)});
-    res.AddRow({Text("Плечо переноса L по умолчанию (м)"), Num(s.L, 3)});
+    res.AddRow({Text("Судно"), Text(s.units.model ? "малое (модель): D и P — кг, плечи — мм" : "большое: D и P — т, плечи — м")});
+    res.AddRow({Text(std::string("Водоизмещение D (") + s.units.Mass() + ")"), Num(s.D, s.units.model ? 3 : 1)});
+    res.AddRow({Text(std::string("Масса кренящего груза P (") + s.units.Mass() + ")"), Num(s.P, s.units.model ? 4 : 3)});
+    res.AddRow({Text(std::string("Плечо переноса L по умолчанию (") + s.units.Arm() + ")"), Num(s.L, s.units.model ? 1 : 3)});
     res.AddRow({Text("Ось угла"), Text(AxisName(s.axis))});
     res.AddRow({Text("Порог |Δθ| (°)"), Num(s.thresholdDeg, 2)});
+    res.AddRow({Text("Обработка сигнала положения"), Text(filt::Describe(s.filter))});
     res.AddRow({Text("Положение не короче (с)"), Num(s.minPlateauS, 0)});
     res.AddRow({Text("Перепад между положениями не меньше (°)"), Num(s.minStepDeg, 2)});
     res.AddRow({Text("Формула"), Text("Δθ = крен положения − крен начального (первого учтённого); h = P·l / (D·tg|Δθ|); "
@@ -254,7 +320,7 @@ inline std::vector<xlsx::Sheet> BuildPositionsReport(const Settings& s, const st
                 Text("RawY"), Text("OffsetX"), Text("OffsetY"), Text("CalcX"), Text("CalcY"), Text("BatV")});
     raw.widths = {10, 8, 9, 12, 10, 10, 9, 9, 9, 9, 9, 9, 7};
     std::size_t skipped = 0;
-    for (int post = 0; post < 2; post++)
+    for (int post = 0; post < kMaxPosts; post++)
     {
         if (m.post[post].file < 0)
             continue;
@@ -271,7 +337,7 @@ inline std::vector<xlsx::Sheet> BuildPositionsReport(const Settings& s, const st
             for (std::size_t i = 0; i < pos.size() && !in; i++)
                 if (r.t >= std::min(pos[i].t0, pos[i].t1) && r.t <= std::max(pos[i].t0, pos[i].t1))
                     in = static_cast<int>(i) + 1;
-            raw.AddRow({in ? Num(in, 0) : xlsx::Empty(), Text(kPostName[post]), Text(sensor),
+            raw.AddRow({in ? Num(in, 0) : xlsx::Empty(), Text(s.PostName(post)), Text(sensor),
                         r.day >= 0 ? Text(csvlog::DateText(r.day)) : xlsx::Empty(),
                         r.sec >= 0 ? Text(csvlog::ClockText(r.sec)) : xlsx::Empty(), Num(r.t, 3), Num(r.rawX, 2),
                         Num(r.rawY, 2), Num(r.offX, 3), Num(r.offY, 3), Num(r.calcX, 3), Num(r.calcY, 3), Num(r.batV, 1)});
@@ -280,6 +346,34 @@ inline std::vector<xlsx::Sheet> BuildPositionsReport(const Settings& s, const st
     if (skipped && warning)
         *warning = "в листе «Сырые_данные» не поместилось строк: " + std::to_string(skipped) + " (предел программы — " +
                    std::to_string(kRawMaxRows) + ")";
+    // Посты (датчики заменяют вески) — сравнение между собой, если их больше одного
+    {
+        std::vector<int> used;
+        for (int p = 0; p < kMaxPosts; p++)
+            if (m.post[p].file >= 0)
+                used.push_back(p);
+        if (used.size() > 1)
+        {
+            xlsx::Sheet cmp("Сравнение постов");
+            std::vector<xlsx::Cell> h = {Text("Положение"), Text("Начало (с)"), Text("Конец (с)")};
+            for (const int p : used)
+                h.push_back(Text("Крен " + s.PostName(p) + " (°)"));
+            h.push_back(Text("Расхождение (°)"));
+            cmp.AddRow(h);
+            for (std::size_t i = 0; i < pos.size(); i++)
+            {
+                const Position& q = pos[i];
+                std::vector<xlsx::Cell> r = {Num(static_cast<double>(i + 1), 0), Num(std::min(q.t0, q.t1), 1),
+                                             Num(std::max(q.t0, q.t1), 1)};
+                for (const int p : used)
+                    r.push_back(Num(q.Level(p), 3));
+                r.push_back(Num(q.Spread(), 3));
+                cmp.AddRow(r);
+            }
+            detail::AutoWidths(cmp);
+            return {std::move(res), std::move(raw), std::move(cmp)};
+        }
+    }
     return {std::move(res), std::move(raw)};
 }
 

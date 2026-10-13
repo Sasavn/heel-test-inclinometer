@@ -88,6 +88,36 @@ inline bool PickFile(std::string& path, const wchar_t* filter, const wchar_t* ti
 #endif
 }
 
+// Сохранить как: path — предлагаемое имя (и папка); ext — расширение по умолчанию без точки.
+inline bool SaveFile(std::string& path, const wchar_t* filter, const wchar_t* title, const wchar_t* ext)
+{
+#ifdef _WIN32
+    wchar_t buf[MAX_PATH] = {};
+    const std::wstring init = text::Widen(path);
+    if (init.size() < MAX_PATH)
+        wcscpy_s(buf, init.c_str());
+    OPENFILENAMEW ofn{};
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner = GetActiveWindow();
+    ofn.lpstrFilter = filter;
+    ofn.lpstrFile = buf;
+    ofn.nMaxFile = MAX_PATH;
+    ofn.lpstrTitle = title;
+    ofn.lpstrDefExt = ext;
+    ofn.Flags = OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR | OFN_HIDEREADONLY;
+    if (!GetSaveFileNameW(&ofn))
+        return false;
+    path = text::Narrow(buf);
+    return true;
+#else
+    (void) path;
+    (void) filter;
+    (void) title;
+    (void) ext;
+    return false;
+#endif
+}
+
 // Несколько файлов сразу (Ctrl/Shift в окне выбора); dir — папка, с которой открыть окно.
 inline bool PickFiles(std::vector<std::string>& paths, const std::string& dir, const wchar_t* filter, const wchar_t* title)
 {

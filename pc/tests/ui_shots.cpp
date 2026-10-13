@@ -21,7 +21,10 @@
 #include <imgui_internal.h>
 #include <implot.h>
 
+#include <functional>
+
 #include "PngWriter.hpp"
+#include "RulesMockups.hpp"
 #include "TestUtil.hpp"
 #include "core/TextUtil.hpp"
 #include "fw/Firmware.hpp"
@@ -72,6 +75,7 @@ std::vector<std::pair<std::string, std::string>> ShownPaths(const fs::path& work
 const unsigned char* g_tex = nullptr;
 int g_texW = 0, g_texH = 0;
 std::string g_out = "shots";
+std::string g_mockOut; // --mock-out: куда класть макеты (по умолчанию — туда же, куда снимки)
 int g_shots = 0;
 long long g_badIdx = 0;
 
@@ -305,6 +309,8 @@ int main(int argc, char** argv)
     for (int i = 1; i + 1 < argc; i++)
         if (std::strcmp(argv[i], "--out") == 0)
             g_out = argv[i + 1];
+        else if (std::strcmp(argv[i], "--mock-out") == 0)
+            g_mockOut = argv[i + 1];
     std::error_code ec;
     fs::create_directories(g_out, ec);
 
@@ -676,6 +682,45 @@ int main(int argc, char** argv)
         wait();
         fs::copy_file(real / L"График_Нос.png", fs::path(g_out) / "21_process_real_export.png",
                       fs::copy_options::overwrite_existing, ec);
+        fs::copy_file(real / L"Положения_Нос.png", fs::path(g_out) / "22_process_positions_export.png",
+                      fs::copy_options::overwrite_existing, ec);
+        CHECK_MSG(fs::file_size(real / L"Положения_Нос.png", ec) > 10000, "нет картинки положений");
+        // Положение 2 крупно: исходный сигнал, обработанный (медиана + EMA), среднее по обработанному
+        app.ProcessSelectPosition(1);
+        st.Run(7000); // уведомление о сохранении погасло
+        st.Shot("22_process_position", true);
+        ui::ApplyTheme(true, 1.f);
+        ImPlot::StyleColorsDark();
+        st.Shot("22_process_position_dark", true);
+        ui::ApplyTheme(false, 1.f);
+        ImPlot::StyleColorsLight();
+        // Малое судно (модель): D и P в кг, плечи в мм; h — ещё и в мм
+        app.ProcessSetSmallShip(true);
+        for (int i = 1; i < 10; i++)
+            app.ProcessSetPositionArm(i, 50.0 * i);
+        st.Run(300);
+        st.Shot("23_process_small_ship", true);
+        app.ProcessSetSmallShip(false);
+        // Окно «Свой метод обработки»: пресет «статья» формулами, предпросмотр на положении 2 рядом с Калманом
+        app.ProcessSelectPosition(1);
+        app.ProcessUseUserMethod(um::PresetArticle(), false);
+        app.ProcessShowMethodWindow(true);
+        st.Run(300);
+        st.Shot("24_process_user_method");
+        app.ProcessShowMethodWindow(false);
+        app.ProcessSelectPosition(-1);
+        st.Run(300);
+
+        // Названия датчиков (посты): опыт с Д2 и Д3 — «Нос, ЛБ» и «Мидель»
+        app.ProcessOpen(text::PathToUtf8(ShotsWorkDir() / L"Опыт кренования"));
+        wait();
+        app.ProcessSetSensorName(2, "Нос, ЛБ");
+        app.ProcessSetSensorName(3, "Мидель");
+        st.Run(7000);
+        st.Shot("25_process_sensor_names", true);
+        app.ProcessSetSensorName(2, "Нос");
+        app.ProcessSetSensorName(3, "Корма");
+        st.Run(300);
     }
 
     SECTION("о программе");
@@ -683,6 +728,50 @@ int main(int argc, char** argv)
     app.ShowAbout(true);
     st.Run(1000);
     st.Shot("15_about");
+
+    // Макеты предложений по Правилам РС (не функции программы): отдельные экраны в стиле программы
+    SECTION("макеты: мастер опыта, проверка по Правилам, протокол");
+    {
+        const mock::Experiment ex = mock::FromSynthetic(testutil::TestDataDir() / "continuous" / "2026-10-09_M020_D2.CSV");
+        CHECK_MSG(ex.m.size() == 9 && ex.excluded >= 0, "замеров %zu, исключён %d", ex.m.size(), ex.excluded);
+        CHECK_RANGE(ex.hk, 0.75, 0.85, "h_k по табл. 6.5 после отбраковки");
+        const std::string outDir = g_mockOut.empty() ? g_out : g_mockOut;
+        fs::create_directories(outDir, ec);
+        auto shot = [&](const char* name, const std::function<void()>& body, bool dark) {
+            ui::ApplyTheme(dark, 1.f);
+            if (dark)
+                ImPlot::StyleColorsDark();
+            else
+                ImPlot::StyleColorsLight();
+            for (int i = 0; i < 4; i++)
+            {
+                ImGuiIO& io = ImGui::GetIO();
+                io.DisplaySize = ImVec2(1280, 800);
+                io.DeltaTime = 1.f / 30.f;
+                ImGui::NewFrame();
+                ImGui::SetNextWindowPos(ImVec2(0, 0));
+                ImGui::SetNextWindowSize(io.DisplaySize);
+                ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16, 12));
+                ImGui::Begin("##mock", nullptr,
+                             ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
+                                 ImGuiWindowFlags_NoBringToFrontOnFocus);
+                ImGui::PopStyleVar();
+                body();
+                ImGui::End();
+                ImGui::Render();
+            }
+            const std::string path = (fs::path(outDir) / (std::string(name) + ".png")).string();
+            CHECK_MSG(Rasterize(path, ui::pal.bg), "не записан %s", path.c_str());
+            std::printf("  %s\n", path.c_str());
+            g_shots++;
+        };
+        shot("30_mock_wizard", [] { mock::Wizard(); }, false);
+        shot("31_mock_checks", [&] { mock::Checks(ex); }, false);
+        shot("32_mock_protocol", [&] { mock::Protocol(ex); }, false);
+        shot("31_mock_checks_dark", [&] { mock::Checks(ex); }, true);
+        ui::ApplyTheme(false, 1.f);
+        ImPlot::StyleColorsLight();
+    }
 
     CHECK_MSG(g_badIdx == 0, "индексов вне буфера: %lld", g_badIdx);
     std::printf("снимков: %d в %s\n", g_shots, fs::absolute(g_out).string().c_str());

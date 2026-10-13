@@ -16,6 +16,9 @@
 #include "TestUtil.hpp"
 #include "core/CsvLog.hpp"
 #include "core/Deflate.hpp"
+#include "core/Expr.hpp"
+#include "core/Filters.hpp"
+#include "core/UserMethod.hpp"
 #include "core/Heel.hpp"
 #include "core/HeelData.hpp"
 #include "core/HeelReport.hpp"
@@ -31,6 +34,13 @@ namespace
 {
 
 const double kDeg = heel::kPi / 180.0;
+
+std::string Fmt3(double v)
+{
+    char b[32];
+    std::snprintf(b, sizeof(b), "%.3f", v);
+    return b;
+}
 
 void WriteText(const fs::path& p, const std::string& s)
 {
@@ -515,8 +525,15 @@ void TestGroupingAndReport()
     std::string warn;
     const auto sheets = heel::BuildReport(s, files, ms, sum, info, &warn);
     CHECK(warn.empty());
-    CHECK(sheets.size() == 2);
-    if (sheets.size() == 2)
+    CHECK(sheets.size() == 3); // + «Сравнение постов»: постов два
+    if (sheets.size() == 3)
+    {
+        const auto& cmp = sheets[2];
+        CHECK(cmp.name == "Сравнение постов" && cmp.rows[0].size() == 4 && cmp.rows[0][1].text == "Крен Нос (°)");
+        CHECK_NEAR(cmp.rows[1][3].num, ms[0].Spread(), 1e-12, "расхождение постов замера 1");
+        CHECK_NEAR(ms[0].Spread(), 0.02, 1e-9, "Д2 1,00° и Д3 1,02°");
+    }
+    if (sheets.size() >= 2)
     {
         const auto& res = sheets[0];
         CHECK(res.name == "Результаты");
@@ -869,7 +886,8 @@ void TestContinuous()
             if (pos.size() == 10)
             {
                 CHECK(pos[0].res[0].reference && std::isnan(pos[0].st[1].mean));
-                CHECK_NEAR(pos[1].res[0].dTheta, pos[1].st[0].mean - pos[0].st[0].mean, 1e-12, "Δθ");
+                CHECK_NEAR(pos[1].res[0].dTheta, pos[1].Level(0) - pos[0].Level(0), 1e-12, "Δθ (по методу обработки)");
+                CHECK(std::isfinite(pos[1].est[0].level) && pos[1].est[0].winT1 >= pos[1].est[0].winT0);
                 CHECK_NEAR(pos[1].res[0].h, heel::Height(s.P, 2.0, s.D, pos[1].res[0].dTheta), 1e-12, "h положения 2");
                 CHECK(!pos[3].res[0].counted && pos[3].res[0].note == "не в расчёте");
                 CHECK(sum.n == 8); // 10 − начальное − снятое
@@ -879,13 +897,62 @@ void TestContinuous()
             if (sheets.size() == 2)
             {
                 CHECK(sheets[0].rows.size() > 12 && sheets[0].rows[1][0].num == 1.0);
-                CHECK(sheets[0].rows[2][9].kind == xlsx::Cell::Kind::Number); // Δθ
+                CHECK(sheets[0].rows[2][10].kind == xlsx::Cell::Kind::Number); // Δθ
+                CHECK(sheets[0].rows[0][11].text == "Плечо l (м)" && sheets[0].rows[0][9].text == "Крен по методу (°)");
                 CHECK(sheets[1].rows.size() == 1 + loaded.files[ms[0].post[0].file >= 0 ? static_cast<std::size_t>(ms[0].post[0].file) : 0].log.rows.size());
                 bool inPos = false;
                 for (const auto& row : sheets[1].rows)
                     inPos |= row[0].kind == xlsx::Cell::Kind::Number && row[0].num == 10.0;
                 CHECK(inPos);
             }
+            // Малое судно: тот же опыт в кг и мм — тот же h; в отчёте — единицы кг/мм и h в мм
+            heel::Settings sm = s;
+            sm.units.model = true;
+            sm.D = s.D * 1000.0;
+            sm.P = s.P * 1000.0;
+            sm.L = s.L * 1000.0;
+            auto posMm = pos;
+            for (auto& q : posMm)
+                q.arm *= 1000.0;
+            const auto sumMm = heel::ComputePositions(sm, loaded.files, ms[0], posMm);
+            CHECK_NEAR(sumMm.h, sum.h, 1e-12, "h: т и м = кг и мм");
+            CHECK_NEAR(sumMm.ls.h, sum.ls.h, 1e-12, "h по МНК: т и м = кг и мм");
+            CHECK_NEAR(posMm[2].res[0].h, pos[2].res[0].h, 1e-12, "h положения 3");
+            const auto shMm = heel::BuildPositionsReport(sm, loaded.files, ms[0], posMm, sumMm, {});
+            CHECK(shMm[0].rows[0][11].text == "Плечо l (мм)" && shMm[0].rows[0][14].text == "h (мм)");
+            CHECK_NEAR(shMm[0].rows[3][14].num, posMm[2].res[0].h * 1000.0, 1e-9, "h в мм");
+            bool massKg = false;
+            for (const auto& row : shMm[0].rows)
+                massKg |= !row.empty() && row[0].text == "Водоизмещение D (кг)";
+            CHECK(massKg);
+            // «Файл = замер» в кг и мм — тот же h
+            auto msT = heel::Group(loaded.files, {});
+            auto msK = msT;
+            for (auto& q : msT)
+                q.arm = 2.0;
+            for (auto& q : msK)
+                q.arm = 2000.0;
+            CHECK_NEAR(heel::Compute(sm, loaded.files, msK).h, heel::Compute(s, loaded.files, msT).h, 1e-12,
+                       "файл = замер: т и м = кг и мм");
+
+            // Ручные правки положений: сохранить, прочитать (в других единицах), забыть
+            const fs::path edits = fs::temp_directory_path() / L"krenomer_process_test_правки";
+            std::error_code ec;
+            fs::remove_all(edits, ec);
+            const std::string key = heel::EditsKey(loaded.files[0], 0);
+            CHECK(key.size() == 16 && key != heel::EditsKey(loaded.files[0], 1));
+            auto edited = pos;
+            edited[1].t0 += 2.5;
+            edited[3].use = false;
+            edited.erase(edited.begin() + 5);
+            CHECK(heel::SavePositionEdits(edits, key, edited, s.units));
+            std::vector<heel::Position> back;
+            CHECK(heel::LoadPositionEdits(edits, key, back, sm.units)); // прочитаны в мм
+            CHECK(back.size() == edited.size() && !back[3].use && std::fabs(back[1].t0 - edited[1].t0) < 1e-3);
+            CHECK_NEAR(back[2].arm, edited[2].arm * 1000.0, 1e-6, "плечо из м в мм");
+            CHECK(std::isnan(back[0].arm) == std::isnan(edited[0].arm));
+            heel::ForgetPositionEdits(edits, key);
+            CHECK(!heel::LoadPositionEdits(edits, key, back, s.units));
         }
         // Папка коротких замеров — «файл = замер»
         const auto shortSet = heel::LoadAll({testutil::TestDataDir() / "2026-10-08_M019_D2.CSV"}, "", nullptr, &s);
@@ -1006,6 +1073,334 @@ void TestRealRecord()
     CHECK(heel::SuggestRecord(loaded.files, heel::Group(loaded.files, {})) == 0);
 }
 
+// Обработка сигнала положения (Filters.hpp): фильтры по статье, альтернативы, сравнение методов.
+void TestFilters()
+{
+    SECTION("фильтры: медиана по 3 последним, EMA, α по (12), Савицкий–Голай, частота качки, синусоида, Калман");
+    {
+        const auto med = filt::MedianCausal({1, 9, 2, 3, 100, 4, 5}, 3);
+        CHECK(med == std::vector<double>({1, 5, 2, 3, 3, 4, 5}));
+        const auto ema = filt::Ema({0, 10, 10}, 0.5);
+        CHECK(ema == std::vector<double>({0, 5, 7.5}));
+        CHECK_NEAR(filt::AlphaFor(0.5, 20.0), 0.13575, 1e-4, "α при fоп = 20 Гц (статья: 0,136)");
+        CHECK_NEAR(filt::AlphaFor(0.5, 10.0), 0.23906, 1e-4, "α при 10 Гц");
+        std::vector<double> t, x;
+        for (int i = 0; i < 200; i++)
+        {
+            t.push_back(i * 0.1);
+            x.push_back(1.0 + 0.5 * t.back() - 0.02 * t.back() * t.back());
+        }
+        const auto sg = filt::SavGol(t, x, 4.0, 2);
+        CHECK_NEAR(sg[100], x[100], 1e-9, "Савицкий–Голай: парабола без искажения");
+        CHECK_NEAR(sg[0], x[0], 1e-9, "Савицкий–Голай: край");
+        x.clear();
+        for (const double tt : t)
+            x.push_back(2.0 + 1.2 * std::exp(-tt / 15.0) * std::sin(2 * heel::kPi * tt / 8.0 + 0.4));
+        CHECK_NEAR(filt::DominantOmega(t, x), 2 * heel::kPi / 8.0, 0.05, "частота качки");
+        const auto fit = filt::FitDampedSine(t, x);
+        CHECK(fit.ok);
+        CHECK_NEAR(fit.level, 2.0, 1e-3, "затухающая синусоида: равновесный угол");
+        CHECK_NEAR(fit.omega, 2 * heel::kPi / 8.0, 1e-2, "затухающая синусоида: ω");
+        const auto kl = filt::KalmanLevel(t, x, 2 * heel::kPi / 8.0);
+        CHECK_NEAR(kl.back(), 2.0, 0.05, "Калман: уровень");
+        filt::Params p;
+        CHECK(p.method == filt::Method::Kalman); // по умолчанию — Калман
+        p.method = filt::Method::MedianEma;
+        const auto e = filt::EstimateSpan(t, x, filt::ProcessSeries(t, x, p), 0.0, 19.9, p);
+        CHECK_MSG(e.alpha > 0.23 && e.alpha < 0.25, "α %.4f", e.alpha);
+        CHECK_MSG(e.tcS > 6.0 && e.tcS < 12.0, "Tc %.2f", e.tcS); // 2,5 качания затухающей синусоиды — грубо
+        CHECK_NEAR(e.winT0, 0.0, 1e-9, "участок короче 3·Tc — окно Ω на весь участок");
+        const auto e2 = filt::EstimateSpan(t, x, filt::ProcessSeries(t, x, p), 0.0, 19.9, [] {
+            filt::Params q;
+            q.method = filt::Method::MedianEma;
+            q.tcS = 4.0;
+            return q;
+        }());
+        CHECK_NEAR(e2.winT0, e2.winT1 - 12.0 + 0.05, 1e-9, "окно Ω = 3·Tc в конце участка");
+    }
+
+    SECTION("сравнение методов: синтетика (истина известна), записи с качкой и выбросами, запись руководителя");
+    struct Row
+    {
+        double err = 0, spread = 0, settle = 0;
+        int n = 0, nSpread = 0, fail = 0;
+    };
+    struct Variant
+    {
+        const char* name;
+        filt::Params p;
+    };
+    std::vector<Variant> vars;
+    for (int m = 0; m < filt::kBuiltinCount; m++)
+    {
+        filt::Params p;
+        p.method = static_cast<filt::Method>(m);
+        vars.push_back({filt::MethodName(p.method), p});
+        if (p.method == filt::Method::MedianEma)
+        {
+            p.wholeSpan = true;
+            vars.push_back({"Медиана + EMA, весь участок", p});
+        }
+    }
+    const int nv = static_cast<int>(vars.size());
+    Row rows[3][8];
+    auto add = [&](int set, int m, const filt::Quality& q, double truth) {
+        Row& r = rows[set][m];
+        if (!std::isfinite(q.level))
+        {
+            r.fail++;
+            return;
+        }
+        r.n++;
+        if (std::isfinite(truth))
+            r.err += std::fabs(q.level - truth);
+        if (std::isfinite(q.spread))
+        {
+            r.spread += q.spread;
+            r.nSpread++;
+        }
+        r.settle += q.settleS;
+    };
+    // 1. Одно положение: истина 2,000°, затухающая качка 1,5° (8 с, τ 20 с) + постоянная 0,3° (11 с) + шум 0,05° +
+    //    5 одиночных выбросов ±3° и всплеск 1,5 с; участок 3…60 с. Пять реализаций шума.
+    for (unsigned seed = 1; seed <= 5; seed++)
+    {
+        std::mt19937 rng(seed);
+        std::normal_distribution<double> nz(0.0, 0.05);
+        std::vector<double> t, x;
+        for (int i = 0; i <= 600; i++)
+        {
+            const double tt = i * 0.1;
+            double v = 2.0 + 1.5 * std::exp(-tt / 20.0) * std::sin(2 * heel::kPi * tt / 8.0 + 0.3 * seed) +
+                       0.3 * std::sin(2 * heel::kPi * tt / 11.0 + seed) + nz(rng);
+            if (i % 113 == 57)
+                v += (i % 2 ? 3.0 : -3.0);
+            if (tt >= 30.0 && tt < 31.5)
+                v += 2.5;
+            t.push_back(tt);
+            x.push_back(v);
+        }
+        for (int m = 0; m < nv; m++)
+            add(0, m, filt::Assess(t, x, 3.0, 60.0, vars[static_cast<std::size_t>(m)].p), 2.0);
+    }
+    // 2. Синтетическая запись опыта (tests/data/continuous): положения — детектором, истина — truth.txt
+    {
+        csvlog::Log log;
+        csvlog::ReadFile(testutil::TestDataDir() / "continuous" / "2026-10-09_M020_D2.CSV", log);
+        std::vector<double> t, x;
+        heel::Series(log, 0, t, x);
+        const double truth[10] = {0, 3, 6, 8, 10.5, -2.5, -6, -9.5, -12, 0.3};
+        const auto ps = plateau::Detect(t, x, plateau::Params{});
+        for (std::size_t i = 0; i < ps.size() && i < 10; i++)
+            for (int m = 0; m < nv; m++)
+                add(1, m, filt::Assess(t, x, ps[i].t0, ps[i].t1, vars[static_cast<std::size_t>(m)].p), truth[i]);
+    }
+    // 3. Запись руководителя (tests/data/real): истины нет — устойчивость и сходимость
+    {
+        csvlog::Log log;
+        csvlog::ReadFile(testutil::TestDataDir() / "real" / "2026-10-09_M020_D2.CSV", log);
+        std::vector<double> t, x;
+        heel::Series(log, 0, t, x);
+        const auto ps = plateau::Detect(t, x, plateau::Params{});
+        std::printf("    запись руководителя, крен положений по методам, °:\n      №  ");
+        for (int m = 0; m < nv; m++)
+            std::printf(" | %s", vars[static_cast<std::size_t>(m)].name);
+        std::printf("\n");
+        for (std::size_t i = 0; i < ps.size(); i++)
+        {
+            std::printf("     %2zu  ", i + 1);
+            for (int m = 0; m < nv; m++)
+            {
+                const auto q = filt::Assess(t, x, ps[i].t0, ps[i].t1, vars[static_cast<std::size_t>(m)].p);
+                add(2, m, q, heel::kNaN);
+                std::printf(" %+11.3f (%4.0f с) ", q.level, q.settleS);
+            }
+            std::printf("\n");
+        }
+    }
+    const char* setName[3] = {"одно положение, 5 реализаций (истина 2°)", "синтетическая запись, 10 положений",
+                              "запись руководителя M020, 10 положений"};
+    for (int s = 0; s < 3; s++)
+    {
+        std::printf("    %s:\n      | метод | |ошибка|, ° | разброс окон 15 с, ° | до ±0,02° от итога, с |\n",
+                    setName[s]);
+        for (int m = 0; m < nv; m++)
+        {
+            const Row& r = rows[s][m];
+            std::printf("      | %s | %s | %.3f | %.1f |%s\n", vars[static_cast<std::size_t>(m)].name,
+                        s == 2 ? "—" : Fmt3(r.n ? r.err / r.n : heel::kNaN).c_str(),
+                        r.nSpread ? r.spread / r.nSpread : heel::kNaN, r.n ? r.settle / r.n : heel::kNaN,
+                        r.fail ? " (не сошлось)" : "");
+        }
+    }
+    // Метод статьи на синтетике — в пределах 0,1° от истины
+    CHECK(rows[1][0].n == 10 && rows[1][0].err / rows[1][0].n < 0.1);
+    CHECK(rows[0][0].n == 5 && rows[0][0].err / rows[0][0].n < 0.15);
+}
+
+// Формулы (Expr.hpp) и свои методы (UserMethod.hpp).
+void TestUserMethod()
+{
+    SECTION("формулы: разбор, вычисление, ошибки с позицией, ограничения");
+    {
+        auto val = [](const char* src) {
+            expr::Error err;
+            const double v = expr::Constant(src, expr::Env{}, {}, err);
+            CHECK_MSG(err.Ok(), "«%s»: %s", src, err.msg.c_str());
+            return v;
+        };
+        CHECK_NEAR(val("1 + 2*3^2"), 19.0, 1e-12, "приоритет");
+        CHECK_NEAR(val("2^3^2"), 512.0, 1e-12, "степень справа налево");
+        CHECK_NEAR(val("-2^2"), -4.0, 1e-12, "унарный минус");
+        CHECK_NEAR(val("(1 + 2) * 3"), 9.0, 1e-12, "скобки");
+        CHECK_NEAR(val("max(1, 5, 3) + min(4, 2) + mean(1, 2, 3)"), 9.0, 1e-12, "min/max/mean");
+        CHECK_NEAR(val("if(1 > 2, 10, 20) + (1 < 2 ? 3 : 4)"), 23.0, 1e-12, "условие");
+        CHECK_NEAR(val("abs(-3) + sqrt(16) + ln(exp(2)) + atan(1)*4/pi"), 10.0, 1e-12, "функции");
+        CHECK_NEAR(val("1 and 0 or not 0"), 1.0, 1e-12, "логика");
+        CHECK_NEAR(val("2.5e-1 * 4 == 1"), 1.0, 1e-12, "сравнение");
+        CHECK(std::isnan(val("sqrt(-1)")) && std::isinf(val("1/0")));
+        struct Bad
+        {
+            const char* src;
+            std::size_t pos;
+            const char* msg;
+        };
+        expr::Env env;
+        env.vars = {"a"};
+        env.allowIndex = env.allowY = env.allowSeries = true;
+        const Bad bad[] = {
+            {"1 + ", 5, "формула оборвана"},          {"foo(1)", 1, "неизвестная функция «foo»"},
+            {"a + b", 5, "неизвестное имя «b»"},      {"(1 + 2", 7, "ожидалась «)»"},
+            {"2 $ 3", 3, "непонятный знак"},          {"y[n]", 1, "y[n] ещё не посчитано"},
+            {"x[n+1]", 4, "индекс"},                  {"y + 1", 1, "y без индекса"},
+            {"abs(1, 2)", 1, "abs(…): нужно 1"},     {"median(a, 3)", 1, "первый аргумент — x"},
+            {"1 2", 3, "лишнее в конце"},             {"avg()", 1, "только в правиле среднего"},
+        };
+        for (const Bad& b : bad)
+        {
+            expr::Program p;
+            expr::Error err;
+            CHECK_MSG(!expr::Compile(b.src, env, p, err), "«%s» разобрано, а не должно", b.src);
+            CHECK_MSG(err.pos == b.pos && err.msg.find(b.msg) != std::string::npos, "«%s»: знак %zu, «%s»", b.src, err.pos,
+                      err.msg.c_str());
+        }
+        expr::Program p;
+        expr::Error err;
+        std::string longText(2100, '1');
+        CHECK(!expr::Compile(longText, env, p, err) && err.msg.find("длиннее") != std::string::npos);
+        std::string deep;
+        for (int i = 0; i < 200; i++)
+            deep += "(";
+        CHECK(!expr::Compile(deep + "1", env, p, err));
+        std::string many = "1";
+        for (int i = 0; i < 700; i++)
+            many += "+1";
+        CHECK(!expr::Compile(many, env, p, err) && err.msg.find("сложная") != std::string::npos);
+    }
+
+    SECTION("свой метод: текст, ошибки, пресет «статья» = встроенный метод статьи (1e-9), нечисловые значения");
+    {
+        const um::Method art = um::PresetArticle();
+        um::Method back;
+        std::string err;
+        CHECK(um::FromText(um::ToText(art), back, &err));
+        CHECK(back.name == art.name && back.consts == art.consts && back.stages.size() == 2 &&
+              back.stages[1].formula == art.stages[1].formula && back.mean == um::MeanKind::Window && back.meanArg == "3*Tc");
+        CHECK(!um::FromText("hello", back, &err) && err.find("krenomer-method") != std::string::npos);
+        CHECK(!um::FromText("krenomer-method 1\nfoo = 1\n", back, &err) && err.find("строка 2") != std::string::npos);
+
+        um::Problem pr;
+        um::Method badM = art;
+        badM.stages[1].formula = "a*x + z";
+        CHECK(!um::Build(badM, pr) && pr.Text() == "Стадия 2, знак 7: неизвестное имя «z»");
+        badM = art;
+        badM.consts.push_back({"x", "1"});
+        CHECK(!um::Build(badM, pr) && pr.where.find("Константа") == 0);
+        badM = art;
+        badM.mean = um::MeanKind::Expr;
+        badM.meanArg = "avgw(";
+        CHECK(!um::Build(badM, pr) && pr.where == "Правило среднего");
+
+        // Пресет «статья» формулами против встроенного метода статьи на синтетической записи
+        csvlog::Log log;
+        csvlog::ReadFile(testutil::TestDataDir() / "continuous" / "2026-10-09_M020_D2.CSV", log);
+        std::vector<double> t, x;
+        heel::Series(log, 0, t, x);
+        const auto ua = um::Build(art, pr);
+        CHECK_MSG(ua != nullptr, "%s", pr.Text().c_str());
+        if (ua)
+        {
+            filt::Params bi;
+            bi.method = filt::Method::MedianEma;
+            filt::Params us;
+            us.method = filt::Method::User;
+            us.custom = ua;
+            const auto a = filt::ProcessSeries(t, x, bi), b = filt::ProcessSeries(t, x, us);
+            double worst = 0;
+            for (std::size_t i = 0; i < a.size() && i < b.size(); i++)
+                worst = std::max(worst, std::fabs(a[i] - b[i]));
+            CHECK(a.size() == b.size() && a.size() == t.size());
+            CHECK_MSG(worst < 1e-9, "обработанный сигнал: расхождение %.3g", worst);
+            const auto ps = plateau::Detect(t, x, plateau::Params{});
+            CHECK(ps.size() == 10);
+            for (const auto& sp : ps)
+            {
+                const auto ea = filt::EstimateSpan(t, x, a, sp.t0, sp.t1, bi);
+                const auto eb = filt::EstimateSpan(t, x, b, sp.t0, sp.t1, us);
+                CHECK_NEAR(eb.level, ea.level, 1e-9, "крен положения: формулы = встроенный");
+                CHECK_NEAR(eb.winT0, ea.winT0, 1e-9, "окно Ω");
+            }
+            // Через heel: свой метод в настройках расчёта
+            std::vector<heel::File> files{heel::LoadFile(testutil::TestDataDir() / "continuous" / "2026-10-09_M020_D2.CSV")};
+            auto ms = heel::Group(files, {});
+            heel::Settings s1, s2;
+            s1.filter = bi;
+            s2.filter = us;
+            auto p1 = heel::FindPositions(s1, files, ms[0]), p2 = p1;
+            heel::ComputePositions(s1, files, ms[0], p1);
+            heel::ComputePositions(s2, files, ms[0], p2);
+            for (std::size_t i = 0; i < p1.size(); i++)
+                CHECK_NEAR(p2[i].Level(0), p1[i].Level(0), 1e-9, "heel: свой метод = встроенный");
+        }
+        // Нечисловые значения: 1/(x − x) — заменяются предыдущим, считаются
+        um::Method nan;
+        nan.stages = {{"n < 5 ? x : 1/(x - x) * 0", "x[0]"}};
+        nan.mean = um::MeanKind::All;
+        const auto nm = um::Build(nan, pr);
+        CHECK(nm != nullptr);
+        if (nm)
+        {
+            const auto y = nm->Process(t, x, 0);
+            bool finite = true;
+            for (const double v : y)
+                finite = finite && std::isfinite(v);
+            CHECK(finite && nm->nonFinite == static_cast<long>(t.size()) - 5 && y.back() == x[4]);
+        }
+        // Пример из нескольких стадий и среднего формулой; y[n-2], x[n-3], t, n
+        const auto ex = um::Build(um::PresetExample(), pr);
+        CHECK_MSG(ex != nullptr, "%s", pr.Text().c_str());
+        um::Method rec;
+        rec.consts = {{"k", "2"}};
+        rec.stages = {{"0.5*(x + x[n-3]) + 0*t + 0*n", "x[0]"}, {"(x + y[n-1] + y[n-2]) / 3 + 0*k", "x[0]"}};
+        rec.mean = um::MeanKind::Expr;
+        rec.meanArg = "0.5*avgw(10) + 0.5*medw(10) + 0*(T1 - T0) + 0*last()";
+        const auto rm = um::Build(rec, pr);
+        CHECK_MSG(rm != nullptr, "%s", pr.Text().c_str());
+        if (rm && ex)
+        {
+            filt::Params p;
+            p.method = filt::Method::User;
+            p.custom = rm;
+            const auto pr2 = filt::ProcessSeries(t, x, p);
+            const auto e = filt::EstimateSpan(t, x, pr2, 60.0, 110.0, p);
+            CHECK_NEAR(e.level, 3.0, 0.15, "своё среднее на положении 2 (истина 3°)");
+            p.custom = ex;
+            const auto e2 = filt::EstimateSpan(t, x, filt::ProcessSeries(t, x, p), 60.0, 110.0, p);
+            CHECK_NEAR(e2.level, 3.0, 0.15, "пример: медиана 5 и EMA дважды");
+        }
+    }
+}
+
 void TestSettings()
 {
     SECTION("настройки: ось по умолчанию X, выбор запоминается; ось из файла программы 1.2 не берётся");
@@ -1026,10 +1421,20 @@ void TestSettings()
     s.heelAxis = 1;
     s.heelPlateauS = 15;
     s.heelStep = 0.7;
+    s.heelSmall = true;
+    s.heelP = 0.004; // маленькое число — как введено
+    s.digP = 4;
+    s.fltMethod = 3;
+    s.fltWhole = true;
     s.Save(ini);
     PcSettings back;
     back.Load(ini);
     CHECK(back.heelAxis == 1 && back.heelPlateauS == 15.0 && back.heelStep == 0.7);
+    CHECK(back.heelSmall && back.heelP == 0.004 && back.digP == 4 && back.digArm == 3 && back.fltMethod == 3 && back.fltWhole);
+    WriteText(ini, "heel_axis_v=2\ndig_arm=1\n"); // у плеч меньше 3 знаков нельзя
+    PcSettings arm;
+    arm.Load(ini);
+    CHECK(arm.digArm == 3);
     CHECK(ReadBytes(ini).find("heel_axis_v=2") != std::string::npos);
 }
 
@@ -1096,6 +1501,8 @@ int main(int argc, char** argv)
     TestContinuous();
     TestXlsxRead();
     TestRealRecord();
+    TestFilters();
+    TestUserMethod();
     TestSettings();
     TestDeflate();
     return TestSummary();

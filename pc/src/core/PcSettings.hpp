@@ -32,6 +32,15 @@ struct PcSettings
     double heelD = 1500.0, heelP = 15.0, heelL = 4.5, heelWinS = 30.0, heelThr = 0.1; // т, т, м, с, °
     int heelAxis = 0;         // ось угла: 0 — X (датчики поперёк судна), 1 — Y
     double heelPlateauS = 10.0, heelStep = 0.5; // непрерывная запись: положение не короче, с; перепад не меньше, °
+    bool heelSmall = false;   // малое судно (модель): D и P — кг, плечи — мм (heelD/heelP/heelL — в этих единицах)
+    // Знаков после запятой в полях: D, P, плечи (не меньше 3), порог, шаг
+    int digD = 1, digP = 2, digArm = 3, digThr = 2, digStep = 2;
+    // Обработка сигнала положения (core/Filters.hpp)
+    int fltMethod = 3, fltMedianN = 3; // метод: 0…4 встроенные (3 — Калман, по умолчанию), 5 — свой (fltUser)
+    std::string fltUser;      // имя выбранного своего метода (методы — файлы в Dir()/methods)
+    std::string sensorNames;  // названия датчиков: «ключ=название;…» (ключ — heel::SensorKey)
+    double fltFc = 0.5, fltTc = 0.0, fltSgWin = 4.0;
+    bool fltWhole = false;
 
     static std::filesystem::path Dir()
     {
@@ -115,6 +124,23 @@ struct PcSettings
             heelAxis = num("heel_axis", heelAxis, 0, 1);
         heelPlateauS = real("heel_plateau_s", heelPlateauS, 2.0, 600.0);
         heelStep = real("heel_step", heelStep, 0.05, 20.0);
+        heelSmall = flag("heel_small", heelSmall);
+        digD = num("dig_d", digD, 0, 6);
+        digP = num("dig_p", digP, 0, 6);
+        digArm = num("dig_arm", digArm, 3, 6);
+        digThr = num("dig_thr", digThr, 0, 6);
+        digStep = num("dig_step", digStep, 0, 6);
+        if (num("flt_v", 0, 0, 100) >= 2) // до 1.4 по умолчанию был метод статьи — старый выбор не берётся
+            fltMethod = num("flt_method", fltMethod, 0, 5);
+        if (kv.count("flt_user"))
+            fltUser = kv["flt_user"];
+        if (kv.count("sensor_names"))
+            sensorNames = kv["sensor_names"];
+        fltMedianN = num("flt_median", fltMedianN, 1, 99);
+        fltFc = real("flt_fc", fltFc, 0.001, 100.0);
+        fltTc = real("flt_tc", fltTc, 0.0, 120.0);
+        fltSgWin = real("flt_sg_win", fltSgWin, 0.2, 60.0);
+        fltWhole = flag("flt_whole", fltWhole);
     }
 
     void Save(const std::filesystem::path& file = Dir() / L"krenomer.ini") const
@@ -144,6 +170,11 @@ struct PcSettings
             out << "heel_d=" << heelD << "\nheel_p=" << heelP << "\nheel_l=" << heelL << "\n";
             out << "heel_window_s=" << heelWinS << "\nheel_threshold=" << heelThr << "\nheel_axis=" << heelAxis << "\n";
             out << "heel_axis_v=2\nheel_plateau_s=" << heelPlateauS << "\nheel_step=" << heelStep << "\n";
+            out << "heel_small=" << (heelSmall ? 1 : 0) << "\ndig_d=" << digD << "\ndig_p=" << digP << "\ndig_arm=" << digArm
+                << "\ndig_thr=" << digThr << "\ndig_step=" << digStep << "\n";
+            out << "flt_v=2\nflt_user=" << fltUser << "\nsensor_names=" << sensorNames << "\n";
+            out << "flt_method=" << fltMethod << "\nflt_median=" << fltMedianN << "\nflt_fc=" << fltFc << "\nflt_tc=" << fltTc
+                << "\nflt_sg_win=" << fltSgWin << "\nflt_whole=" << (fltWhole ? 1 : 0) << "\n";
             if (!out)
                 return;
         }

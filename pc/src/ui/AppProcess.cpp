@@ -18,6 +18,8 @@
 #include <chrono>
 #include <cmath>
 #include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <limits>
 #include <set>
 #include <system_error>
@@ -52,7 +54,8 @@ constexpr int kLogMax = 200;
 constexpr int kExportW = 1000, kExportH = 820; // картинка графиков, логических точек
 constexpr float kExportScale = 2.f;            // -> 2000 × 1640 пикселей
 
-const char* PostCombo[] = {"Нос", "Корма", "Не учитывать"};
+const char* kPostPresets[] = {"Нос", "Корма", "Мидель", "Нос, ЛБ", "Нос, ПБ", "Корма, ЛБ", "Корма, ПБ", "Мидель, ЛБ",
+                              "Мидель, ПБ"};
 
 std::string Deg(double v)
 {
@@ -132,7 +135,75 @@ heel::Settings App::ProcSettings() const
     s.axis = settings_.heelAxis;
     s.minPlateauS = settings_.heelPlateauS;
     s.minStepDeg = settings_.heelStep;
+    s.units.model = settings_.heelSmall;
+    for (const auto& [key, post] : proc_.postOf)
+        if (post >= 0 && post < heel::kMaxPosts)
+            s.postNames[static_cast<std::size_t>(post)] = SensorTitle(key);
+    s.filter.method = static_cast<filt::Method>(std::clamp(settings_.fltMethod, 0, static_cast<int>(filt::Method::Count) - 1));
+    if (s.filter.method == filt::Method::User)
+    {
+        // Свой метод: по имени среди сохранённых; не найден или с ошибкой — Калман
+        const_cast<App*>(this)->ProcLoadMethods();
+        for (const auto& m : proc_.methods)
+            if (m.name == settings_.fltUser)
+                s.filter.custom = ProcUserCompiled(m, nullptr);
+        if (!s.filter.custom)
+            s.filter.method = filt::Method::Kalman;
+    }
+    s.filter.medianN = settings_.fltMedianN;
+    s.filter.fcHz = settings_.fltFc;
+    s.filter.tcS = settings_.fltTc;
+    s.filter.sgWindowS = settings_.fltSgWin;
+    s.filter.wholeSpan = settings_.fltWhole;
     return s;
+}
+
+// Формат поля: digits знаков, но ненулевое число не показывается нулём (знаков — сколько нужно, до 6).
+std::string App::NumFmt(double v, int digits) const
+{
+    int d = std::clamp(digits, 0, 6);
+    const double a = std::fabs(v);
+    if (a > 0 && a < 1.0)
+        d = std::max(d, std::min(6, static_cast<int>(std::ceil(-std::log10(a))) + 1));
+    return Fmt("%%.%df", d);
+}
+
+// Большое / малое судно: D и P — т или кг, плечи — м или мм. Введённые числа переводятся в новые единицы; значения по
+// умолчанию одного типа судна заменяются значениями по умолчанию другого (1500 т не превращаются в 1 500 000 кг).
+void App::ProcSetSmallShip(bool model)
+{
+    if (model == settings_.heelSmall)
+        return;
+    const double k = model ? 1000.0 : 0.001; // т -> кг и м -> мм (или обратно)
+    const bool bigDefaults = settings_.heelD == 1500.0 && settings_.heelP == 15.0 && settings_.heelL == 4.5;
+    const bool smallDefaults = settings_.heelD == 50.0 && settings_.heelP == 1.0 && settings_.heelL == 200.0;
+    if (model && bigDefaults)
+    {
+        settings_.heelD = 50.0;
+        settings_.heelP = 1.0;
+        settings_.heelL = 200.0;
+    }
+    else if (!model && smallDefaults)
+    {
+        settings_.heelD = 1500.0;
+        settings_.heelP = 15.0;
+        settings_.heelL = 4.5;
+    }
+    else
+    {
+        settings_.heelD *= k;
+        settings_.heelP *= k;
+        settings_.heelL *= k;
+    }
+    for (auto& [n, a] : proc_.arm)
+        a *= k;
+    for (auto& p : proc_.pos)
+        if (std::isfinite(p.arm))
+            p.arm *= k;
+    settings_.heelSmall = model;
+    ProcLog(model ? "Малое судно (модель): D и P — в кг, плечи — в мм" : "Большое судно: D и P — в т, плечи — в м");
+    proc_.dirty = true;
+    SaveSettingsSoon();
 }
 
 void App::ProcessSetMode(int mode)
@@ -171,22 +242,51 @@ void App::ProcChooseMode(bool fromLoad)
     proc_.dirty = true;
 }
 
-void App::ProcFindPositions()
+std::filesystem::path App::EditsDir() const
+{
+    if (!opt_.editsDir.empty())
+        return text::PathFromUtf8(opt_.editsDir);
+    if (opt_.useSettingsFile)
+        return PcSettings::Dir() / L"edits";
+    return {};
+}
+
+std::string App::EditsKeyNow() const
+{
+    if (!ProcCont() || !proc_.files)
+        return {};
+    const auto& m = proc_.meas[static_cast<std::size_t>(proc_.rec)];
+    const int mp = heel::MainPost(m);
+    return mp < 0 ? std::string() : heel::EditsKey((*proc_.files)[static_cast<std::size_t>(m.post[mp].file)], settings_.heelAxis);
+}
+
+void App::ProcFindPositions(bool restore)
 {
     proc_.pos.clear();
     proc_.sel = -1;
     proc_.posEdited = false;
+    proc_.editsSaveAt = 0;
     if (!ProcCont() || !proc_.files)
         return;
     const auto& m = proc_.meas[static_cast<std::size_t>(proc_.rec)];
-    proc_.pos = heel::FindPositions(ProcSettings(), *proc_.files, m);
+    const heel::Settings s = ProcSettings();
+    proc_.pos = heel::FindPositions(s, *proc_.files, m);
     const int mp = heel::MainPost(m);
     if (mp >= 0)
     {
         const auto& f = (*proc_.files)[static_cast<std::size_t>(m.post[mp].file)];
-        ProcLog(Fmt("Одна запись — весь опыт: %s (%s), %.0f с; найдено положений груза: %d (ось %s)", f.name.c_str(),
-                    heel::kPostName[mp], f.log.Duration(), static_cast<int>(proc_.pos.size()),
-                    settings_.heelAxis == 0 ? "X" : "Y"));
+        (void) f;
+        ProcLog(ProcRecordText());
+        // Ручные правки этой записи (границы, флажки, плечи) — из прошлой обработки
+        std::vector<heel::Position> edited;
+        const auto dir = EditsDir();
+        if (restore && !dir.empty() && heel::LoadPositionEdits(dir, EditsKeyNow(), edited, s.units))
+        {
+            proc_.pos = std::move(edited);
+            proc_.posEdited = true;
+            ProcLog(Fmt("Восстановлены ручные правки положений (%d) — «Сбросить правки» вернёт найденные",
+                        static_cast<int>(proc_.pos.size())));
+        }
     }
     proc_.dirty = true;
 }
@@ -208,9 +308,9 @@ int App::ProcShownPost() const
     return m.post[proc_.show].file >= 0 ? proc_.show : std::max(0, heel::MainPost(m));
 }
 
-void App::ProcLog(const std::string& s)
+void App::ProcLog(const std::string& s, const std::string& tip)
 {
-    proc_.log.push_back(s);
+    proc_.log.push_back({s, tip});
     if (proc_.log.size() > static_cast<std::size_t>(kLogMax))
         proc_.log.erase(proc_.log.begin());
     proc_.logScroll = true;
@@ -284,20 +384,32 @@ void App::ProcRegroup(bool quiet)
     proc_.meas.clear();
     if (!proc_.files)
         return;
-    // Посты по умолчанию для новых датчиков: Д2 — нос, Д3 — корма (старые имена: 1 — нос, 2 — корма)
-    for (const auto& f : *proc_.files)
-        if (f.Measurement() && f.sensor >= 0 && !proc_.postOf.count(f.sensor))
-            proc_.postOf[f.sensor] = heel::DefaultPost(f.sensor);
     std::set<int> keys;
     for (const auto& f : *proc_.files)
         if (f.Measurement() && f.sensor >= 0)
             keys.insert(f.sensor);
     proc_.keys.assign(keys.begin(), keys.end());
+    ProcAssignPosts();
     std::vector<std::string> notes;
     proc_.meas = heel::Group(*proc_.files, proc_.postOf, &notes);
     if (!quiet)
+    {
+        // Непонятые файлы (чужие книги и CSV) — одной строкой, список — в подсказке
+        std::string foreign;
+        int nForeign = 0;
         for (const auto& n : notes)
-            ProcLog(n);
+            if (n.rfind("не понял формат: ", 0) == 0)
+            {
+                foreign += (foreign.empty() ? "" : "\n") + n.substr(std::string("не понял формат: ").size());
+                nForeign++;
+            }
+            else
+                ProcLog(n);
+        if (nForeign)
+            ProcLog(Fmt("Пропущено %d %s не того формата (нет столбцов углов) — наведите, чтобы увидеть список", nForeign,
+                        text::Plural(static_cast<std::uint64_t>(nForeign), "файл", "файла", "файлов")),
+                    foreign);
+    }
     proc_.dirty = true;
 }
 
@@ -317,9 +429,29 @@ void App::ProcRecompute()
         m.arm = a != proc_.arm.end() ? a->second : settings_.heelL;
     }
     proc_.sum = heel::Compute(ProcSettings(), *proc_.files, proc_.meas);
+    for (int p = 0; p < heel::kMaxPosts; p++)
+    {
+        proc_.procT[p].clear();
+        proc_.procY[p].clear();
+    }
     if (ProcCont())
-        proc_.posSum = heel::ComputePositions(ProcSettings(), *proc_.files, proc_.meas[static_cast<std::size_t>(proc_.rec)],
-                                              proc_.pos);
+    {
+        const heel::Settings s = ProcSettings();
+        const auto& m = proc_.meas[static_cast<std::size_t>(proc_.rec)];
+        proc_.posSum = heel::ComputePositions(s, *proc_.files, m, proc_.pos);
+        // Обработанный сигнал всей записи — для графика (Медиана + EMA и Савицкий–Голай; у остальных — по положениям)
+        for (int p = 0; p < heel::kMaxPosts; p++)
+            if (m.post[p].file >= 0)
+            {
+                std::vector<double> v;
+                heel::Series((*proc_.files)[static_cast<std::size_t>(m.post[p].file)].log, s.axis, proc_.procT[p], v);
+                proc_.procY[p] = filt::ProcessSeries(proc_.procT[p], v, s.filter);
+                if (proc_.procY[p].empty())
+                    proc_.procT[p].clear();
+            }
+        if (proc_.posEdited)
+            proc_.editsSaveAt = link_->NowMs() + 1000;
+    }
     else
         proc_.posSum = heel::Summary{};
 }
@@ -362,19 +494,7 @@ void App::TickProcess()
                                     csvlog::Details(f.log).c_str(), static_cast<int>(f.log.rows.size()), f.log.Duration()));
                 }
         if (!proc_.meas.empty())
-        {
-            std::string fmt;
-            for (const auto& s : formats)
-                fmt += (fmt.empty() ? "" : ", ") + s;
-            std::string posts;
-            for (const int key : proc_.keys)
-                if (const int post = proc_.postOf[key]; post >= 0)
-                    posts += (posts.empty() ? "" : ", ") + heel::SensorName(key) + " — " +
-                             (post == 0 ? "нос" : "корма");
-            // Перенос перед скобкой: иначе ImGui переносит строку по точке внутри «1.4+»
-            ProcLog(Fmt("Замеров: %d, файлов: %d\n(%s; %s)%s", static_cast<int>(proc_.meas.size()), used, posts.c_str(),
-                        fmt.c_str(), byTime ? "; без Ms — время по столбцу Time" : ""));
-        }
+            ProcLog(ProcSummaryText());
         else if (!proc_.files->empty())
             ProcLog("Ни один файл не понят как файл замера (что не так — выше)");
         ProcChooseMode(true); // режим по содержимому: одна запись — весь опыт или файл = замер
@@ -387,10 +507,13 @@ void App::TickProcess()
         proc_.saveRequested = false;
         if (proc_.dirty)
             ProcRecompute();
-        std::shared_ptr<offscreen::Frame> frames[2];
+        std::shared_ptr<offscreen::Frame> frames[heel::kMaxPosts], posFrames[heel::kMaxPosts];
+        std::string plotName[heel::kMaxPosts], posName[heel::kMaxPosts];
         const bool cont = ProcCont();
-        for (int post = 0; post < 2; post++)
+        for (int post = 0; post < heel::kMaxPosts; post++)
         {
+            plotName[post] = heel::PlotFileName("График", ProcSettings().PostName(post));
+            posName[post] = heel::PlotFileName("Положения", ProcSettings().PostName(post));
             bool any = false;
             if (cont)
                 any = proc_.meas[static_cast<std::size_t>(proc_.rec)].post[post].file >= 0;
@@ -404,6 +527,13 @@ void App::TickProcess()
                     else
                         ProcExportPage(post, w, h);
                 });
+            // Положения крупно — сеткой по два в ряд
+            if (any && cont && !proc_.pos.empty())
+            {
+                const int rowsN = (static_cast<int>(proc_.pos.size()) + 1) / 2;
+                posFrames[post] = offscreen::Capture(kExportW, 170 + rowsN * 300, kExportScale,
+                                                     [this, post](float w, float h) { ProcExportPositions(post, w, h); });
+            }
         }
         heel::ReportInfo info;
         info.folder = Shown(proc_.outDir);
@@ -430,16 +560,25 @@ void App::TickProcess()
                 out.push_back(std::string("✗ ") + heel::kReportName + " не сохранён: " + err);
             if (!warn.empty())
                 out.push_back(warn);
-            for (int post = 0; post < 2; post++)
+            for (int post = 0; post < heel::kMaxPosts; post++)
             {
                 if (!frames[post])
                     continue;
                 const auto rgb = offscreen::Rasterize(*frames[post]);
-                if (png::WriteRgb(dir / text::PathFromUtf8(heel::kPlotName[post]), frames[post]->w, frames[post]->h, rgb))
-                    out.push_back(Fmt("✓ График сохранён: %s (%d × %d)", heel::kPlotName[post], frames[post]->w,
+                if (png::WriteRgb(dir / text::PathFromUtf8(plotName[post]), frames[post]->w, frames[post]->h, rgb))
+                    out.push_back(Fmt("✓ График сохранён: %s (%d × %d)", plotName[post].c_str(), frames[post]->w,
                                       frames[post]->h));
                 else
-                    out.push_back(std::string("✗ ") + heel::kPlotName[post] + " не сохранён");
+                    out.push_back(std::string("✗ ") + plotName[post] + " не сохранён");
+                if (!posFrames[post])
+                    continue;
+                const auto rgb2 = offscreen::Rasterize(*posFrames[post]);
+                if (png::WriteRgb(dir / text::PathFromUtf8(posName[post]), posFrames[post]->w,
+                                  posFrames[post]->h, rgb2))
+                    out.push_back(Fmt("✓ Положения сохранены: %s (%d × %d)", posName[post].c_str(), posFrames[post]->w,
+                                      posFrames[post]->h));
+                else
+                    out.push_back(std::string("✗ ") + posName[post] + " не сохранён");
             }
             return out;
         });
@@ -457,6 +596,15 @@ void App::TickProcess()
     }
     if (proc_.dirty && !proc_.load.valid())
         ProcRecompute();
+    // Ручные правки положений — в файл
+    if (proc_.editsSaveAt && link_->NowMs() >= proc_.editsSaveAt)
+    {
+        proc_.editsSaveAt = 0;
+        const auto dir = EditsDir();
+        const std::string key = EditsKeyNow();
+        if (!dir.empty() && !key.empty() && proc_.posEdited)
+            heel::SavePositionEdits(dir, key, proc_.pos, ProcSettings().units);
+    }
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -465,6 +613,7 @@ void App::TickProcess()
 
 void App::PageProcess()
 {
+    ProcMethodWindow(); // окно своих методов — поверх страницы
     if (!proc_.opened)
     {
         proc_.opened = true;
@@ -521,14 +670,14 @@ void App::PageProcess()
     else
     {
         const float avail = ImGui::GetContentRegionAvail().y;
-        const float h = std::clamp(tableH, S(210), std::max(S(210), avail - S(270) - gap - sp));
+        const float h = std::clamp(tableH, S(170), std::max(S(170), avail - S(255) - gap - sp));
         const float tw = std::floor(W * 0.64f);
         ProcTable(tw, h);
         ImGui::SameLine(0, gap);
         ProcResult(W - tw - gap, h);
     }
     ImGui::Dummy(ImVec2(0, gap - sp));
-    ProcPlots(W, std::max(S(270), ImGui::GetContentRegionAvail().y));
+    ProcPlots(W, std::max(S(255), ImGui::GetContentRegionAvail().y));
 }
 
 void App::ProcParams(float w)
@@ -643,12 +792,18 @@ void App::ProcParams(float w)
             }
             ImGui::EndGroup();
         }
-        field("Водоизмещение D, т", "##hd", &settings_.heelD, 10, 100, "%.1f", 0.001, 1e7, S(150),
+        const bool model = settings_.heelSmall;
+        const std::string labD = std::string("Водоизмещение D, ") + (model ? "кг" : "т");
+        const std::string labP = std::string("Масса груза P, ") + (model ? "кг" : "т");
+        const std::string labL = std::string("Плечо L, ") + (model ? "мм" : "м");
+        const std::string fmtD = NumFmt(settings_.heelD, settings_.digD), fmtP = NumFmt(settings_.heelP, settings_.digP);
+        const std::string fmtL = NumFmt(settings_.heelL, std::max(3, settings_.digArm));
+        field(labD.c_str(), "##hd", &settings_.heelD, model ? 1 : 10, model ? 10 : 100, fmtD.c_str(), 0.0001, 1e9, S(150),
               "Водоизмещение судна в момент опыта");
-        field("Масса груза P, т", "##hp", &settings_.heelP, 0.5, 5, "%.2f", 0.0, 1e6, S(136),
+        field(labP.c_str(), "##hp", &settings_.heelP, model ? 0.1 : 0.5, model ? 1 : 5, fmtP.c_str(), 0.0, 1e9, S(136),
               "Масса кренящего груза, который переносят с борта на борт");
         {
-            const char* label = "Плечо L, м";
+            const char* label = labL.c_str();
             flow(ImGui::CalcTextSize(label).x + S(8) + S(136) + S(8) + S(72));
             ImGui::BeginGroup();
             ImGui::AlignTextToFramePadding();
@@ -658,9 +813,9 @@ void App::ProcParams(float w)
                                   "У каждого замера можно задать своё — в таблице, столбец «Плечо l».");
             ImGui::SameLine(0, S(8));
             ImGui::SetNextItemWidth(S(136));
-            if (InputDoubleStep("##hl", &settings_.heelL, 0.1, 1.0, "%.2f"))
+            if (InputDoubleStep("##hl", &settings_.heelL, model ? 10.0 : 0.1, model ? 100.0 : 1.0, fmtL.c_str()))
             {
-                settings_.heelL = std::clamp(settings_.heelL, 0.0, 1000.0);
+                settings_.heelL = std::clamp(settings_.heelL, 0.0, 1e7);
                 proc_.dirty = true;
                 SaveSettingsSoon();
             }
@@ -714,57 +869,69 @@ void App::ProcParams(float w)
             if (field("Положение ≥, с", "##hps", &settings_.heelPlateauS, 1, 5, "%.0f", 2.0, 600.0, S(112),
                       "Положение груза — участок установившегося крена не короче N секунд (переходы при переносе\n"
                       "груза и всплески отбрасываются). Изменение — поиск положений заново."))
-                ProcFindPositions();
-            if (field("Шаг ≥, °", "##hst", &settings_.heelStep, 0.1, 0.5, "%.2f", 0.05, 20.0, S(120),
+                ProcFindPositions(false);
+            const std::string fmtS = NumFmt(settings_.heelStep, settings_.digStep);
+            if (field("Шаг ≥, °", "##hst", &settings_.heelStep, 0.1, 0.5, fmtS.c_str(), 0.05, 20.0, S(120),
                       "Соседние положения отличаются по крену не меньше чем на столько градусов; ближе — одно\n"
                       "положение (качка не делит ступеньку). Изменение — поиск положений заново."))
-                ProcFindPositions();
+                ProcFindPositions(false);
             if (edited && !proc_.posEdited)
                 ProcLog("Положения найдены заново — ручные правки сброшены");
         }
         else
             field("Окно, с", "##hw", &settings_.heelWinS, 5, 30, "%.0f", 1.0, 3600.0, S(120),
                   "Установившийся крен — среднее за последние N секунд каждого файла (в старой программе — 30 с)");
-        field("Порог, °", "##ht", &settings_.heelThr, 0.05, 0.5, "%.2f", 0.0, 10.0, S(120),
+        const std::string fmtT = NumFmt(settings_.heelThr, settings_.digThr);
+        field("Порог, °", "##ht", &settings_.heelThr, 0.05, 0.5, fmtT.c_str(), 0.0, 10.0, S(120),
               ProcCont() ? "Положение с |Δθ| (от начального) не больше порога не учитывается: h не считается"
                          : "Замер на посту с |крен| не больше порога не учитывается: h не считается (в старой программе — 0,1°)");
-        // Посты: датчик -> нос / корма / не учитывать (датчики прочитанных файлов)
-        const std::vector<int> keys = proc_.keys; // копия: смена поста пересобирает proc_.keys
-        if (!keys.empty())
+        // Датчики: название поста каждого (нос, корма, мидель, …) и учитывать ли
+        ProcSensorNames(right, flow);
+        // Судно: большое (т, м) или малое — модель (кг, мм); знаки после запятой в полях
         {
-            float need = ImGui::CalcTextSize("Посты:").x;
-            for (const int k : keys)
-                need += S(12) + ImGui::CalcTextSize(heel::SensorShort(k).c_str()).x + S(6) + S(116);
-            flow(need);
+            static const char* ships[] = {"Большое судно", "Малое судно (модель)"};
+            static const int shipValues[] = {0, 1};
+            const float sw = ImGui::CalcTextSize(ships[0]).x + ImGui::CalcTextSize(ships[1]).x +
+                             4 * ImGui::GetStyle().FramePadding.x + S(2) + S(8) + S(84);
+            flow(sw);
             ImGui::BeginGroup();
-            ImGui::AlignTextToFramePadding();
-            ImGui::TextUnformatted("Посты:");
+            int ship = settings_.heelSmall ? 1 : 0;
+            if (Segmented("ship", &ship, ships, shipValues, 2))
+                ProcSetSmallShip(ship == 1);
             if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("Какой датчик на каком посту. По умолчанию Д2 — нос, Д3 — корма\n"
-                                  "(старые файлы M_NNN_k: 1 — нос, 2 — корма).");
-            for (const int k : keys)
+                ImGui::SetTooltip("Большое судно: водоизмещение D и масса груза P — в тоннах, плечи — в метрах.\n"
+                                  "Малое судно (модель, длина примерно до 5 м): D и P — в килограммах, плечи — в миллиметрах.\n"
+                                  "При переключении введённые числа переводятся в новые единицы. h — в метрах (и в мм).");
+            ImGui::SameLine(0, S(8));
+            if (Button("Знаки…", BtnKind::Normal, ImVec2(S(84), 0)))
+                ImGui::OpenPopup("##digits");
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Сколько знаков после запятой показывать в полях. Число хранится как введено;\n"
+                                  "маленькое ненулевое число нулём не показывается.");
+            if (ImGui::BeginPopup("##digits"))
             {
-                ImGui::SameLine(0, S(12));
-                ImGui::AlignTextToFramePadding();
-                const std::string name = heel::SensorName(k);
-                const int addr = k >= 100 ? k - 100 : k;
-                TextColored(k < 100 && (addr == 2 || addr == 3) ? pal.sensor[addr - 2] : pal.text, "%s",
-                            k >= 100 ? Fmt("M_%d", addr).c_str() : name.c_str());
-                if (ImGui::IsItemHovered())
-                    ImGui::SetTooltip("%s", name.c_str());
-                ImGui::SameLine(0, S(6));
-                int idx = proc_.postOf[k] < 0 ? 2 : proc_.postOf[k];
-                ImGui::SetNextItemWidth(S(116));
-                ImGui::PushID(k);
-                if (ImGui::Combo("##post", &idx, PostCombo, 3))
+                struct Dig
                 {
-                    proc_.postOf[k] = idx == 2 ? -1 : idx;
-                    ProcRegroup(true);
-                    if (proc_.mode == 1 && !ProcCont())
-                        ProcChooseMode(false);
-                    ProcRecompute();
+                    const char* label;
+                    int* v;
+                    int lo;
+                };
+                const Dig digs[] = {{"Водоизмещение D", &settings_.digD, 0}, {"Масса груза P", &settings_.digP, 0},
+                                    {"Плечи L и l (не меньше 3)", &settings_.digArm, 3}, {"Порог, °", &settings_.digThr, 0},
+                                    {"Шаг ≥, °", &settings_.digStep, 0}};
+                for (const Dig& d : digs)
+                {
+                    ImGui::AlignTextToFramePadding();
+                    ImGui::TextUnformatted(d.label);
+                    ImGui::SameLine(S(230));
+                    ImGui::SetNextItemWidth(S(110));
+                    if (InputIntStep(d.label, d.v, 1, 1))
+                    {
+                        *d.v = std::clamp(*d.v, d.lo, 6);
+                        SaveSettingsSoon();
+                    }
                 }
-                ImGui::PopID();
+                ImGui::EndPopup();
             }
             ImGui::EndGroup();
         }
@@ -797,21 +964,17 @@ void App::ProcTable(float w, float h)
         }
         else
         {
-            // Заголовки постов — с датчиками: «Крен нос (Д2)»
-            std::string sens[2];
-            for (const int key : proc_.keys)
+            // Заголовки постов — с датчиками: «Крен Нос (Д2)»
+            const std::vector<int> usedPosts = PostsInUse();
+            std::vector<std::string> hdr, hdrH;
+            for (const int p : usedPosts)
             {
-                const int post = proc_.postOf[key];
-                if (post == 0 || post == 1)
-                    sens[post] += (sens[post].empty() ? "" : ", ") +
-                                  (key >= 100 ? Fmt("M_%d", key - 100) : heel::SensorName(key));
+                hdr.push_back("Крен " + PostTitle(p));
+                hdrH.push_back("h " + SensorTitleOfPost(p) + ", м");
             }
-            const std::string hdr[2] = {
-                "Крен нос" + (sens[0].empty() ? std::string() : " (" + sens[0] + ")"),
-                "Крен корма" + (sens[1].empty() ? std::string() : " (" + sens[1] + ")")};
             ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(S(6), S(2)));
             ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, ImVec2(S(8), S(3)));
-            if (ImGui::BeginTable("##proc_t", 7,
+            if (ImGui::BeginTable("##proc_t", 3 + 2 * static_cast<int>(usedPosts.size()),
                                   ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_ScrollY |
                                       ImGuiTableFlags_SizingFixedFit,
                                   ImVec2(0, ImGui::GetContentRegionAvail().y)))
@@ -822,11 +985,13 @@ void App::ProcTable(float w, float h)
                 for (const auto& m : proc_.meas)
                     numW = std::max(numW, ImGui::CalcTextSize(m.label.c_str()).x + S(20));
                 ImGui::TableSetupColumn("Замер", ImGuiTableColumnFlags_WidthFixed, std::min(numW, S(170)));
-                ImGui::TableSetupColumn("Плечо l, м", ImGuiTableColumnFlags_WidthFixed, S(76));
-                ImGui::TableSetupColumn(hdr[0].c_str(), ImGuiTableColumnFlags_WidthStretch);
-                ImGui::TableSetupColumn("h нос, м", ImGuiTableColumnFlags_WidthFixed, S(66));
-                ImGui::TableSetupColumn(hdr[1].c_str(), ImGuiTableColumnFlags_WidthStretch);
-                ImGui::TableSetupColumn("h корма, м", ImGuiTableColumnFlags_WidthFixed, S(78));
+                ImGui::TableSetupColumn(settings_.heelSmall ? "Плечо l, мм" : "Плечо l, м", ImGuiTableColumnFlags_WidthFixed, S(76));
+                for (std::size_t k = 0; k < usedPosts.size(); k++)
+                {
+                    ImGui::TableSetupColumn(hdr[k].c_str(), ImGuiTableColumnFlags_WidthStretch);
+                    ImGui::TableSetupColumn(hdrH[k].c_str(), ImGuiTableColumnFlags_WidthFixed,
+                                            std::max(S(66), ImGui::CalcTextSize(hdrH[k].c_str()).x + S(4)));
+                }
                 ImGui::TableHeadersRow();
                 for (std::size_t mi = 0; mi < proc_.meas.size(); mi++)
                 {
@@ -853,9 +1018,9 @@ void App::ProcTable(float w, float h)
                     if (ImGui::IsItemHovered() && files)
                     {
                         std::string tip = "Замер " + m.label;
-                        for (int p = 0; p < 2; p++)
+                        for (const int p : usedPosts)
                         {
-                            tip += std::string("\n") + heel::kPostName[p] + ": ";
+                            tip += "\n" + PostTitle(p) + ": ";
                             if (m.post[p].file < 0)
                             {
                                 tip += "нет файла";
@@ -874,9 +1039,9 @@ void App::ProcTable(float w, float h)
                         double arm = std::isfinite(m.arm) ? m.arm : settings_.heelL;
                         ImGui::SetNextItemWidth(-FLT_MIN);
                         ImGui::PushStyleColor(ImGuiCol_Text, own ? pal.accent : tc);
-                        if (ImGui::InputDouble("##arm", &arm, 0.0, 0.0, "%.2f"))
+                        if (ImGui::InputDouble("##arm", &arm, 0.0, 0.0, NumFmt(arm, std::max(3, settings_.digArm)).c_str()))
                         {
-                            proc_.arm[m.number] = std::clamp(std::fabs(arm), 0.0, 1000.0);
+                            proc_.arm[m.number] = std::clamp(std::fabs(arm), 0.0, 1e7);
                             proc_.dirty = true;
                         }
                         ImGui::PopStyleColor();
@@ -887,7 +1052,7 @@ void App::ProcTable(float w, float h)
                                               settings_.heelL);
                     }
                     // Посты
-                    for (int p = 0; p < 2; p++)
+                    for (const int p : usedPosts)
                     {
                         const heel::PostData& pd = m.post[p];
                         ImGui::TableNextColumn();
@@ -964,6 +1129,12 @@ void App::ProcResult(float w, float h)
             else
                 Muted("—");
         }
+        if (std::isfinite(s.h) && settings_.heelSmall)
+        {
+            ImGui::SameLine(0, S(10));
+            FontScope fb(fontBold);
+            Muted("= %.1f мм", s.h * 1000.0);
+        }
         {
             FontScope f(fontSmall);
             if (s.n)
@@ -990,7 +1161,7 @@ void App::ProcResult(float w, float h)
         {
             FontScope f(fontBold);
             if (std::isfinite(s.ls.h))
-                ImGui::Text("По МНК: %.3f м", s.ls.h);
+                ImGui::Text(settings_.heelSmall ? "По МНК: %.3f м (%.1f мм)" : "По МНК: %.3f м", s.ls.h, s.ls.h * 1000.0);
             else
                 Muted("По МНК: —");
         }
@@ -1017,10 +1188,11 @@ void App::ProcResult(float w, float h)
                    saving ? "Отчёт сохраняется" : cont ? "Нет положений" : "Нет замеров"))
             ProcessSaveReport();
         if (ImGui::IsItemHovered() && !saving && canSave)
-            ImGui::SetTooltip(cont ? "В папку с файлами: %s (листы «Положения» и «Сырые_данные»),\n"
-                                     "графики всей записи с положениями: %s / %s"
-                                   : "В папку с файлами: %s (листы «Результаты» и «Сырые_данные»),\n%s и %s",
-                              heel::kReportName, heel::kPlotName[0], heel::kPlotName[1]);
+            ImGui::SetTooltip(cont ? "В папку с файлами: %s (листы «Положения», «Сырые_данные», при нескольких постах —\n"
+                                     "«Сравнение постов»), картинки по постам: График_<пост>.png, Положения_<пост>.png"
+                                   : "В папку с файлами: %s (листы «Результаты», «Сырые_данные», при нескольких постах —\n"
+                                     "«Сравнение постов»), картинки по постам: График_<пост>.png",
+                              heel::kReportName);
         ImGui::SameLine(0, S(8));
         if (Button("Открыть папку", BtnKind::Normal, ImVec2(-FLT_MIN, 0), proc_.outDir.empty() && !proc_.dir[0]))
             dialogs::OpenFolder(proc_.outDir.empty() ? std::string(proc_.dir) : proc_.outDir);
@@ -1036,12 +1208,20 @@ void App::ProcResult(float w, float h)
             FontScope f(fontSmall);
             if (proc_.log.empty())
                 Muted("Журнал: здесь — что прочитано, что пропущено и куда сохранён отчёт.");
-            for (const auto& l : proc_.log)
+            for (const auto& [l, tip] : proc_.log)
             {
                 const bool bad = l.rfind("✗", 0) == 0, good = l.rfind("✓", 0) == 0;
                 ImGui::PushStyleColor(ImGuiCol_Text, bad ? pal.err : good ? pal.ok : pal.textDim);
                 ImGui::TextWrapped("%s", l.c_str());
                 ImGui::PopStyleColor();
+                if (!tip.empty() && ImGui::IsItemHovered())
+                {
+                    ImGui::BeginTooltip();
+                    ImGui::PushTextWrapPos(S(640));
+                    ImGui::TextUnformatted(tip.c_str());
+                    ImGui::PopTextWrapPos();
+                    ImGui::EndTooltip();
+                }
             }
             if (proc_.logScroll)
             {
@@ -1066,20 +1246,21 @@ void App::ProcPlots(float w, float h)
             ImGui::TextUnformatted("Графики крена");
         }
         ImGui::SameLine(0, S(14));
-        std::string labels[2] = {"Нос", "Корма"};
-        for (const int key : proc_.keys)
         {
-            const int post = proc_.postOf[key];
-            if (post == 0 || post == 1)
-                labels[post] += (labels[post].find('(') == std::string::npos ? " (" : ", ") +
-                                (key >= 100 ? Fmt("M_%d", key - 100) : heel::SensorName(key));
+            const std::vector<int> used = PostsInUse();
+            std::vector<std::string> labels;
+            std::vector<const char*> lp;
+            for (const int p : used)
+                labels.push_back(PostTitle(p));
+            for (const auto& l : labels)
+                lp.push_back(l.c_str());
+            if (!used.empty())
+            {
+                if (std::find(used.begin(), used.end(), proc_.show) == used.end())
+                    proc_.show = used.front();
+                Segmented("post", &proc_.show, lp.data(), used.data(), static_cast<int>(used.size()));
+            }
         }
-        for (auto& l : labels)
-            if (l.find('(') != std::string::npos)
-                l += ")";
-        const char* lp[2] = {labels[0].c_str(), labels[1].c_str()};
-        static const int values[2] = {0, 1};
-        Segmented("post", &proc_.show, lp, values, 2);
         const float right = ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x;
         HeaderHint(right - ModeSwitchWidth() - S(16),
                    Fmt("ось %s · пунктир — среднее за последние %.0f с · легенда — средний крен замера",
@@ -1115,14 +1296,9 @@ void App::ProcModeSwitch(float right)
 // Картинка графиков одного поста для отчёта: заголовок, две панели друг под другом (как у старой программы).
 void App::ProcExportPage(int post, float w, float h)
 {
-    std::string sens;
-    for (const int key : proc_.keys)
-        if (proc_.postOf[key] == post)
-            sens += (sens.empty() ? "" : ", ") + heel::SensorName(key);
     {
         FontScope f(fontH2);
-        ImGui::Text("%s пост%s — крен по оси %s", post == 0 ? "Носовой" : "Кормовой",
-                    sens.empty() ? "" : (" (" + sens + ")").c_str(), settings_.heelAxis == 0 ? "X" : "Y");
+        ImGui::Text("Пост «%s» — крен по оси %s", PostTitle(post).c_str(), settings_.heelAxis == 0 ? "X" : "Y");
     }
     {
         FontScope f(fontSmall);
@@ -1313,13 +1489,17 @@ void App::ProcPositions(float w, float h)
                               "границы — в таблице или перетаскиванием на графике.",
                               gapA, gapB);
         ImGui::SameLine(0, S(8));
-        if (Button("Найти заново", BtnKind::Normal, ImVec2(bw2, 0)))
+        if (Button(proc_.posEdited ? "Сбросить правки" : "Найти заново", BtnKind::Normal, ImVec2(bw2, 0)))
         {
-            ProcFindPositions();
+            if (const auto dir = EditsDir(); !dir.empty())
+                heel::ForgetPositionEdits(dir, EditsKeyNow());
+            ProcFindPositions(false);
             ProcRecompute();
         }
         if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("Найти положения груза по записи заново (ручные правки сбросятся)");
+            ImGui::SetTooltip(proc_.posEdited ? "Забыть ручные правки положений этой записи (границы, флажки, плечи,\n"
+                                                "добавленные и удалённые) и найти положения заново"
+                                              : "Найти положения груза по записи заново");
 
         if (proc_.pos.empty())
         {
@@ -1332,8 +1512,8 @@ void App::ProcPositions(float w, float h)
         }
         else
         {
-            int posts[2], np = 0;
-            for (int p = 0; p < 2; p++)
+            int posts[heel::kMaxPosts], np = 0;
+            for (int p = 0; p < heel::kMaxPosts; p++)
                 if (m.post[p].file >= 0)
                     posts[np++] = p;
             const bool showDelta = np == 1;
@@ -1350,18 +1530,18 @@ void App::ProcPositions(float w, float h)
                 ImGui::TableSetupColumn("№", ImGuiTableColumnFlags_WidthFixed, S(34));
                 ImGui::TableSetupColumn("Начало, с", ImGuiTableColumnFlags_WidthFixed, S(62));
                 ImGui::TableSetupColumn("Конец, с", ImGuiTableColumnFlags_WidthFixed, S(62));
-                ImGui::TableSetupColumn("Плечо l, м", ImGuiTableColumnFlags_WidthFixed, S(68));
-                std::string hdr[2];
+                ImGui::TableSetupColumn(settings_.heelSmall ? "Плечо l, мм" : "Плечо l, м", ImGuiTableColumnFlags_WidthFixed, S(68));
+                std::string hdr[heel::kMaxPosts], hdrH[heel::kMaxPosts];
                 for (int k = 0; k < np; k++)
                 {
                     const int p = posts[k];
-                    const auto& f = (*files)[static_cast<std::size_t>(m.post[p].file)];
-                    hdr[k] = std::string("Крен ") + (p == 0 ? "нос" : "корма") + " (" + heel::SensorShort(f.sensor) + ")";
+                    hdr[k] = "Крен " + PostTitle(p);
+                    hdrH[k] = np == 1 ? std::string("h, м") : "h " + SensorTitleOfPost(p) + ", м";
                     ImGui::TableSetupColumn(hdr[k].c_str(), ImGuiTableColumnFlags_WidthStretch);
                     if (showDelta)
                         ImGui::TableSetupColumn("Δθ", ImGuiTableColumnFlags_WidthFixed, S(62));
-                    ImGui::TableSetupColumn(np == 1 ? "h, м" : (p == 0 ? "h нос, м" : "h корма, м"),
-                                            ImGuiTableColumnFlags_WidthFixed, S(np == 1 ? 52.f : 70.f));
+                    ImGui::TableSetupColumn(hdrH[k].c_str(), ImGuiTableColumnFlags_WidthFixed,
+                                            np == 1 ? S(52.f) : std::max(S(70.f), ImGui::CalcTextSize(hdrH[k].c_str()).x + S(4)));
                 }
                 ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed, 3 * S(24) + 2 * S(3));
                 ImGui::TableHeadersRow();
@@ -1432,9 +1612,10 @@ void App::ProcPositions(float w, float h)
                         double arm = own ? ps.arm : settings_.heelL;
                         ImGui::SetNextItemWidth(-FLT_MIN);
                         ImGui::PushStyleColor(ImGuiCol_Text, own ? pal.accent : tc);
-                        if (ImGui::InputDouble("##arm", &arm, 0.0, 0.0, "%.2f"))
+                        if (ImGui::InputDouble("##arm", &arm, 0.0, 0.0, NumFmt(arm, std::max(3, settings_.digArm)).c_str()))
                         {
-                            ps.arm = std::clamp(std::fabs(arm), 0.0, 1000.0);
+                            ps.arm = std::clamp(std::fabs(arm), 0.0, 1e7);
+                            proc_.posEdited = true;
                             proc_.dirty = true;
                         }
                         ImGui::PopStyleColor();
@@ -1452,11 +1633,13 @@ void App::ProcPositions(float w, float h)
                         const auto& res = ps.res[p];
                         ImGui::TableNextColumn();
                         ImGui::AlignTextToFramePadding();
-                        if (!std::isfinite(st.mean))
+                        const double level = ps.Level(p);
+                        const auto& est = ps.est[p];
+                        if (!std::isfinite(level))
                             TextColored(pal.err, "нет данных");
                         else
                         {
-                            TextColored(tc, "%s", text::Angle(st.mean, 3).c_str());
+                            TextColored(tc, "%s", text::Angle(level, 3).c_str());
                             if (std::isfinite(st.sd))
                             {
                                 ImGui::SameLine(0, S(5));
@@ -1464,10 +1647,12 @@ void App::ProcPositions(float w, float h)
                                 Muted("±%.3f", st.sd);
                             }
                         }
-                        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenOverlapped) && std::isfinite(st.mean))
-                            ImGui::SetTooltip("Средний крен на участке %.1f…%.1f с (%.1f с): %s, СКО %.3f°, точек %d"
-                                              " (выбросов отброшено %d)\nΔθ от начального положения: %s",
-                                              std::min(ps.t0, ps.t1), std::max(ps.t0, ps.t1), std::fabs(ps.t1 - ps.t0),
+                        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenOverlapped) && std::isfinite(level))
+                            ImGui::SetTooltip("Крен положения (%s): %s — окно %.1f…%.1f с\n"
+                                              "Простое среднее исходных на участке %.1f…%.1f с: %s, СКО (качка) %.3f°,\n"
+                                              "точек %d, выбросов отброшено %d\nΔθ от начального положения: %s",
+                                              filt::MethodName(ProcSettings().filter.method), text::Angle(level, 3).c_str(),
+                                              est.winT0, est.winT1, std::min(ps.t0, ps.t1), std::max(ps.t0, ps.t1),
                                               text::Angle(st.mean, 3).c_str(), st.sd, st.n, st.rejected,
                                               text::Angle(res.dTheta, 3).c_str());
                         if (showDelta)
@@ -1558,35 +1743,48 @@ void App::ProcSeriesCard(float w, float h)
 {
     if (BeginCard("##proc_series", ImVec2(w, h)))
     {
-        const auto& m = proc_.meas[static_cast<std::size_t>(proc_.rec)];
         ImGui::AlignTextToFramePadding();
         {
             FontScope f(fontBold);
             ImGui::TextUnformatted("Запись крена");
         }
         const int post = ProcShownPost();
-        if (m.post[0].file >= 0 && m.post[1].file >= 0 && proc_.files)
         {
-            ImGui::SameLine(0, S(14));
-            std::string labels[2];
-            for (int p = 0; p < 2; p++)
-                labels[p] = std::string(heel::kPostName[p]) + " (" +
-                            heel::SensorShort((*proc_.files)[static_cast<std::size_t>(m.post[p].file)].sensor) + ")";
-            const char* lp[2] = {labels[0].c_str(), labels[1].c_str()};
-            static const int values[2] = {0, 1};
-            int show = post;
-            if (Segmented("spost", &show, lp, values, 2))
-                proc_.show = show;
+            const std::vector<int> used = PostsInUse();
+            if (used.size() > 1)
+            {
+                ImGui::SameLine(0, S(14));
+                std::vector<std::string> labels;
+                std::vector<const char*> lp;
+                for (const int p : used)
+                    labels.push_back(PostTitle(p));
+                for (const auto& l : labels)
+                    lp.push_back(l.c_str());
+                int show = post;
+                if (Segmented("spost", &show, lp.data(), used.data(), static_cast<int>(used.size())))
+                    proc_.show = show;
+            }
         }
+        ImGui::SameLine(0, S(14));
+        ProcFilterButton();
         const float right = ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x;
         HeaderHint(right - ModeSwitchWidth() - S(16),
-                   Fmt("ось %s · заливка — положения, линия — их средний крен · щелчок — выбрать, границы "
-                       "выбранного перетаскиваются",
+                   Fmt("ось %s · щелчок по положению — выбрать (крупно справа), границы перетаскиваются",
                        settings_.heelAxis == 0 ? "X" : "Y"),
-                   Fmt("ось %s · щелчок — выбрать положение, границы перетаскиваются", settings_.heelAxis == 0 ? "X" : "Y"));
+                   Fmt("ось %s", settings_.heelAxis == 0 ? "X" : "Y"));
         ProcModeSwitch(right);
         const ImVec2 avail = ImGui::GetContentRegionAvail();
-        ProcSeriesPlot(post, avail.x, avail.y, false);
+        if (proc_.sel >= 0 && proc_.sel < static_cast<int>(proc_.pos.size()))
+        {
+            // Выбрано положение: слева вся запись, справа — положение крупно (исходный, обработанный, среднее)
+            const float gap = S(12);
+            const float lw = std::floor((avail.x - gap) * 0.42f);
+            ProcSeriesPlot(post, lw, avail.y, false);
+            ImGui::SameLine(0, gap);
+            ProcPositionPlot(post, proc_.sel, avail.x - lw - gap, avail.y, false);
+        }
+        else
+            ProcSeriesPlot(post, avail.x, avail.y, false);
     }
     EndCard();
 }
@@ -1598,7 +1796,7 @@ void App::ProcSeriesPlot(int post, float w, float h, bool forExport)
     if (!ProcCont() || !proc_.files)
         return;
     const auto& m = proc_.meas[static_cast<std::size_t>(proc_.rec)];
-    if (post < 0 || post > 1 || m.post[post].file < 0)
+    if (post < 0 || post >= heel::kMaxPosts || m.post[post].file < 0)
         return;
     const heel::File& f = (*proc_.files)[static_cast<std::size_t>(m.post[post].file)];
     const auto& rows = f.log.rows;
@@ -1653,21 +1851,29 @@ void App::ProcSeriesPlot(int post, float w, float h, bool forExport)
     }
     ImPlot::PopPlotClipRect();
 
-    // Запись
-    ImPlot::SetNextLineStyle(darkTheme ? ImVec4(0.80f, 0.84f, 0.90f, 1.f) : ImVec4(0.20f, 0.24f, 0.30f, 1.f), lineW);
-    ImPlot::PlotLine("Крен", &rows[0].t, axis == 0 ? &rows[0].calcX : &rows[0].calcY, static_cast<int>(rows.size()), 0, 0,
+    // Запись: исходный сигнал — тонко и бледнее, обработанный — поверх
+    const bool haveProc = !proc_.procY[post].empty();
+    const ImVec4 rawCol = darkTheme ? ImVec4(0.80f, 0.84f, 0.90f, 1.f) : ImVec4(0.20f, 0.24f, 0.30f, 1.f);
+    ImPlot::SetNextLineStyle(haveProc ? Alpha(rawCol, 0.45f) : rawCol, haveProc ? S(1.f) : lineW);
+    ImPlot::PlotLine("Исходный", &rows[0].t, axis == 0 ? &rows[0].calcX : &rows[0].calcY, static_cast<int>(rows.size()), 0, 0,
                      static_cast<int>(sizeof(csvlog::Row)));
+    if (haveProc)
+    {
+        ImPlot::SetNextLineStyle(pal.accent, lineW);
+        ImPlot::PlotLine("Обработанный", proc_.procT[post].data(), proc_.procY[post].data(),
+                         static_cast<int>(std::min(proc_.procT[post].size(), proc_.procY[post].size())));
+    }
 
     // Средний крен положений, номера и уровни
     for (std::size_t i = 0; i < proc_.pos.size(); i++)
     {
         const auto& p = proc_.pos[i];
-        const auto& st = p.st[post];
+        const double level = p.Level(post);
         const ImVec4 c = p.use ? kMeasColors[i % 10] : pal.muted;
         const double t0 = std::min(p.t0, p.t1), t1 = std::max(p.t0, p.t1);
-        if (std::isfinite(st.mean))
+        if (std::isfinite(level))
         {
-            const double xs[2] = {t0, t1}, ys[2] = {st.mean, st.mean};
+            const double xs[2] = {t0, t1}, ys[2] = {level, level};
             ImPlot::SetNextLineStyle(Mix(c, darkTheme ? ImVec4(1, 1, 1, 1) : ImVec4(0, 0, 0, 1), 0.15f), S(2.6f));
             ImPlot::PlotLine(Fmt("##lvl%d", static_cast<int>(i)).c_str(), xs, ys, 2);
         }
@@ -1677,10 +1883,10 @@ void App::ProcSeriesPlot(int post, float w, float h, bool forExport)
             ImPlot::PlotText(Fmt("%d", static_cast<int>(i) + 1).c_str(), 0.5 * (t0 + t1), lim.Y.Max,
                              ImVec2(0, S(11)));
         }
-        if (std::isfinite(st.mean))
+        if (std::isfinite(level))
         {
             FontScope fs(fontSmall);
-            const std::string lv = text::Angle(st.mean, 2);
+            const std::string lv = text::Angle(level, 2);
             if (ImPlot::PlotToPixels(t1, 0).x - ImPlot::PlotToPixels(t0, 0).x > ImGui::CalcTextSize(lv.c_str()).x + S(4))
                 ImPlot::PlotText(lv.c_str(), 0.5 * (t0 + t1), lim.Y.Max, ImVec2(0, S(28)));
         }
@@ -1734,21 +1940,1092 @@ void App::ProcExportSeries(int post, float w, float h)
     const heel::File& f = (*proc_.files)[static_cast<std::size_t>(m.post[post].file)];
     {
         FontScope fh(fontH2);
-        ImGui::Text("%s пост (%s) — запись опыта, крен по оси %s", post == 0 ? "Носовой" : "Кормовой",
-                    heel::SensorShort(f.sensor).c_str(), settings_.heelAxis == 0 ? "X" : "Y");
+        ImGui::Text("Пост «%s» — запись опыта, крен по оси %s", PostTitle(post).c_str(), settings_.heelAxis == 0 ? "X" : "Y");
     }
     {
         FontScope fs(fontSmall);
         const auto& s = proc_.posSum;
-        Muted("%s · D = %.1f т, P = %.2f т · положений %d · h = %s м (среднее), по МНК %s м · заливка — положения груза, "
-              "линия — средний крен положения",
-              f.name.c_str(), settings_.heelD, settings_.heelP, static_cast<int>(proc_.pos.size()),
-              std::isfinite(s.h) ? Fmt("%.3f", s.h).c_str() : "—", std::isfinite(s.ls.h) ? Fmt("%.3f", s.ls.h).c_str() : "—");
+        const char* mu = settings_.heelSmall ? "кг" : "т";
+        Muted("%s · D = %s %s, P = %s %s · положений %d · h = %s м (среднее), по МНК %s м",
+              f.name.c_str(), Fmt(NumFmt(settings_.heelD, settings_.digD).c_str(), settings_.heelD).c_str(), mu,
+              Fmt(NumFmt(settings_.heelP, settings_.digP).c_str(), settings_.heelP).c_str(), mu,
+              static_cast<int>(proc_.pos.size()), std::isfinite(s.h) ? Fmt("%.3f", s.h).c_str() : "—",
+              std::isfinite(s.ls.h) ? Fmt("%.3f", s.ls.h).c_str() : "—");
+        Muted("Обработка: %s · бледная линия — исходный сигнал, синяя — обработанный, цветная — крен положения",
+              filt::Describe(ProcSettings().filter).c_str());
     }
     ImGui::Spacing();
     (void) h;
     ProcSeriesPlot(post, w, ImGui::GetContentRegionAvail().y, true);
 }
 
+// «Обработка: метод ▾» — метод оценки крена положения и его параметры (core/Filters.hpp).
+void App::ProcFilterButton()
+{
+    const auto m = static_cast<filt::Method>(std::clamp(settings_.fltMethod, 0, static_cast<int>(filt::Method::Count) - 1));
+    const std::string label = std::string("Обработка: ") + filt::MethodName(m) + " ▼";
+    if (Button(label.c_str(), BtnKind::Normal))
+        ImGui::OpenPopup("##filter");
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("%s", filt::Describe(ProcSettings().filter).c_str());
+    if (!ImGui::BeginPopup("##filter"))
+        return;
+    bool changed = false;
+    {
+        FontScope f(fontBold);
+        ImGui::TextUnformatted("Крен положения — метод");
+    }
+    for (int i = 0; i < filt::kBuiltinCount; i++)
+        if (ImGui::RadioButton(filt::MethodName(static_cast<filt::Method>(i)), &settings_.fltMethod, i))
+            changed = true;
+    ProcLoadMethods();
+    if (!proc_.methods.empty())
+    {
+        FontScope fs(fontSmall);
+        Muted("Свои методы (формулы):");
+    }
+    for (const auto& um : proc_.methods)
+    {
+        const bool on = settings_.fltMethod == static_cast<int>(filt::Method::User) && settings_.fltUser == um.name;
+        if (ImGui::RadioButton(Fmt("%s##um_%s", um.name.c_str(), um.name.c_str()).c_str(), on))
+        {
+            settings_.fltMethod = static_cast<int>(filt::Method::User);
+            settings_.fltUser = um.name;
+            changed = true;
+        }
+    }
+    if (Button("Свои методы (формулы)…", BtnKind::Normal, ImVec2(S(260), 0)))
+    {
+        proc_.methodWin = true;
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::Separator();
+    auto num = [&](const char* label, double* v, double step, const char* fmt, double lo, double hi, const char* tip) {
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted(label);
+        if (tip && ImGui::IsItemHovered())
+            ImGui::SetTooltip("%s", tip);
+        ImGui::SameLine(S(250));
+        ImGui::SetNextItemWidth(S(140));
+        if (InputDoubleStep(label, v, step, step * 10, fmt))
+        {
+            *v = std::clamp(*v, lo, hi);
+            changed = true;
+        }
+    };
+    if (m == filt::Method::MedianEma)
+    {
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted("Медиана: последних отсчётов");
+        ImGui::SameLine(S(250));
+        ImGui::SetNextItemWidth(S(140));
+        if (InputIntStep("##medn", &settings_.fltMedianN, 2, 2))
+        {
+            settings_.fltMedianN = std::clamp(settings_.fltMedianN | 1, 1, 99);
+            changed = true;
+        }
+        num("EMA: частота среза fс, Гц", &settings_.fltFc, 0.05, "%.2f", 0.01, 10.0,
+            "α = 2π·fс / (2π·fс + fоп) — формула (12) статьи; fоп — частота опроса по записи");
+    }
+    if (m == filt::Method::SavGol)
+        num("Окно Савицкого–Голая, с", &settings_.fltSgWin, 0.5, "%.1f", 0.5, 30.0, "Полином 2-й степени по этому окну");
+    if (m == filt::Method::MedianEma || m == filt::Method::SavGol)
+    {
+        num("Период качки Tc, с (0 — по записи)", &settings_.fltTc, 1.0, "%.0f", 0.0, 120.0,
+            "Окно среднего Ω = 3·Tc в конце положения — формула (13) статьи");
+        if (ui::Checkbox("Среднее по всему положению, а не по окну Ω", &settings_.fltWhole))
+            changed = true;
+    }
+    {
+        FontScope f(fontSmall);
+        ImGui::PushTextWrapPos(S(460));
+        Muted("%s", filt::Describe(ProcSettings().filter).c_str());
+        ImGui::PopTextWrapPos();
+    }
+    if (changed)
+    {
+        proc_.dirty = true;
+        SaveSettingsSoon();
+    }
+    ImGui::EndPopup();
+}
+
+// Положение крупно: исходный сигнал (бледно), обработанный (или кривая метода), среднее по обработанному на окне.
+void App::ProcPositionPlot(int post, int index, float w, float h, bool forExport)
+{
+    if (!ProcCont() || !proc_.files || index < 0 || index >= static_cast<int>(proc_.pos.size()))
+        return;
+    const auto& m = proc_.meas[static_cast<std::size_t>(proc_.rec)];
+    if (post < 0 || post >= heel::kMaxPosts || m.post[post].file < 0)
+        return;
+    const heel::File& f = (*proc_.files)[static_cast<std::size_t>(m.post[post].file)];
+    const auto& rows = f.log.rows;
+    const heel::Position& p = proc_.pos[static_cast<std::size_t>(index)];
+    const filt::Estimate& e = p.est[post];
+    const int axis = settings_.heelAxis;
+    const double t0 = std::min(p.t0, p.t1), t1 = std::max(p.t0, p.t1);
+    const double margin = std::max(3.0, 0.12 * (t1 - t0));
+    const double a = t0 - margin, b = t1 + margin;
+    PlotStyle(forExport);
+    double lo = std::numeric_limits<double>::infinity(), hi = -lo;
+    for (const auto& r : rows)
+        if (r.t >= t0 && r.t <= t1)
+            if (const double v = r.Calc(axis); std::isfinite(v))
+            {
+                lo = std::min(lo, v);
+                hi = std::max(hi, v);
+            }
+    if (!(hi >= lo))
+    {
+        lo = -1;
+        hi = 1;
+    }
+    const double pad = std::max((hi - lo) * 0.25, 0.1);
+    char id[64];
+    std::snprintf(id, sizeof(id), "Положение %d##pos%d_%d_%d", index + 1, post, index, forExport ? 1 : 0);
+    ImPlotFlags flags = ImPlotFlags_NoMenus | ImPlotFlags_NoBoxSelect;
+    if (forExport)
+        flags |= ImPlotFlags_NoMouseText;
+    if (!ImPlot::BeginPlot(id, ImVec2(w, h), flags))
+        return;
+    ImPlot::SetupAxes("Время, с", "Крен, °", ImPlotAxisFlags_NoHighlight, ImPlotAxisFlags_NoHighlight);
+    ImPlot::SetupAxisLimits(ImAxis_X1, a, b, ImPlotCond_Always);
+    ImPlot::SetupAxisLimits(ImAxis_Y1, lo - pad, hi + pad, ImPlotCond_Always);
+    ImPlot::SetupAxisFormat(ImAxis_Y1, "%.2f");
+    ImPlot::SetupLegend(ImPlotLocation_South, ImPlotLegendFlags_Horizontal | ImPlotLegendFlags_Outside);
+    ImPlot::SetupFinish();
+    const ImPlotRect lim = ImPlot::GetPlotLimits();
+    const ImVec4 c = kMeasColors[static_cast<std::size_t>(index) % 10];
+    // Участок положения и окно среднего
+    ImPlot::PushPlotClipRect();
+    ImDrawList* dl = ImPlot::GetPlotDrawList();
+    dl->AddRectFilled(ImPlot::PlotToPixels(t0, lim.Y.Max), ImPlot::PlotToPixels(t1, lim.Y.Min),
+                      U32(Alpha(c, darkTheme ? 0.10f : 0.07f)));
+    if (std::isfinite(e.winT0) && e.winT1 > e.winT0)
+        dl->AddRectFilled(ImPlot::PlotToPixels(e.winT0, lim.Y.Max), ImPlot::PlotToPixels(e.winT1, lim.Y.Min),
+                          U32(Alpha(c, darkTheme ? 0.16f : 0.12f)));
+    ImPlot::PopPlotClipRect();
+    // Исходный сигнал на участке ± поля
+    std::size_t i0 = 0, i1 = rows.size();
+    while (i0 < rows.size() && rows[i0].t < a)
+        i0++;
+    while (i1 > i0 && rows[i1 - 1].t > b)
+        i1--;
+    const ImVec4 rawCol = darkTheme ? ImVec4(0.80f, 0.84f, 0.90f, 1.f) : ImVec4(0.20f, 0.24f, 0.30f, 1.f);
+    if (i1 > i0)
+    {
+        ImPlot::SetNextLineStyle(Alpha(rawCol, 0.45f), S(1.f));
+        ImPlot::PlotLine("Исходный сигнал", &rows[i0].t, axis == 0 ? &rows[i0].calcX : &rows[i0].calcY,
+                         static_cast<int>(i1 - i0), 0, 0, static_cast<int>(sizeof(csvlog::Row)));
+    }
+    // Обработанный: весь ряд записи (Медиана + EMA, Савицкий–Голай) на окне графика, иначе — кривая метода по участку
+    const auto method = ProcSettings().filter.method;
+    const char* procName = method == filt::Method::Kalman       ? "Уровень (Калман)"
+                           : method == filt::Method::DampedSine ? "Затухающая синусоида"
+                           : method == filt::Method::Mean       ? nullptr
+                                                                : "Обработанный сигнал";
+    if (procName)
+    {
+        std::vector<double> xs, ys;
+        if (!proc_.procY[post].empty())
+        {
+            for (std::size_t k = 0; k < proc_.procT[post].size(); k++)
+                if (proc_.procT[post][k] >= a && proc_.procT[post][k] <= b)
+                {
+                    xs.push_back(proc_.procT[post][k]);
+                    ys.push_back(proc_.procY[post][k]);
+                }
+        }
+        else
+        {
+            xs = e.t;
+            ys = e.y;
+        }
+        ImPlot::SetNextLineStyle(pal.accent, S(2.f));
+        ImPlot::PlotLine(procName, xs.data(), ys.data(), static_cast<int>(std::min(xs.size(), ys.size())));
+    }
+    // Среднее по обработанному — на окне, пунктиром продлено на весь участок
+    const double level = p.Level(post);
+    if (std::isfinite(level))
+    {
+        const double wa = std::isfinite(e.winT0) && e.winT1 > e.winT0 ? e.winT0 : t0;
+        const double wb = std::isfinite(e.winT1) && e.winT1 > e.winT0 ? e.winT1 : t1;
+        const std::string lab = Fmt("Среднее %s", text::Angle(level, 3).c_str());
+        const double xs[2] = {wa, wb}, ys[2] = {level, level};
+        ImPlot::SetNextLineStyle(Mix(c, darkTheme ? ImVec4(1, 1, 1, 1) : ImVec4(0, 0, 0, 1), 0.2f), S(3.f));
+        ImPlot::PlotLine(lab.c_str(), xs, ys, 2);
+        std::vector<double> dx, dy;
+        const double perPx = (lim.X.Max - lim.X.Min) / std::max(1.f, ImPlot::GetPlotSize().x);
+        for (double x = t0; x < t1; x += 14 * perPx * uiScale)
+        {
+            dx.insert(dx.end(), {x, std::min(x + 8 * perPx * uiScale, t1), heel::kNaN});
+            dy.insert(dy.end(), {level, level, heel::kNaN});
+        }
+        ImPlot::SetNextLineStyle(Alpha(c, 0.8f), S(1.5f));
+        ImPlot::PlotLine(lab.c_str(), dx.data(), dy.data(), static_cast<int>(dx.size()));
+        ImPlot::PushStyleColor(ImPlotCol_InlayText, pal.text);
+        {
+            FontScope fb(fontBold);
+            ImPlot::PlotText(Fmt("%d: %s", index + 1, text::Angle(level, 3).c_str()).c_str(), 0.5 * (t0 + t1), lim.Y.Max,
+                             ImVec2(0, S(12)));
+        }
+        ImPlot::PopStyleColor();
+    }
+    ImPlot::EndPlot();
+}
+
+// Все положения поста сеткой (картинка для отчёта): по каждому — исходный, обработанный и среднее.
+void App::ProcExportPositions(int post, float w, float h)
+{
+    const auto& m = proc_.meas[static_cast<std::size_t>(proc_.rec)];
+    const heel::File& f = (*proc_.files)[static_cast<std::size_t>(m.post[post].file)];
+    {
+        FontScope fh(fontH2);
+        ImGui::Text("Пост «%s» — положения груза, крен по оси %s", PostTitle(post).c_str(),
+                    settings_.heelAxis == 0 ? "X" : "Y");
+    }
+    {
+        FontScope fs(fontSmall);
+        const std::string line = f.name + " · обработка: " + filt::Describe(ProcSettings().filter) +
+                                 " · бледная линия — исходный сигнал, синяя — обработанный, толстая — среднее по "
+                                 "обработанному на окне (выделено), пунктир — оно же на всём положении";
+        ImGui::PushStyleColor(ImGuiCol_Text, pal.muted);
+        ImGui::PushTextWrapPos(0.f);
+        ImGui::TextUnformatted(line.c_str());
+        ImGui::PopTextWrapPos();
+        ImGui::PopStyleColor();
+    }
+    ImGui::Spacing();
+    const int n = static_cast<int>(proc_.pos.size());
+    const int cols = 2, rowsN = (n + cols - 1) / cols;
+    const float gap = S(10);
+    const float cw = std::floor((w - gap) / cols);
+    const float ch = std::floor((ImGui::GetContentRegionAvail().y - gap * static_cast<float>(rowsN - 1) - S(24)) /
+                                static_cast<float>(std::max(1, rowsN)));
+    (void) h;
+    for (int i = 0; i < n; i++)
+    {
+        if (i % cols)
+            ImGui::SameLine(0, gap);
+        else if (i)
+            ImGui::Dummy(ImVec2(0, gap - ImGui::GetStyle().ItemSpacing.y));
+        ProcPositionPlot(post, i, cw, ch, true);
+    }
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Датчики и посты: у каждого датчика — пост со своим названием (датчики заменяют вески: нос, корма, мидель, …)
+// ---------------------------------------------------------------------------------------------------------------
+
+namespace
+{
+
+// «2=Нос;3=Корма;101=Мидель» <-> карта (в названиях «;» и «=» заменяются на «,» и «-»).
+std::map<int, std::string> ParseNames(const std::string& s)
+{
+    std::map<int, std::string> out;
+    std::size_t a = 0;
+    while (a < s.size())
+    {
+        std::size_t b = s.find(';', a);
+        if (b == std::string::npos)
+            b = s.size();
+        const std::string item = s.substr(a, b - a);
+        const std::size_t eq = item.find('=');
+        if (eq != std::string::npos && eq > 0)
+            out[std::atoi(item.substr(0, eq).c_str())] = item.substr(eq + 1, 60);
+        a = b + 1;
+    }
+    return out;
+}
+
+std::string JoinNames(const std::map<int, std::string>& m)
+{
+    std::string s;
+    for (const auto& [k, v] : m)
+    {
+        std::string clean = v;
+        for (auto& c : clean)
+            c = c == ';' ? ',' : c == '=' ? '-' : c;
+        s += (s.empty() ? "" : ";") + std::to_string(k) + "=" + clean;
+    }
+    return s;
+}
+
+} // namespace
+
+std::string App::SensorTitle(int key) const
+{
+    if (const auto it = proc_.names.find(key); it != proc_.names.end() && !it->second.empty())
+        return it->second;
+    const int d = heel::DefaultPost(key);
+    if (d == heel::kBow)
+        return "Нос";
+    if (d == heel::kStern)
+        return "Корма";
+    return heel::SensorShort(key);
+}
+
+std::string App::SensorTitleOfPost(int post) const
+{
+    for (const auto& [key, p] : proc_.postOf)
+        if (p == post)
+            return SensorTitle(key);
+    return heel::DefaultPostName(post);
+}
+
+std::string App::PostTitle(int post) const
+{
+    std::string sens;
+    for (const auto& [key, p] : proc_.postOf)
+        if (p == post)
+            sens += (sens.empty() ? "" : ", ") + heel::SensorShort(key);
+    return SensorTitleOfPost(post) + (sens.empty() ? std::string() : " (" + sens + ")");
+}
+
+// Датчики -> посты по порядку (Д2 и старый датчик 1 — первыми), снятые с расчёта — -1; постов не больше kMaxPosts.
+void App::ProcAssignPosts()
+{
+    if (!proc_.namesLoaded)
+    {
+        proc_.names = ParseNames(settings_.sensorNames);
+        proc_.namesLoaded = true;
+    }
+    std::vector<int> keys = proc_.keys;
+    std::stable_sort(keys.begin(), keys.end(), [](int a, int b) {
+        auto rank = [](int k) {
+            const int d = heel::DefaultPost(k);
+            return d < 0 ? 10 : d;
+        };
+        return rank(a) != rank(b) ? rank(a) < rank(b) : a < b;
+    });
+    proc_.postOf.clear();
+    int next = 0;
+    for (const int k : keys)
+    {
+        if (proc_.skip.count(k) || next >= heel::kMaxPosts)
+        {
+            if (!proc_.skip.count(k))
+                ProcLog(heel::SensorName(k) + ": постов больше " + std::to_string(heel::kMaxPosts) + " — не учитывается");
+            proc_.postOf[k] = -1;
+            continue;
+        }
+        proc_.postOf[k] = next++;
+    }
+}
+
+std::vector<int> App::PostsInUse() const
+{
+    std::vector<int> out;
+    for (int p = 0; p < heel::kMaxPosts; p++)
+    {
+        bool any = false;
+        if (ProcCont())
+            any = proc_.meas[static_cast<std::size_t>(proc_.rec)].post[p].file >= 0;
+        else
+            for (const auto& m : proc_.meas)
+                any |= m.post[p].file >= 0;
+        if (any)
+            out.push_back(p);
+    }
+    return out;
+}
+
+void App::SaveSensorNames()
+{
+    settings_.sensorNames = JoinNames(proc_.names);
+    SaveSettingsSoon();
+    ProcRefreshLogNames();
+}
+
+std::string App::ProcSummaryText() const
+{
+    int used = 0;
+    std::set<std::string> formats;
+    bool byTime = false;
+    if (proc_.files)
+        for (const auto& m : proc_.meas)
+            for (const auto& pd : m.post)
+                if (pd.file >= 0)
+                {
+                    used++;
+                    const auto& f = (*proc_.files)[static_cast<std::size_t>(pd.file)];
+                    formats.insert(csvlog::FormatName(f.log.format));
+                    byTime |= f.log.time != csvlog::TimeSource::Ms;
+                }
+    std::string fmt;
+    for (const auto& x : formats)
+        fmt += (fmt.empty() ? "" : ", ") + x;
+    std::string posts;
+    for (const int key : proc_.keys)
+        if (const auto it = proc_.postOf.find(key); it != proc_.postOf.end() && it->second >= 0)
+            posts += (posts.empty() ? "" : ", ") + heel::SensorShort(key) + " — «" + SensorTitle(key) + "»";
+    // Перенос перед скобкой: иначе ImGui переносит строку по точке внутри «1.4+»
+    return Fmt("Замеров: %d, файлов: %d\n(%s; %s)%s", static_cast<int>(proc_.meas.size()), used, posts.c_str(), fmt.c_str(),
+               byTime ? "; без Ms — время по столбцу Time" : "");
+}
+
+std::string App::ProcRecordText() const
+{
+    if (!ProcCont() || !proc_.files)
+        return {};
+    const auto& m = proc_.meas[static_cast<std::size_t>(proc_.rec)];
+    const int mp = heel::MainPost(m);
+    if (mp < 0)
+        return {};
+    const auto& f = (*proc_.files)[static_cast<std::size_t>(m.post[mp].file)];
+    return Fmt("Одна запись — весь опыт: %s (%s), %.0f с; положений груза: %d (ось %s)", f.name.c_str(),
+               PostTitle(mp).c_str(), f.log.Duration(), static_cast<int>(proc_.pos.size()), settings_.heelAxis == 0 ? "X" : "Y");
+}
+
+// Переименовали датчик — строки журнала с постами (последние) пересобираются с текущими названиями.
+void App::ProcRefreshLogNames()
+{
+    auto refresh = [&](const char* prefix, const std::string& text) {
+        if (text.empty())
+            return;
+        for (auto it = proc_.log.rbegin(); it != proc_.log.rend(); ++it)
+            if (it->first.rfind(prefix, 0) == 0)
+            {
+                it->first = text;
+                return;
+            }
+    };
+    refresh("Замеров: ", ProcSummaryText());
+    refresh("Одна запись — весь опыт: ", ProcRecordText());
+}
+
+// «Датчики: Д2 [Нос ▼]  Д3 [Корма ▼]» — название поста каждого датчика (своё или из списка) и «учитывать».
+void App::ProcSensorNames(float right, const std::function<void(float)>& flow)
+{
+    (void) right;
+    const std::vector<int> keys = proc_.keys; // копия: смена учёта пересобирает proc_.keys
+    if (keys.empty())
+        return;
+    const float fw = S(128);
+    float need = ImGui::CalcTextSize("Датчики:").x;
+    for (const int k : keys)
+        need += S(12) + ImGui::CalcTextSize(heel::SensorShort(k).c_str()).x + S(6) + fw + ImGui::GetFrameHeight();
+    flow(need);
+    ImGui::BeginGroup();
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("Датчики:");
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Название поста каждого датчика: где он стоит на судне (нос, корма, мидель-шпангоут, …).\n"
+                          "Датчики заменяют вески: любой может стоять где угодно. Название — в таблице, на графиках\n"
+                          "и в отчёте; запоминается. ▼ — готовые названия и «не учитывать».");
+    bool regroup = false;
+    for (const int k : keys)
+    {
+        ImGui::SameLine(0, S(12));
+        ImGui::AlignTextToFramePadding();
+        const bool off = proc_.skip.count(k) > 0;
+        const int addr = k >= 100 ? k - 100 : k;
+        TextColored(off ? pal.muted : k > 0 && k < 100 && (addr == 2 || addr == 3) ? pal.sensor[addr - 2] : pal.text, "%s",
+                    heel::SensorShort(k).c_str());
+        if (ImGui::IsItemHovered())
+        {
+            std::string tip = heel::SensorName(k);
+            if (k == heel::kNoSensor && proc_.files)
+            {
+                tip = "Файлы без номера датчика в имени (не «…_Dk», не «M_NNN_k»):";
+                int shown = 0;
+                for (const auto& f : *proc_.files)
+                    if (f.sensor == heel::kNoSensor && f.log.error.empty() && shown++ < 12)
+                        tip += "\n  " + f.name;
+            }
+            ImGui::SetTooltip("%s", tip.c_str());
+        }
+        ImGui::SameLine(0, S(6));
+        ImGui::PushID(k);
+        char buf[64];
+        std::snprintf(buf, sizeof(buf), "%s", SensorTitle(k).c_str());
+        ImGui::SetNextItemWidth(fw);
+        if (off)
+            ImGui::PushStyleColor(ImGuiCol_Text, pal.muted);
+        if (ImGui::InputText("##name", buf, sizeof(buf)))
+        {
+            proc_.names[k] = buf;
+            SaveSensorNames();
+            proc_.dirty = true;
+        }
+        if (off)
+            ImGui::PopStyleColor();
+        ImGui::SameLine(0, 0);
+        if (ImGui::ArrowButton("##pick", ImGuiDir_Down))
+            ImGui::OpenPopup("##names");
+        if (ImGui::BeginPopup("##names"))
+        {
+            for (const char* n : kPostPresets)
+                if (ImGui::Selectable(n, SensorTitle(k) == n))
+                {
+                    proc_.names[k] = n;
+                    SaveSensorNames();
+                    proc_.dirty = true;
+                }
+            ImGui::Separator();
+            bool use = !off;
+            if (ui::Checkbox("Учитывать в расчёте", &use))
+            {
+                if (use)
+                    proc_.skip.erase(k);
+                else
+                    proc_.skip.insert(k);
+                regroup = true;
+            }
+            ImGui::EndPopup();
+        }
+        ImGui::PopID();
+    }
+    ImGui::EndGroup();
+    if (regroup)
+    {
+        ProcRegroup(true);
+        if (proc_.mode == 1 && !ProcCont())
+            ProcChooseMode(false);
+        ProcRecompute();
+        ProcRefreshLogNames();
+    }
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Свои методы обработки — формулы (core/Expr.hpp, core/UserMethod.hpp)
+// ---------------------------------------------------------------------------------------------------------------
+
+namespace
+{
+
+// Имя файла метода из его названия (знаки, недопустимые в имени файла, — «_»).
+std::string MethodFileName(const std::string& name)
+{
+    std::string s;
+    for (const char c : name)
+        s += (c == '\\' || c == '/' || c == ':' || c == '*' || c == '?' || c == '"' || c == '<' || c == '>' || c == '|' ||
+              static_cast<unsigned char>(c) < 0x20)
+                 ? '_'
+                 : c;
+    return (s.empty() ? std::string("метод") : s) + ".krenomer-method";
+}
+
+// Поле ввода строки (буфер — на кадр; ImGui держит свой буфер, пока поле в фокусе).
+bool InputStr(const char* id, std::string& v, float width, std::size_t maxLen = 1000)
+{
+    std::vector<char> buf(maxLen + 1, 0);
+    std::snprintf(buf.data(), buf.size(), "%s", v.c_str());
+    ImGui::SetNextItemWidth(width);
+    if (ImGui::InputText(id, buf.data(), buf.size()))
+    {
+        v = buf.data();
+        return true;
+    }
+    return false;
+}
+
+const char* kSyntaxHelp =
+    "Стадия: y[n] = формула. x — вход стадии (у первой — исходный крен), x[n-k], x[k], y[n-k] (k ≥ 1) — прошлые значения;\n"
+    "n — номер отсчёта, t — время, с; fs — частота опроса, Гц; dt = 1/fs; Tc — период качки, с; pi; константы метода.\n"
+    "Действия: + − * / ^, скобки, < <= > >= == != (1 или 0), and or not, условие  c ? a : b  или  if(c, a, b).\n"
+    "Функции: abs sqrt exp ln log10 sin cos tan atan atan2 pow min max mean floor ceil round sign clamp.\n"
+    "Ряды по входу стадии: median(x, N) — медиана N последних, sma(x, N) — среднее N последних, ema(x, α).\n"
+    "Начальное значение — y[n-k] до начала записи (по умолчанию x[0]). Выход стадии — вход следующей.\n"
+    "Среднее: по окну последних T с положения (window), по всему положению (all) или формулой (expr) с\n"
+    "avg(), avgw(T), med(), medw(T), last(), T0, T1. Нечисловой результат (1/0) заменяется предыдущим значением.\n"
+    "Пример — метод статьи: const fc = 0.5; const a = 2*pi*fc/(2*pi*fc + fs); стадии median(x, 3) и\n"
+    "a*x + (1 - a)*y[n-1]; среднее — window 3*Tc.";
+
+} // namespace
+
+void App::ProcLoadMethods()
+{
+    if (proc_.methodsLoaded)
+        return;
+    proc_.methodsLoaded = true;
+    if (!opt_.useSettingsFile)
+        return;
+    std::error_code ec;
+    const fs::path dir = PcSettings::Dir() / L"methods";
+    for (fs::directory_iterator it(dir, ec), end; !ec && it != end; it.increment(ec))
+    {
+        if (!it->is_regular_file(ec) || it->path().extension() != L".krenomer-method")
+            continue;
+        std::ifstream in(it->path(), std::ios::binary);
+        const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        um::Method m;
+        if (um::FromText(text, m))
+            proc_.methods.push_back(m);
+    }
+    std::sort(proc_.methods.begin(), proc_.methods.end(), [](const um::Method& a, const um::Method& b) { return a.name < b.name; });
+}
+
+void App::ProcSaveMethod(const um::Method& m)
+{
+    if (!opt_.useSettingsFile)
+        return;
+    std::error_code ec;
+    const fs::path dir = PcSettings::Dir() / L"methods";
+    fs::create_directories(dir, ec);
+    const fs::path file = dir / text::PathFromUtf8(MethodFileName(m.name));
+    fs::path tmp = file;
+    tmp += L".tmp";
+    {
+        std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
+        out << um::ToText(m);
+        if (!out)
+            return;
+    }
+    fs::rename(tmp, file, ec);
+}
+
+void App::ProcDeleteMethodFile(const std::string& name)
+{
+    if (!opt_.useSettingsFile)
+        return;
+    std::error_code ec;
+    fs::remove(PcSettings::Dir() / L"methods" / text::PathFromUtf8(MethodFileName(name)), ec);
+}
+
+std::shared_ptr<const um::Compiled> App::ProcUserCompiled(const um::Method& m, um::Problem* problem) const
+{
+    um::Problem pr;
+    auto c = um::Build(m, pr);
+    if (problem)
+        *problem = pr;
+    return c;
+}
+
+void App::ProcessUseUserMethod(const um::Method& m, bool apply)
+{
+    ProcLoadMethods();
+    bool found = false;
+    for (std::size_t i = 0; i < proc_.methods.size(); i++)
+        if (proc_.methods[i].name == m.name)
+        {
+            proc_.methods[i] = m;
+            proc_.methodSel = static_cast<int>(i);
+            found = true;
+        }
+    if (!found)
+    {
+        proc_.methods.push_back(m);
+        proc_.methodSel = static_cast<int>(proc_.methods.size()) - 1;
+    }
+    if (!apply)
+        return;
+    settings_.fltMethod = static_cast<int>(filt::Method::User);
+    settings_.fltUser = m.name;
+    proc_.dirty = true;
+}
+
+// Предпросмотр на выбранном положении (или первом): исходный, текущий метод расчёта и свой метод — линии и средние.
+void App::ProcMethodPreview(const um::Method& m, float w, float h)
+{
+    if (!ProcCont() || !proc_.files || proc_.pos.empty())
+    {
+        MutedWrapped("Предпросмотр — на записи всего опыта: откройте папку с записью (режим «Весь опыт одной записью») "
+                     "и выберите положение в таблице.");
+        return;
+    }
+    const int idx = proc_.sel >= 0 && proc_.sel < static_cast<int>(proc_.pos.size()) ? proc_.sel : std::min<int>(1, static_cast<int>(proc_.pos.size()) - 1);
+    const auto& rec = proc_.meas[static_cast<std::size_t>(proc_.rec)];
+    const int post = ProcShownPost();
+    if (post < 0 || rec.post[post].file < 0)
+        return;
+    const auto& rows = (*proc_.files)[static_cast<std::size_t>(rec.post[post].file)].log.rows;
+    std::vector<double> t, x;
+    heel::Series((*proc_.files)[static_cast<std::size_t>(rec.post[post].file)].log, settings_.heelAxis, t, x);
+    const heel::Position& p = proc_.pos[static_cast<std::size_t>(idx)];
+    const double t0 = std::min(p.t0, p.t1), t1 = std::max(p.t0, p.t1);
+    // Свой метод
+    um::Problem pr;
+    const auto c = ProcUserCompiled(m, &pr);
+    filt::Estimate mine;
+    std::vector<double> mineY;
+    if (c)
+    {
+        filt::Params fp = ProcSettings().filter;
+        fp.method = filt::Method::User;
+        fp.custom = c;
+        mineY = filt::ProcessSeries(t, x, fp);
+        mine = filt::EstimateSpan(t, x, mineY, t0, t1, fp);
+    }
+    const filt::Estimate& cur = p.est[post];
+    {
+        FontScope f(fontSmall);
+        Muted("Положение %d, %s · текущий метод (%s): %s · свой: %s · разница %s", idx + 1, PostTitle(post).c_str(),
+              filt::MethodName(ProcSettings().filter.method), text::Angle(p.Level(post), 3).c_str(),
+              text::Angle(mine.level, 3).c_str(),
+              std::isfinite(mine.level) && std::isfinite(p.Level(post)) ? Fmt("%.3f°", mine.level - p.Level(post)).c_str() : "—");
+    }
+    PlotStyle(false);
+    const double margin = std::max(3.0, 0.12 * (t1 - t0));
+    double lo = 1e300, hi = -1e300;
+    for (std::size_t i = 0; i < t.size(); i++)
+        if (t[i] >= t0 && t[i] <= t1 && std::isfinite(x[i]))
+        {
+            lo = std::min(lo, x[i]);
+            hi = std::max(hi, x[i]);
+        }
+    if (!(hi >= lo))
+    {
+        lo = -1;
+        hi = 1;
+    }
+    const double pad = std::max((hi - lo) * 0.2, 0.1);
+    if (!ImPlot::BeginPlot("##umprev", ImVec2(w, h - ImGui::GetTextLineHeightWithSpacing()), ImPlotFlags_NoMenus | ImPlotFlags_NoBoxSelect))
+        return;
+    ImPlot::SetupAxes("Время, с", "Крен, °", ImPlotAxisFlags_NoHighlight, ImPlotAxisFlags_NoHighlight);
+    ImPlot::SetupAxisLimits(ImAxis_X1, t0 - margin, t1 + margin, ImPlotCond_Always);
+    ImPlot::SetupAxisLimits(ImAxis_Y1, lo - pad, hi + pad, ImPlotCond_Always);
+    ImPlot::SetupLegend(ImPlotLocation_South, ImPlotLegendFlags_Horizontal | ImPlotLegendFlags_Outside);
+    ImPlot::SetupFinish();
+    auto window = [&](const std::vector<double>& ys, const ImVec4& col, const char* label, int stride, const double* ts) {
+        std::vector<double> xs2, ys2;
+        for (std::size_t i = 0; i < ys.size(); i++)
+        {
+            const double tt = ts ? ts[i * static_cast<std::size_t>(stride)] : t[i];
+            if (tt >= t0 - margin && tt <= t1 + margin)
+            {
+                xs2.push_back(tt);
+                ys2.push_back(ys[i]);
+            }
+        }
+        ImPlot::SetNextLineStyle(col, S(1.8f));
+        ImPlot::PlotLine(label, xs2.data(), ys2.data(), static_cast<int>(xs2.size()));
+    };
+    const ImVec4 rawCol = darkTheme ? ImVec4(0.80f, 0.84f, 0.90f, 0.45f) : ImVec4(0.20f, 0.24f, 0.30f, 0.45f);
+    {
+        std::vector<double> xs2, ys2;
+        for (std::size_t i = 0; i < rows.size(); i++)
+            if (t[i] >= t0 - margin && t[i] <= t1 + margin)
+            {
+                xs2.push_back(t[i]);
+                ys2.push_back(x[i]);
+            }
+        ImPlot::SetNextLineStyle(rawCol, S(1.f));
+        ImPlot::PlotLine("Исходный", xs2.data(), ys2.data(), static_cast<int>(xs2.size()));
+    }
+    const ImVec4 curCol = pal.accent, mineCol = ImVec4(0.90f, 0.45f, 0.10f, 1.f);
+    if (!proc_.procY[post].empty())
+        window(proc_.procY[post], curCol, "Текущий метод", 1, nullptr);
+    else if (!cur.y.empty())
+    {
+        ImPlot::SetNextLineStyle(curCol, S(1.8f));
+        ImPlot::PlotLine("Текущий метод", cur.t.data(), cur.y.data(), static_cast<int>(std::min(cur.t.size(), cur.y.size())));
+    }
+    if (!mineY.empty())
+        window(mineY, mineCol, Fmt("«%s»", m.name.c_str()).c_str(), 1, nullptr);
+    auto level = [&](double v, double a, double b, const ImVec4& col, const char* label) {
+        if (!std::isfinite(v))
+            return;
+        const bool win = std::isfinite(a) && std::isfinite(b) && b > a;
+        const double xs2[2] = {win ? a : t0, win ? b : t1}, ys2[2] = {v, v};
+        ImPlot::SetNextLineStyle(col, S(3.f));
+        ImPlot::PlotLine(label, xs2, ys2, 2);
+    };
+    level(p.Level(post), cur.winT0, cur.winT1, Mix(curCol, ImVec4(0, 0, 0, 1), 0.25f),
+          Fmt("Среднее текущего %s", text::Angle(p.Level(post), 3).c_str()).c_str());
+    level(mine.level, mine.winT0, mine.winT1, Mix(mineCol, ImVec4(0, 0, 0, 1), 0.2f),
+          Fmt("Среднее своего %s", text::Angle(mine.level, 3).c_str()).c_str());
+    ImPlot::EndPlot();
+}
+
+// Окно «Свой метод обработки»: список методов, редактор (константы, стадии, правило среднего), ошибки с местом,
+// предпросмотр на положении, файлы .krenomer-method (импорт / экспорт).
+void App::ProcMethodWindow()
+{
+    if (!proc_.methodWin)
+        return;
+    ProcLoadMethods();
+    const ImVec2 ds = ImGui::GetIO().DisplaySize;
+    ImGui::SetNextWindowSize(ImVec2(std::min(ds.x - S(40), S(1180)), std::min(ds.y - S(40), S(740))), ImGuiCond_Appearing);
+    ImGui::SetNextWindowPos(ImVec2(ds.x * 0.5f, ds.y * 0.5f), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, pal.bg);
+    if (!ImGui::Begin("Свой метод обработки (формулы)##umwin", &proc_.methodWin, ImGuiWindowFlags_NoCollapse))
+    {
+        ImGui::End();
+        ImGui::PopStyleColor();
+        return;
+    }
+    const ImVec2 avail = ImGui::GetContentRegionAvail();
+    const float gap = S(12), lw = S(250);
+    // Список методов
+    if (BeginCard("##umlist", ImVec2(lw, avail.y)))
+    {
+        CardTitle("Методы", "Свои методы — в расчёте вместе со встроенными (кнопка «Обработка: … ▼»)");
+        for (int i = 0; i < static_cast<int>(proc_.methods.size()); i++)
+        {
+            const bool used = settings_.fltMethod == static_cast<int>(filt::Method::User) &&
+                              settings_.fltUser == proc_.methods[static_cast<std::size_t>(i)].name;
+            ImGui::PushID(i);
+            if (ImGui::Selectable(Fmt("%s%s", used ? "● " : "", proc_.methods[static_cast<std::size_t>(i)].name.c_str()).c_str(),
+                                  proc_.methodSel == i))
+                proc_.methodSel = i;
+            ImGui::PopID();
+        }
+        if (proc_.methods.empty())
+            SmallMuted("Своих методов пока нет — создайте из готового ниже.");
+        ImGui::Spacing();
+        {
+            FontScope f(fontSmall);
+            Muted("Новый из готового:");
+        }
+        const struct
+        {
+            const char* label;
+            um::Method (*make)();
+        } presets[] = {{"Медиана + EMA (статья)", um::PresetArticle},
+                       {"Простое среднее", um::PresetMean},
+                       {"Пример из трёх стадий", um::PresetExample}};
+        for (const auto& pr : presets)
+            if (Button(pr.label, BtnKind::Normal, ImVec2(-FLT_MIN, 0)))
+            {
+                um::Method m = pr.make();
+                std::string base = m.name;
+                for (int k = 2; std::any_of(proc_.methods.begin(), proc_.methods.end(),
+                                            [&](const um::Method& q) { return q.name == m.name; });
+                     k++)
+                    m.name = base + " " + std::to_string(k);
+                proc_.methods.push_back(m);
+                proc_.methodSel = static_cast<int>(proc_.methods.size()) - 1;
+            }
+        ImGui::Spacing();
+        if (Button("Импорт…", BtnKind::Normal, ImVec2(-FLT_MIN, 0)))
+        {
+            std::string path;
+            if (dialogs::PickFile(path, L"Метод обработки (*.krenomer-method)\0*.krenomer-method\0Все файлы\0*.*\0",
+                                  L"Метод обработки из файла"))
+            {
+                std::ifstream in(text::PathFromUtf8(path), std::ios::binary);
+                const std::string txt((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+                um::Method m;
+                std::string err;
+                if (um::FromText(txt, m, &err))
+                {
+                    proc_.methods.push_back(m);
+                    proc_.methodSel = static_cast<int>(proc_.methods.size()) - 1;
+                    proc_.methodMsg = "✓ Импортирован «" + m.name + "»";
+                }
+                else
+                    proc_.methodMsg = "✗ Файл не прочитан: " + err;
+            }
+        }
+        if (!proc_.methodMsg.empty())
+        {
+            FontScope f(fontSmall);
+            ImGui::PushStyleColor(ImGuiCol_Text, proc_.methodMsg.rfind("✗", 0) == 0 ? pal.err : pal.ok);
+            ImGui::TextWrapped("%s", proc_.methodMsg.c_str());
+            ImGui::PopStyleColor();
+        }
+    }
+    EndCard();
+    ImGui::SameLine(0, gap);
+    ImGui::BeginGroup();
+    const float rw = avail.x - lw - gap;
+    if (proc_.methodSel < 0 || proc_.methodSel >= static_cast<int>(proc_.methods.size()))
+    {
+        if (BeginCard("##umempty", ImVec2(rw, avail.y)))
+        {
+            CardTitle("Как писать формулы");
+            FontScope f(fontSmall);
+            ImGui::TextUnformatted(kSyntaxHelp);
+        }
+        EndCard();
+        ImGui::EndGroup();
+        ImGui::End();
+        ImGui::PopStyleColor();
+        return;
+    }
+    um::Method& m = proc_.methods[static_cast<std::size_t>(proc_.methodSel)];
+    const std::string oldName = m.name;
+    um::Problem problem;
+    const auto compiled = ProcUserCompiled(m, &problem);
+    const float editH = std::floor(avail.y * 0.6f);
+    if (BeginCard("##umedit", ImVec2(rw, editH)))
+    {
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted("Название");
+        ImGui::SameLine(0, S(8));
+        InputStr("##umname", m.name, S(300), 80);
+        ImGui::SameLine(0, S(8));
+        Hint(kSyntaxHelp);
+        const float bw = S(118);
+        ImGui::SameLine(rw - S(28) - 3 * bw - 2 * S(8));
+        if (Button("В расчёт", BtnKind::Primary, ImVec2(bw, 0), compiled == nullptr, "Сначала исправьте ошибку"))
+        {
+            ProcSaveMethod(m);
+            settings_.fltMethod = static_cast<int>(filt::Method::User);
+            settings_.fltUser = m.name;
+            SaveSettingsSoon();
+            proc_.dirty = true;
+            proc_.methodMsg = "✓ «" + m.name + "» — метод расчёта";
+        }
+        ImGui::SameLine(0, S(8));
+        if (Button("Экспорт…", BtnKind::Normal, ImVec2(bw, 0)))
+        {
+            std::string path = MethodFileName(m.name);
+            if (dialogs::SaveFile(path, L"Метод обработки (*.krenomer-method)\0*.krenomer-method\0", L"Сохранить метод в файл",
+                                  L"krenomer-method"))
+            {
+                std::ofstream out(text::PathFromUtf8(path), std::ios::binary | std::ios::trunc);
+                out << um::ToText(m);
+                proc_.methodMsg = out ? "✓ Сохранён в файл" : "✗ Файл не записан";
+            }
+        }
+        ImGui::SameLine(0, S(8));
+        if (Button("Удалить", BtnKind::Danger, ImVec2(bw, 0)))
+        {
+            ProcDeleteMethodFile(m.name);
+            if (settings_.fltUser == m.name && settings_.fltMethod == static_cast<int>(filt::Method::User))
+                settings_.fltMethod = static_cast<int>(filt::Method::Kalman);
+            proc_.methods.erase(proc_.methods.begin() + proc_.methodSel);
+            proc_.methodSel = -1;
+            proc_.dirty = true;
+            EndCard();
+            ImGui::EndGroup();
+            ImGui::End();
+            ImGui::PopStyleColor();
+            return;
+        }
+        ImGui::Spacing();
+        const float fw = rw - S(28);
+        bool changed = false;
+        // Константы
+        {
+            FontScope f(fontBold);
+            ImGui::TextUnformatted("Константы");
+        }
+        int delConst = -1;
+        for (std::size_t i = 0; i < m.consts.size(); i++)
+        {
+            ImGui::PushID(static_cast<int>(i) + 100);
+            ImGui::AlignTextToFramePadding();
+            Muted("const");
+            ImGui::SameLine(0, S(6));
+            changed |= InputStr("##cn", m.consts[i].first, S(90), 30);
+            ImGui::SameLine(0, S(6));
+            ImGui::TextUnformatted("=");
+            ImGui::SameLine(0, S(6));
+            changed |= InputStr("##cv", m.consts[i].second, fw - S(200));
+            ImGui::SameLine(0, S(6));
+            if (Button("✕", BtnKind::Normal, ImVec2(S(26), 0)))
+                delConst = static_cast<int>(i);
+            ImGui::PopID();
+        }
+        if (delConst >= 0)
+        {
+            m.consts.erase(m.consts.begin() + delConst);
+            changed = true;
+        }
+        if (Button("+ константа", BtnKind::Normal, ImVec2(S(130), 0), static_cast<int>(m.consts.size()) >= um::kMaxConsts))
+        {
+            m.consts.push_back({"k" + std::to_string(m.consts.size() + 1), "1"});
+            changed = true;
+        }
+        // Стадии
+        ImGui::Spacing();
+        {
+            FontScope f(fontBold);
+            ImGui::TextUnformatted("Стадии (выход одной — вход следующей)");
+        }
+        int delStage = -1;
+        for (std::size_t i = 0; i < m.stages.size(); i++)
+        {
+            ImGui::PushID(static_cast<int>(i) + 200);
+            ImGui::AlignTextToFramePadding();
+            TextColored(pal.accent, "%d.", static_cast<int>(i) + 1);
+            ImGui::SameLine(0, S(6));
+            Muted("y[n] =");
+            ImGui::SameLine(0, S(6));
+            changed |= InputStr("##sf", m.stages[i].formula, fw - S(330));
+            ImGui::SameLine(0, S(8));
+            Muted("начало");
+            ImGui::SameLine(0, S(6));
+            changed |= InputStr("##si", m.stages[i].init, S(110));
+            ImGui::SameLine(0, S(6));
+            if (Button("✕", BtnKind::Normal, ImVec2(S(26), 0)))
+                delStage = static_cast<int>(i);
+            ImGui::PopID();
+        }
+        if (delStage >= 0)
+        {
+            m.stages.erase(m.stages.begin() + delStage);
+            changed = true;
+        }
+        if (Button("+ стадия", BtnKind::Normal, ImVec2(S(130), 0), static_cast<int>(m.stages.size()) >= um::kMaxStages))
+        {
+            m.stages.push_back({"x", "x[0]"});
+            changed = true;
+        }
+        // Среднее
+        ImGui::Spacing();
+        ImGui::AlignTextToFramePadding();
+        {
+            FontScope f(fontBold);
+            ImGui::TextUnformatted("Среднее");
+        }
+        ImGui::SameLine(0, S(10));
+        static const char* kinds[] = {"Окно в конце, с", "Всё положение", "Формула"};
+        static const int kindValues[] = {0, 1, 2};
+        int kind = static_cast<int>(m.mean);
+        if (Segmented("umk", &kind, kinds, kindValues, 3))
+        {
+            m.mean = static_cast<um::MeanKind>(kind);
+            if (m.mean == um::MeanKind::Window && m.meanArg.empty())
+                m.meanArg = "3*Tc";
+            if (m.mean == um::MeanKind::Expr && m.meanArg.find('(') == std::string::npos)
+                m.meanArg = "avgw(3*Tc)";
+            changed = true;
+        }
+        if (m.mean != um::MeanKind::All)
+        {
+            ImGui::SameLine(0, S(10));
+            changed |= InputStr("##ma", m.meanArg, std::max(S(160), ImGui::GetContentRegionAvail().x));
+        }
+        // Ошибка — с местом
+        ImGui::Spacing();
+        if (!compiled)
+        {
+            ImGui::PushStyleColor(ImGuiCol_Text, pal.err);
+            ImGui::TextWrapped("✗ %s", problem.Text().c_str());
+            ImGui::PopStyleColor();
+        }
+        else
+        {
+            FontScope f(fontSmall);
+            ImGui::PushStyleColor(ImGuiCol_Text, pal.ok);
+            ImGui::TextWrapped("✓ Формулы разобраны%s", compiled->nonFinite ? Fmt(" · нечисловых значений заменено: %ld", compiled->nonFinite).c_str() : "");
+            ImGui::PopStyleColor();
+        }
+        if (changed && settings_.fltMethod == static_cast<int>(filt::Method::User) && settings_.fltUser == oldName)
+        {
+            settings_.fltUser = m.name;
+            proc_.dirty = true;
+        }
+        if (changed || m.name != oldName)
+        {
+            if (m.name != oldName)
+                ProcDeleteMethodFile(oldName);
+            ProcSaveMethod(m);
+        }
+    }
+    EndCard();
+    ImGui::Dummy(ImVec2(0, gap - ImGui::GetStyle().ItemSpacing.y));
+    if (BeginCard("##umprevcard", ImVec2(rw, ImGui::GetContentRegionAvail().y)))
+    {
+        {
+            FontScope f(fontBold);
+            ImGui::TextUnformatted("Предпросмотр на положении");
+        }
+        const ImVec2 a = ImGui::GetContentRegionAvail();
+        ProcMethodPreview(m, a.x, a.y);
+    }
+    EndCard();
+    ImGui::EndGroup();
+    ImGui::End();
+    ImGui::PopStyleColor();
+}
+
 } // namespace ui
+
+
 

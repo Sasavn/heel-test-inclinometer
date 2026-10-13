@@ -14,15 +14,22 @@
 // Непрерывная запись (один файл — весь опыт): положения груза ищет Plateaus.hpp по основному посту записи; крен
 // каждого поста на участке положения, Δθ от начального положения, h по положениям — heel::SolvePositions (Heel.hpp).
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <cmath>
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 #include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <map>
 #include <string>
 #include <system_error>
 #include <vector>
 
 #include "CsvLog.hpp"
+#include "Filters.hpp"
 #include "Heel.hpp"
 #include "Plateaus.hpp"
 #include "Protocol.hpp"
@@ -31,20 +38,34 @@
 namespace heel
 {
 
-inline constexpr int kBow = 0, kStern = 1; // посты
-inline constexpr const char* kPostName[2] = {"Нос", "Корма"};
+// Посты — места датчиков на судне (датчики заменяют вески): у каждого датчика свой пост и своё название (нос, корма,
+// мидель-шпангоут, …). Постов в замере / положении — до kMaxPosts.
+inline constexpr int kMaxPosts = 4;
+inline constexpr int kBow = 0, kStern = 1; // посты по умолчанию: Д2 и старый датчик 1 — первый, Д3 и датчик 2 — второй
+
+inline const char* DefaultPostName(int p)
+{
+    static const char* names[kMaxPosts] = {"Нос", "Корма", "Пост 3", "Пост 4"};
+    return p >= 0 && p < kMaxPosts ? names[p] : "Пост";
+}
 
 // Исходные данные обработки (значения по умолчанию — как в BWM427_Analyzer, ось — X: датчики ставят поперёк судна).
 struct Settings
 {
-    double D = 1500.0;        // водоизмещение, т
-    double P = 15.0;          // масса кренящего груза, т
-    double L = 4.5;           // плечо переноса по умолчанию, м
+    double D = 1500.0;        // водоизмещение, т (малое судно — кг)
+    double P = 15.0;          // масса кренящего груза, т (малое судно — кг)
+    double L = 4.5;           // плечо переноса по умолчанию, м (малое судно — мм)
     double windowS = 30.0;    // крен — среднее за последние N с файла
     double thresholdDeg = 0.1; // |θ| не больше — замер на этом посту не учитывается
     int axis = 0;             // 0 — CalcX, 1 — CalcY
     double minPlateauS = 10.0; // непрерывная запись: положение не короче, с
     double minStepDeg = 0.5;   // непрерывная запись: перепад крена между положениями не меньше, °
+
+    Units units;               // большое судно (т, м) или малое (кг, мм): в этих единицах D, P, L и плечи
+    std::array<std::string, kMaxPosts> postNames = {"Нос", "Корма", "Пост 3", "Пост 4"}; // названия постов (датчиков)
+
+    const std::string& PostName(int p) const { return postNames[static_cast<std::size_t>(std::clamp(p, 0, kMaxPosts - 1))]; }
+    filt::Params filter;       // обработка сигнала положения (Filters.hpp): метод и его параметры
 
     plateau::Params Plateau() const
     {
@@ -364,7 +385,22 @@ struct Measurement
     std::string label;     // «19»; у записи на ПК — «17:19:28 метка»
     bool use = true;       // в расчёте (флажок в таблице)
     double arm = kNaN;     // |l|, м (задаёт интерфейс: своё или L)
-    PostData post[2];      // нос, корма
+    PostData post[kMaxPosts]; // посты (датчики)
+
+    // Расхождение крена между постами (наибольший минус наименьший), °; NaN — постов с данными меньше двух.
+    double Spread() const
+    {
+        double lo = 1e300, hi = -1e300;
+        int n = 0;
+        for (const PostData& pd : post)
+            if (pd.file >= 0 && std::isfinite(pd.st.mean))
+            {
+                lo = std::min(lo, pd.st.mean);
+                hi = std::max(hi, pd.st.mean);
+                n++;
+            }
+        return n >= 2 ? hi - lo : kNaN;
+    }
 };
 
 struct Summary
@@ -415,7 +451,7 @@ inline std::vector<Measurement> Group(const std::vector<File>& files, const std:
                                               : f.number;
         const auto it = postOf.find(f.sensor);
         const int post = it != postOf.end() ? it->second : DefaultPost(f.sensor);
-        if (post < 0 || post > 1)
+        if (post < 0 || post >= kMaxPosts)
         {
             note(f.name + ": " + SensorName(f.sensor) + " без поста — не учитывается");
             continue;
@@ -426,7 +462,7 @@ inline std::vector<Measurement> Group(const std::vector<File>& files, const std:
         PostData& pd = m.post[post];
         if (pd.file >= 0)
         {
-            note(f.name + ": на посту «" + kPostName[post] + "» замера " + m.label + " уже есть " +
+            note(f.name + ": на посту " + std::to_string(post + 1) + " замера " + m.label + " уже есть " +
                  files[static_cast<std::size_t>(pd.file)].name + " — не учтён");
             continue;
         }
@@ -448,7 +484,7 @@ inline Summary Compute(const Settings& s, const std::vector<File>& files, std::v
     {
         if (m.use)
             sum.measurements++;
-        for (int p = 0; p < 2; p++)
+        for (int p = 0; p < kMaxPosts; p++)
         {
             PostData& pd = m.post[p];
             pd.res = PointResult{};
@@ -466,12 +502,12 @@ inline Summary Compute(const Settings& s, const std::vector<File>& files, std::v
             pt.number = m.number;
             pt.post = p;
             pt.thetaDeg = pd.st.mean;
-            pt.arm = std::isfinite(m.arm) ? std::fabs(m.arm) : s.L;
+            pt.arm = s.units.ToMetres(std::isfinite(m.arm) ? std::fabs(m.arm) : s.L);
             pts.push_back(pt);
             where.push_back(&pd);
         }
     }
-    const Result r = Solve(pts, s.D, s.P, s.thresholdDeg);
+    const Result r = Solve(pts, s.units.ToTonnes(s.D), s.units.ToTonnes(s.P), s.thresholdDeg);
     for (std::size_t i = 0; i < where.size(); i++)
         where[i]->res = r.points[i];
     sum.h = r.h;
@@ -489,9 +525,28 @@ struct Position
 {
     double t0 = kNaN, t1 = kNaN; // участок, с от начала записи
     bool use = true;             // в расчёте
-    double arm = kNaN;           // |l| — плечо переноса от начального положения, м; NaN — L
-    plateau::Span st[2];         // крен поста на участке (нос, корма)
-    PointResult res[2];          // Δθ, h, учтено ли, почему нет
+    double arm = kNaN;           // |l| — плечо переноса от начального положения (м / мм — Settings::units); NaN — L
+    plateau::Span st[kMaxPosts];       // крен поста на участке: среднее исходных отсчётов без выбросов
+    filt::Estimate est[kMaxPosts];     // крен по методу обработки (Filters.hpp) — он идёт в расчёт
+    PointResult res[kMaxPosts];        // Δθ, h, учтено ли, почему нет
+
+    // Расхождение крена между постами (по методу обработки), °; NaN — постов с данными меньше двух.
+    double Spread() const
+    {
+        double lo = 1e300, hi = -1e300;
+        int n = 0;
+        for (int p = 0; p < kMaxPosts; p++)
+            if (const double v = Level(p); std::isfinite(v))
+            {
+                lo = std::min(lo, v);
+                hi = std::max(hi, v);
+                n++;
+            }
+        return n >= 2 ? hi - lo : kNaN;
+    }
+
+    // Крен поста для расчёта: по методу обработки, а если он не сошёлся — простое среднее.
+    double Level(int post) const { return std::isfinite(est[post].level) ? est[post].level : st[post].mean; }
 };
 
 // Время и угол по оси axis — отдельными рядами (для Plateaus.hpp).
@@ -511,7 +566,10 @@ inline void Series(const csvlog::Log& log, int axis, std::vector<double>& t, std
 // Основной пост записи — по нему ищутся положения: нос, а без носового файла — корма; -1 — файлов нет.
 inline int MainPost(const Measurement& m)
 {
-    return m.post[0].file >= 0 ? 0 : m.post[1].file >= 0 ? 1 : -1;
+    for (int p = 0; p < kMaxPosts; p++)
+        if (m.post[p].file >= 0)
+            return p;
+    return -1;
 }
 
 // Положения груза в записи m (Plateaus.hpp по основному посту).
@@ -541,24 +599,30 @@ inline Summary ComputePositions(const Settings& s, const std::vector<File>& file
     std::vector<Point> pts;
     std::vector<bool> use;
     std::vector<std::pair<std::size_t, int>> where;
-    for (int p = 0; p < 2; p++)
+    for (int p = 0; p < kMaxPosts; p++)
     {
-        std::vector<double> t, v;
+        std::vector<double> t, v, proc;
         if (m.post[p].file >= 0)
+        {
             Series(files[static_cast<std::size_t>(m.post[p].file)].log, s.axis, t, v);
+            proc = filt::ProcessSeries(t, v, s.filter); // обработанный сигнал — по всей записи (фильтры каузальные)
+        }
         for (std::size_t i = 0; i < pos.size(); i++)
         {
             Position& ps = pos[i];
             ps.res[p] = PointResult{};
             ps.st[p] = plateau::Span{};
+            ps.est[p] = filt::Estimate{};
             if (m.post[p].file < 0)
                 continue;
-            ps.st[p] = plateau::Measure(t, v, std::min(ps.t0, ps.t1), std::max(ps.t0, ps.t1));
+            const double a = std::min(ps.t0, ps.t1), b = std::max(ps.t0, ps.t1);
+            ps.st[p] = plateau::Measure(t, v, a, b);
+            ps.est[p] = filt::EstimateSpan(t, v, proc, a, b, s.filter);
             Point pt;
             pt.number = static_cast<int>(i) + 1;
             pt.post = p;
-            pt.thetaDeg = ps.st[p].mean;
-            pt.arm = std::isfinite(ps.arm) ? std::fabs(ps.arm) : s.L;
+            pt.thetaDeg = ps.Level(p);
+            pt.arm = s.units.ToMetres(std::isfinite(ps.arm) ? std::fabs(ps.arm) : s.L);
             pts.push_back(pt);
             use.push_back(ps.use);
             where.push_back({i, p});
@@ -566,7 +630,7 @@ inline Summary ComputePositions(const Settings& s, const std::vector<File>& file
     }
     for (const Position& ps : pos)
         sum.measurements += ps.use ? 1 : 0;
-    const Result r = SolvePositions(pts, use, s.D, s.P, s.thresholdDeg);
+    const Result r = SolvePositions(pts, use, s.units.ToTonnes(s.D), s.units.ToTonnes(s.P), s.thresholdDeg);
     for (std::size_t k = 0; k < where.size(); k++)
         pos[where[k].first].res[where[k].second] = r.points[k];
     sum.h = r.h;
@@ -617,6 +681,124 @@ inline int LongestRecord(const std::vector<File>& files, const std::vector<Measu
         }
     }
     return best;
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Ручные правки положений: хранятся у программы (не рядом с данными — папка может быть на карте или в «Загрузках»)
+// в файле <папка>/<ключ>.txt; ключ — имя, размер и время изменения файла записи и ось. Формат — строки
+// «t0;t1;use;arm» (arm пусто — L), первой строкой «units=small|large».
+// ---------------------------------------------------------------------------------------------------------------
+
+// Ключ правок записи: FNV-1a 64 от «имя|размер|время|ось» — в 16 hex-знаках.
+inline std::string EditsKey(const File& f, int axis)
+{
+    std::error_code ec;
+    const auto size = std::filesystem::file_size(f.path, ec);
+    const auto when = std::filesystem::last_write_time(f.path, ec).time_since_epoch().count();
+    const std::string id = f.name + "|" + std::to_string(ec ? 0 : size) + "|" + std::to_string(when) + "|" +
+                           std::to_string(axis);
+    std::uint64_t h = 1469598103934665603ull;
+    for (const char c : id)
+    {
+        h ^= static_cast<unsigned char>(c);
+        h *= 1099511628211ull;
+    }
+    char b[24];
+    std::snprintf(b, sizeof(b), "%016llx", static_cast<unsigned long long>(h));
+    return b;
+}
+
+inline std::string PositionsText(const std::vector<Position>& pos, const Units& u)
+{
+    std::string s = std::string("units=") + (u.model ? "small" : "large") + "\n";
+    char b[128];
+    for (const Position& p : pos)
+    {
+        std::snprintf(b, sizeof(b), "%.3f;%.3f;%d;", p.t0, p.t1, p.use ? 1 : 0);
+        s += b;
+        if (std::isfinite(p.arm))
+        {
+            std::snprintf(b, sizeof(b), "%.6g", p.arm);
+            s += b;
+        }
+        s += "\n";
+    }
+    return s;
+}
+
+// Разбор PositionsText; плечи — в единицы u. false — не тот формат.
+inline bool ParsePositions(const std::string& text, std::vector<Position>& out, const Units& u)
+{
+    out.clear();
+    bool model = false, head = false;
+    std::size_t a = 0;
+    while (a < text.size())
+    {
+        std::size_t b = text.find('\n', a);
+        if (b == std::string::npos)
+            b = text.size();
+        std::string line = text.substr(a, b - a);
+        a = b + 1;
+        if (!line.empty() && line.back() == '\r')
+            line.pop_back();
+        if (line.empty())
+            continue;
+        if (line.rfind("units=", 0) == 0)
+        {
+            model = line == "units=small";
+            head = true;
+            continue;
+        }
+        Position p;
+        int use = 1;
+        char armText[64] = {};
+        if (std::sscanf(line.c_str(), "%lf;%lf;%d;%63s", &p.t0, &p.t1, &use, armText) < 3)
+            return false;
+        p.use = use != 0;
+        if (armText[0])
+        {
+            const double arm = std::strtod(armText, nullptr);
+            p.arm = arm * (model ? 0.001 : 1.0) / u.ArmToM(); // в метры и в единицы u
+        }
+        out.push_back(p);
+    }
+    return head;
+}
+
+inline bool SavePositionEdits(const std::filesystem::path& dir, const std::string& key, const std::vector<Position>& pos,
+                              const Units& u)
+{
+    std::error_code ec;
+    std::filesystem::create_directories(dir, ec);
+    const auto file = dir / (key + ".txt");
+    auto tmp = file;
+    tmp += ".tmp";
+    {
+        std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
+        if (!out)
+            return false;
+        out << PositionsText(pos, u);
+        if (!out)
+            return false;
+    }
+    std::filesystem::rename(tmp, file, ec);
+    return !ec;
+}
+
+inline bool LoadPositionEdits(const std::filesystem::path& dir, const std::string& key, std::vector<Position>& pos,
+                              const Units& u)
+{
+    std::ifstream in(dir / (key + ".txt"), std::ios::binary);
+    if (!in)
+        return false;
+    const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    return ParsePositions(text, pos, u);
+}
+
+inline void ForgetPositionEdits(const std::filesystem::path& dir, const std::string& key)
+{
+    std::error_code ec;
+    std::filesystem::remove(dir / (key + ".txt"), ec);
 }
 
 } // namespace heel

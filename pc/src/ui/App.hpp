@@ -8,8 +8,10 @@
 #include <cstdint>
 #include <ctime>
 #include <future>
+#include <functional>
 #include <map>
 #include <memory>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -17,6 +19,7 @@
 #include "../comm/SimDevice.hpp"
 #include "../core/Download.hpp"
 #include "../core/HeelData.hpp"
+#include "../core/UserMethod.hpp"
 #include "../core/PcRecorder.hpp"
 #include "../core/PcSettings.hpp"
 #include "../fw/Firmware.hpp"
@@ -24,7 +27,7 @@
 namespace ui
 {
 
-inline constexpr const char* kAppVersion = "1.3.1";
+inline constexpr const char* kAppVersion = "1.3.2";
 
 enum class Page
 {
@@ -46,6 +49,7 @@ struct AppOptions
     std::time_t simStart = 0;     // часы имитатора (0 — сейчас)
     std::uint32_t simSeed = 12345;
     bool noHardware = false;      // без демо — «прибора нет», COM-порты не трогать (стенд снимков)
+    std::string editsDir;         // правки положений «Обработки»; пусто — %APPDATA%\Krenomer\edits (если useSettingsFile)
 };
 
 struct Toast
@@ -119,6 +123,15 @@ public:
     bool ProcessBusy() const;                 // идёт чтение или сохранение отчёта
     void ProcessSetArm(int number, double arm);
     void ProcessShowPost(int post) { proc_.show = post; }
+    // Свой метод: добавить (или заменить по имени) и выбрать в расчёте; открыть окно формул
+    void ProcessUseUserMethod(const um::Method& m, bool apply = true);
+    void ProcessShowMethodWindow(bool on) { proc_.methodWin = on; }
+    void ProcessSetSensorName(int key, const std::string& name)
+    {
+        proc_.names[key] = name;
+        proc_.dirty = true;
+        ProcRefreshLogNames();
+    }
     void ProcessSaveReport();
     const heel::Summary& ProcessSummary() const { return proc_.sum; }
     std::size_t ProcessMeasurements() const { return proc_.meas.size(); }
@@ -129,6 +142,8 @@ public:
     void ProcessSetPositionArm(int index, double arm);
     void ProcessSelectPosition(int index) { proc_.sel = index; }
     int ProcessAxis() const { return settings_.heelAxis; }
+    void ProcessSetSmallShip(bool model) { ProcSetSmallShip(model); }
+    void ProcessSetArmDefault(double L) { settings_.heelL = L; proc_.dirty = true; }
 
 private:
     // Каркас
@@ -174,7 +189,7 @@ private:
     void ProcLoad();      // прочитать файлы (выбранные или все *.CSV папки) в фоне
     void ProcRegroup(bool quiet = false); // замеры и посты заново (после чтения, смены постов; quiet — без журнала)
     void ProcRecompute(); // окно, h, итог
-    void ProcLog(const std::string& s);
+    void ProcLog(const std::string& s, const std::string& tip = {});
     void ProcParams(float w);
     void ProcTable(float w, float h);
     void ProcResult(float w, float h);
@@ -184,11 +199,36 @@ private:
     // Непрерывная запись (одна запись — весь опыт)
     bool ProcCont() const { return proc_.mode == 1 && proc_.rec >= 0 && proc_.rec < static_cast<int>(proc_.meas.size()); }
     void ProcChooseMode(bool fromLoad); // режим и запись: по содержимому (если не выбран вручную)
-    void ProcFindPositions();           // положения заново (поиск по основному посту записи)
+    void ProcFindPositions(bool restore = true); // положения заново (поиск по основному посту; restore — с правками)
     void ProcSortPositions();
     void ProcPositions(float w, float h);
     void ProcSeriesCard(float w, float h);
     void ProcModeSwitch(float right);
+    void ProcFilterButton();                        // «Обработка: метод ▾» — метод и параметры обработки сигнала
+    void ProcPositionPlot(int post, int index, float w, float h, bool forExport); // положение крупно: 3 линии
+    void ProcExportPositions(int post, float w, float h);                          // все положения — сеткой (PNG)
+    void ProcSetSmallShip(bool model);
+    // Посты = датчики со своими названиями
+    void ProcAssignPosts();                         // датчики -> посты 0…3 (по порядку, без снятых)
+    std::string SensorTitle(int key) const;         // название датчика (своё или по умолчанию)
+    std::string PostTitle(int post) const;          // «Нос (Д2)»
+    std::string SensorTitleOfPost(int post) const;  // «Нос»
+    std::vector<int> PostsInUse() const;            // посты, у которых есть файлы (в замерах или записи)
+    void ProcSensorNames(float right, const std::function<void(float)>& flow); // поля названий датчиков
+    void SaveSensorNames();
+    std::string ProcSummaryText() const;            // «Замеров: …, файлов: … (Д2 — Нос, …; формат)»
+    std::string ProcRecordText() const;             // «Одна запись — весь опыт: файл (пост), …»
+    void ProcRefreshLogNames();                     // строки журнала с постами — по текущим названиям
+    // Свои методы (формулы, core/UserMethod.hpp)
+    void ProcLoadMethods();
+    void ProcSaveMethod(const um::Method& m);
+    void ProcDeleteMethodFile(const std::string& name);
+    std::shared_ptr<const um::Compiled> ProcUserCompiled(const um::Method& m, um::Problem* problem) const;
+    void ProcMethodWindow();                        // окно «Свой метод обработки»
+    void ProcMethodPreview(const um::Method& m, float w, float h);
+    std::string NumFmt(double v, int digits) const;
+    std::filesystem::path EditsDir() const;         // правки положений; пусто — не сохранять
+    std::string EditsKeyNow() const;                // ключ правок текущей записи (пусто — нет)
     void ProcSeriesPlot(int post, float w, float h, bool forExport);
     void ProcExportSeries(int post, float w, float h);
     int ProcShownPost() const;
@@ -343,11 +383,22 @@ private:
         std::shared_ptr<const std::vector<heel::File>> files; // прочитанные файлы
         std::vector<heel::Measurement> meas;
         heel::Summary sum;
-        std::map<int, int> postOf;                            // датчик (heel::SensorKey) -> пост: 0, 1, -1 — нет
+        std::map<int, int> postOf;                            // датчик (heel::SensorKey) -> пост 0…3, -1 — не учитывать
+        std::map<int, std::string> names;                     // датчик -> название поста («Нос», «Мидель», …)
+        std::set<int> skip;                                   // датчики, снятые с расчёта
+        bool namesLoaded = false;
+        // Свои методы обработки (формулы)
+        std::vector<um::Method> methods;      // сохранённые (Dir()/methods/*.krenomer-method)
+        bool methodsLoaded = false;
+        bool methodWin = false;               // окно «Свой метод обработки»
+        int methodSel = -1;                   // выбранный в окне
+        std::string cacheText;                // текст метода, для которого собран cache
+        std::shared_ptr<const um::Compiled> cache;
+        std::string methodMsg;                // сообщение окна (сохранено, импортировано, ошибка файла)
         std::vector<int> keys;                                // датчики прочитанных файлов
         std::map<int, double> arm;                            // плечо, заданное в таблице: замер -> |l|, м
         std::map<int, bool> off;                              // замеры, снятые с расчёта
-        std::vector<std::string> log;                         // журнал (коротко)
+        std::vector<std::pair<std::string, std::string>> log; // журнал (коротко): строка и подсказка при наведении
         std::future<heel::Loaded> load;
         std::shared_ptr<std::atomic<int>> loadDone;
         int loadTotal = 0;
@@ -363,6 +414,8 @@ private:
         heel::Summary posSum;
         int sel = -1;                     // выбранное положение: его границы двигаются на графике
         bool posEdited = false;           // положения правились руками
+        std::int64_t editsSaveAt = 0;     // правки — в файл (через ~1 с после последней)
+        std::vector<double> procT[heel::kMaxPosts], procY[heel::kMaxPosts]; // обработанный сигнал записи по постам
     } proc_;
     std::int64_t settingsSaveAt_ = 0;     // SaveSettingsSoon: когда записать (0 — не нужно)
 };
