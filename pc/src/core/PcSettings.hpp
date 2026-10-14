@@ -43,8 +43,15 @@ struct PcSettings
     bool fltWhole = false;
     // Правила РС: h и l_max по Информации об остойчивости (плечевые единицы), Δ0 порожнем (единицы массы); 0 — не
     // задано. Порог сверки постов, °. Основной расчёт h: 0 — от начального + МНК, 1 — по приращениям (табл. 6.5).
-    double rsH = 0.0, rsLmax = 0.0, rsD0 = 0.0, rsSpread = 0.05;
+    double rsH = 0.0, rsLmax = 0.0, rsD0 = 0.0;
+    double rsSpread = 0.1;   // сверка приборов: расхождение приращений Δθ на замере, ° (rs_spread_step)
     int rsMain = 0;
+    int rsMainGroups = -1;   // основной расчёт в режиме групп: -1 — не выбран (табл. 6.5)
+    int rsInstrument = -1;   // табл. 6.5: Δθ — среднее приборов (-1) или пост 0…3
+    double rsDh = 0.0;       // поправка на свободные поверхности (плечевые единицы)
+    double rsDworst = 0.0;   // Δ наихудшего варианта загрузки (единицы массы); 0 — D
+    bool rsGroupMode = false; // крен-балласт группами (таблица перемещений)
+    std::string rsGroups;    // группы: «название=масса;…» (масса — в единицах массы)
 
     static std::filesystem::path Dir()
     {
@@ -148,8 +155,15 @@ struct PcSettings
         rsH = real("rs_h", rsH, 0.0, 1e6);
         rsLmax = real("rs_lmax", rsLmax, 0.0, 1e7);
         rsD0 = real("rs_d0", rsD0, 0.0, 1e9);
-        rsSpread = real("rs_spread", rsSpread, 0.001, 10.0);
+        rsSpread = real("rs_spread_step", rsSpread, 0.001, 10.0); // до 1.4 — по уровням (rs_spread), не берётся
         rsMain = num("rs_main", rsMain, 0, 1);
+        rsMainGroups = num("rs_main_groups", rsMainGroups, -1, 1);
+        rsInstrument = num("rs_instrument", rsInstrument, -1, 3);
+        rsDh = real("rs_dh", rsDh, -1e6, 1e6);
+        rsDworst = real("rs_dworst", rsDworst, 0.0, 1e9);
+        rsGroupMode = flag("rs_group_mode", rsGroupMode);
+        if (kv.count("rs_groups"))
+            rsGroups = kv["rs_groups"];
     }
 
     void Save(const std::filesystem::path& file = Dir() / L"krenomer.ini") const
@@ -184,8 +198,10 @@ struct PcSettings
             out << "flt_v=2\nflt_user=" << fltUser << "\nsensor_names=" << sensorNames << "\n";
             out << "flt_method=" << fltMethod << "\nflt_median=" << fltMedianN << "\nflt_fc=" << fltFc << "\nflt_tc=" << fltTc
                 << "\nflt_sg_win=" << fltSgWin << "\nflt_whole=" << (fltWhole ? 1 : 0) << "\n";
-            out << "rs_h=" << rsH << "\nrs_lmax=" << rsLmax << "\nrs_d0=" << rsD0 << "\nrs_spread=" << rsSpread
-                << "\nrs_main=" << rsMain << "\n";
+            out << "rs_h=" << rsH << "\nrs_lmax=" << rsLmax << "\nrs_d0=" << rsD0 << "\nrs_spread_step=" << rsSpread
+                << "\nrs_main=" << rsMain << "\nrs_main_groups=" << rsMainGroups << "\nrs_instrument=" << rsInstrument << "\nrs_dh=" << rsDh
+                << "\nrs_dworst=" << rsDworst << "\nrs_group_mode=" << (rsGroupMode ? 1 : 0) << "\nrs_groups=" << rsGroups
+                << "\n";
             if (!out)
                 return;
         }

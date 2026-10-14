@@ -192,6 +192,13 @@ heel::Settings App::ProcSettings() const
     s.rsD0 = settings_.rsD0 > 0 ? settings_.rsD0 : heel::kNaN;
     s.rsSpread = settings_.rsSpread;
     s.rsMain = settings_.rsMain;
+    s.rsMainGroups = settings_.rsMainGroups;
+    s.rsInstrument = settings_.rsInstrument;
+    s.rsDh = settings_.rsDh;
+    s.rsDworst = settings_.rsDworst > 0 ? settings_.rsDworst : heel::kNaN;
+    s.rsGroupMode = settings_.rsGroupMode;
+    s.rsGroups = ProcGroups();
+    s.rsMoves = proc_.rsMoves;
     return s;
 }
 
@@ -469,6 +476,19 @@ void App::ProcRecompute()
         const auto a = proc_.arm.find(m.number);
         m.arm = a != proc_.arm.end() ? a->second : settings_.heelL;
     }
+    proc_.groupArm.clear();
+    if (settings_.rsGroupMode)
+    {
+        // Группы: плечо замера — эквивалентное (накопленный момент / P), первый учтённый — начальное положение
+        std::size_t n = 0;
+        for (const auto& m : proc_.meas)
+            n += m.use;
+        const auto arms = heel::GroupArms(ProcSettings(), n);
+        std::size_t k = 0;
+        for (auto& m : proc_.meas)
+            if (m.use)
+                m.arm = arms[k++];
+    }
     proc_.sum = heel::Compute(ProcSettings(), *proc_.files, proc_.meas);
     for (int p = 0; p < heel::kMaxPosts; p++)
     {
@@ -479,7 +499,31 @@ void App::ProcRecompute()
     {
         const heel::Settings s = ProcSettings();
         const auto& m = proc_.meas[static_cast<std::size_t>(proc_.rec)];
-        proc_.posSum = heel::ComputePositions(s, *proc_.files, m, proc_.pos);
+        if (settings_.rsGroupMode)
+        {
+            // Группы: расчёт «от начального» — с эквивалентными плечами (накопленный момент / P), свои плечи не трогаются
+            auto calc = proc_.pos;
+            std::size_t n = 0;
+            for (const auto& q : calc)
+                n += q.use;
+            const auto arms = heel::GroupArms(s, n);
+            proc_.groupArm.assign(calc.size(), heel::kNaN);
+            for (std::size_t i = 0, k = 0; i < calc.size(); i++)
+                if (calc[i].use)
+                {
+                    calc[i].arm = arms[k++];
+                    proc_.groupArm[i] = calc[i].arm;
+                }
+            proc_.posSum = heel::ComputePositions(s, *proc_.files, m, calc);
+            for (std::size_t i = 0; i < calc.size(); i++)
+            {
+                const double own = proc_.pos[i].arm;
+                proc_.pos[i] = calc[i];
+                proc_.pos[i].arm = own;
+            }
+        }
+        else
+            proc_.posSum = heel::ComputePositions(s, *proc_.files, m, proc_.pos);
         // Обработанный сигнал всей записи — для графика (Медиана + EMA и Савицкий–Голай; у остальных — по положениям)
         for (int p = 0; p < heel::kMaxPosts; p++)
             if (m.post[p].file >= 0)
@@ -533,6 +577,7 @@ void App::TickProcess()
             proc_.off.clear();
             proc_.rsManual.clear();
             proc_.rsLegacyLogged = false;
+            proc_.rsMoves.clear();
         }
         proc_.outDir = r.folder;
         proc_.files = std::make_shared<const std::vector<heel::File>>(std::move(r.files));
@@ -627,7 +672,11 @@ void App::TickProcess()
                                                             info, &warn)
                                : heel::BuildReport(s, *files, meas, sum, info, &warn);
             if (!rsCase.in.theta.empty())
+            {
                 sheets.insert(sheets.begin() + 1, heel::BuildRsSheet(s, rsCase)); // «Проверки» — после результатов
+                if (rsCase.groupMode)
+                    sheets.insert(sheets.begin() + 2, heel::BuildMovesSheet(s, rsCase));
+            }
             if (xlsx::Write(dir / text::PathFromUtf8(heel::kReportName), sheets, &err))
                 out.push_back(std::string("✓ Отчёт сохранён: ") + heel::kReportName);
             else
@@ -1131,6 +1180,18 @@ void App::ProcTable(float w, float h)
                     }
                     // Плечо
                     ImGui::TableNextColumn();
+                    if (settings_.rsGroupMode)
+                    {
+                        ImGui::AlignTextToFramePadding();
+                        if (m.use && std::isfinite(m.arm))
+                            Muted(NumFmt(m.arm, std::max(3, settings_.digArm)).c_str(), m.arm);
+                        else
+                            Muted("—");
+                        if (ImGui::IsItemHovered())
+                            ImGui::SetTooltip("Крен-балласт группами: плечо замера — эквивалентное (накопленный момент / P),\n"
+                                              "моменты — в виде «Перемещения»; первый учтённый замер — начальное положение");
+                    }
+                    else
                     {
                         const bool own = proc_.arm.count(m.number) > 0;
                         double arm = std::isfinite(m.arm) ? m.arm : settings_.heelL;
@@ -1225,14 +1286,21 @@ void App::ProcResult(float w, float h)
                  "(по номеру), h_k — среднее, оценка качества — п. 6.6 (вид «Правила РС»). Какой расчёт основной "
                  "(крупно) — выбирается там же.");
         const heel::RsCase& rc = proc_.rs;
-        const bool byTable = settings_.rsMain == 1; // основной расчёт — по табл. 6.5
-        const double hMain = byTable ? rc.r.hFinal : s.h;
+        const bool byTable = ProcSettings().RsMain() == 1; // основной расчёт — по табл. 6.5
+        const double hMain = byTable ? rc.r.hFinal : s.h - rc.dh; // с поправкой на свободные поверхности
         {
             FontScope f(fontHuge);
             if (std::isfinite(hMain))
                 TextColored(pal.text, "%.3f м", hMain);
             else
                 Muted("—");
+        }
+        if (std::isfinite(hMain) && rc.dh != 0.0)
+        {
+            ImGui::SameLine(0, S(10));
+            TextColored(pal.warn, "испр. (−Δh %.3f)", rc.dh);
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Исправленная h: с поправкой на свободные поверхности Δh (вид «Правила РС»)");
         }
         if (std::isfinite(hMain) && settings_.heelSmall)
         {
@@ -1446,6 +1514,8 @@ void App::ProcPlots(float w, float h)
         const ImVec2 avail = ImGui::GetContentRegionAvail();
         if (proc_.view == 1)
             ProcControlPlot(avail.x, avail.y, false);
+        else if (proc_.view == 3)
+            ProcMovesView(avail.x, avail.y);
         else if (proc_.view == 2)
             ProcRsView(avail.x, avail.y);
         else
@@ -1789,6 +1859,18 @@ void App::ProcPositions(float w, float h)
                         if (ImGui::IsItemHovered())
                             ImGui::SetTooltip("Начальное положение: от него считаются Δθ и плечи переноса остальных");
                     }
+                    else if (settings_.rsGroupMode)
+                    {
+                        ImGui::AlignTextToFramePadding();
+                        const double ga = i < proc_.groupArm.size() ? proc_.groupArm[i] : heel::kNaN;
+                        if (std::isfinite(ga))
+                            Muted(NumFmt(ga, std::max(3, settings_.digArm)).c_str(), ga);
+                        else
+                            Muted("—");
+                        if (ImGui::IsItemHovered())
+                            ImGui::SetTooltip("Крен-балласт группами: плечо положения — эквивалентное (накопленный момент / P),\n"
+                                              "моменты — в виде «Перемещения»");
+                    }
                     else
                     {
                         const bool own = std::isfinite(ps.arm);
@@ -1966,6 +2048,8 @@ void App::ProcSeriesCard(float w, float h)
         const ImVec2 avail = ImGui::GetContentRegionAvail();
         if (proc_.view == 1)
             ProcControlPlot(avail.x, avail.y, false);
+        else if (proc_.view == 3)
+            ProcMovesView(avail.x, avail.y);
         else if (proc_.view == 2)
             ProcRsView(avail.x, avail.y);
         else if (proc_.sel >= 0 && proc_.sel < static_cast<int>(proc_.pos.size()))

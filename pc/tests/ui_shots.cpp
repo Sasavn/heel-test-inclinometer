@@ -26,6 +26,7 @@
 #include "PngWriter.hpp"
 #include "RulesMockups.hpp"
 #include "TestUtil.hpp"
+#include "VodnikData.hpp"
 #include "core/TextUtil.hpp"
 #include "fw/Firmware.hpp"
 #include "ui/App.hpp"
@@ -299,6 +300,36 @@ void MakeHeelSet(const fs::path& dir)
             std::ofstream(dir / name, std::ios::binary).write(csv.data(), static_cast<std::streamsize>(csv.size()));
         }
     }
+}
+
+// Опыт кренования с двумя весками (tests/VodnikData.hpp) как «файл = замер»: 11 замеров × посты Д2 и Д3, крен
+// постоянный 30 с (подмешивание ±0,00045° — среднее записанных с 0,001° равно истинному).
+void MakeVodnikSet(const fs::path& dir)
+{
+    std::error_code ec;
+    fs::create_directories(dir, ec);
+    for (int pos = 0; pos < vodnik::kPositions; pos++)
+        for (int v = 0; v < 2; v++)
+        {
+            const double th = vodnik::ThetaDeg(v, pos);
+            std::string csv = "Date;Time;RawX;RawY;OffsetX;OffsetY;CalcX;CalcY;BatV;Ms\n";
+            for (int k = 0; k < 300; k++)
+            {
+                const double x = th + ((k % 10) - 4.5) * 0.0001;
+                const int sec = 10 * 3600 + pos * 600 + k / 10;
+                char line[160];
+                std::snprintf(line, sizeof(line), "04.05.2026;%02d:%02d:%02d;%.2f;0.00;0.000;0.000;%.3f;0.000;12.4;%d\n",
+                              sec / 3600, (sec / 60) % 60, sec % 60, x, x, k * 100);
+                csv += line;
+            }
+            // десятичная запятая (как в файлах прибора 1.4+), дата остаётся с точками
+            for (std::size_t i = 0; i < csv.size(); i++)
+                if (csv[i] == '.' && csv.compare(i, 6, ".05.20") != 0 && csv.compare(i, 6, ".2026;") != 0)
+                    csv[i] = ',';
+            char name[64];
+            std::snprintf(name, sizeof(name), "2026-05-04_M%03d_D%d.CSV", pos + 1, v + 2);
+            std::ofstream(dir / name, std::ios::binary).write(csv.data(), static_cast<std::streamsize>(csv.size()));
+        }
 }
 
 } // namespace
@@ -785,6 +816,57 @@ int main(int argc, char** argv)
         app.ProcessSetSensorName(3, "Мидель");
         st.Run(7000);
         st.Shot("25_process_sensor_names", true);
+        app.ProcessSetSensorName(2, "Нос");
+        app.ProcessSetSensorName(3, "Корма");
+        st.Run(300);
+
+        // Опыт с двумя весками (протокол кренования): группы крен-балласта и перемещения, среднее двух приборов,
+        // поправка на свободные поверхности, Δ наихудшего варианта — вид «Перемещения» и «Правила РС»
+        const fs::path vd = ShotsWorkDir() / L"Опыт с весками";
+        fs::remove_all(vd, ec);
+        MakeVodnikSet(vd);
+        app.ProcessOpen(text::PathToUtf8(vd));
+        wait();
+        app.ProcessSetSensorName(2, "Весок 1");
+        app.ProcessSetSensorName(3, "Весок 2");
+        app.ProcessSetShip(vodnik::kD, vodnik::kMass[0]);
+        app.ProcessSetRsGroupMode(true);
+        app.ProcessSetRsGroups({{"Группа 1", vodnik::kMass[0]}, {"Группа 2", vodnik::kMass[1]}});
+        for (int i = 0; i < 10; i++)
+            app.ProcessSetRsMove(i, vodnik::kGroup[i], vodnik::kArm[i]);
+        app.ProcessSetRsCorrections(vodnik::kDh, vodnik::kDworst);
+        app.ProcessSetRsInfo(vodnik::kH, vodnik::kLmax, vodnik::kD0);
+        st.Run(7000);
+        CHECK(!app.ProcessContinuous() && app.ProcessMeasurements() == 11);
+        {
+            const auto& rc = app.ProcessRs();
+            CHECK(rc.groupMode && rc.postIds.size() == 2 && rc.r.m.size() == 10 && rc.r.n == 9);
+            CHECK(rc.r.m.size() == 10 && rc.r.m[1].autoExcluded);
+            CHECK_NEAR(rc.r.hk, 1.154, 0.001, "h_k опыта с весками (протокол 1,154)");
+            CHECK_NEAR(rc.r.hFinal, 1.123, 0.001, "исправленная h (протокол 1,123)");
+        }
+        app.ProcessSetView(3);
+        st.Run(300);
+        st.Shot("28_vodnik_moves", true);
+        CHECK_NEAR(app.ProcessRs().hMain, 1.123, 0.001, "основной в режиме групп (табл. 6.5, испр.) — без явного выбора");
+        app.ProcessSetView(2);
+        st.Run(300);
+        st.Shot("28_vodnik_rules", true);
+        st.size = ImVec2(1024, 700);
+        st.Shot("28_vodnik_rules_1024x700");
+        app.ProcessSetView(3);
+        st.Shot("28_vodnik_moves_1024x700");
+        st.size = ImVec2(1280, 800);
+        app.ProcessSaveReport();
+        st.Run(100);
+        wait();
+        fs::copy_file(vd / L"Отчет_Кренование.xlsx", fs::path(g_out) / "28_vodnik_report.xlsx",
+                      fs::copy_options::overwrite_existing, ec);
+        app.ProcessSetView(0);
+        app.ProcessSetRsGroupMode(false);
+        app.ProcessSetRsCorrections(0.0, 0.0);
+        app.ProcessSetRsInfo(0.0, 0.0, 0.0);
+        app.ProcessSetShip(1500.0, 15.0);
         app.ProcessSetSensorName(2, "Нос");
         app.ProcessSetSensorName(3, "Корма");
         st.Run(300);

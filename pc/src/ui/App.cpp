@@ -16,7 +16,7 @@
 #ifdef KRENOMER_PROJECT_VERSION
 namespace
 {
-// kAppVersion («1.4») — начало версии из CMakeLists.txt (project VERSION 1.4.0): сведения о файле и окно — одно.
+// kAppVersion («1.5») — начало версии из CMakeLists.txt (project VERSION 1.5.0): сведения о файле и окно — одно.
 constexpr bool VersionMatches(const char* project, const char* app)
 {
     while (*app)

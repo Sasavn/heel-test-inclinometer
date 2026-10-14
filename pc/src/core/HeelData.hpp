@@ -49,6 +49,13 @@ inline const char* DefaultPostName(int p)
     return p >= 0 && p < kMaxPosts ? names[p] : "Пост";
 }
 
+// Группа крен-балласта (таблица перемещений): название и масса (т / кг — Settings::units).
+struct RsGroup
+{
+    std::string name;
+    double mass = 0.0;
+};
+
 // Исходные данные обработки (значения по умолчанию — как в BWM427_Analyzer, ось — X: датчики ставят поперёк судна).
 struct Settings
 {
@@ -71,8 +78,20 @@ struct Settings
     // (среднее по точкам), 1 — по приращениям (табл. 6.5).
     double rsH = std::numeric_limits<double>::quiet_NaN(), rsLmax = std::numeric_limits<double>::quiet_NaN(),
            rsD0 = std::numeric_limits<double>::quiet_NaN();
-    double rsSpread = 0.05;
-    int rsMain = 0;
+    double rsSpread = 0.1;     // сверка приборов: наибольшее расхождение приращений Δθ на замере, °
+    int rsMain = 0;            // основной расчёт в режиме «Одна масса P»
+    int rsMainGroups = -1;     // он же в режиме групп: -1 — не выбран явно (тогда табл. 6.5), 0 / 1 — выбран
+    // Основной расчёт h с учётом режима: в режиме групп по умолчанию — табл. 6.5.
+    int RsMain() const { return rsGroupMode ? (rsMainGroups < 0 ? 1 : rsMainGroups) : rsMain; }
+    int rsInstrument = -1;     // табл. 6.5: Δθ — среднее приборов (-1) или пост с этим номером
+    double rsDh = 0.0;         // поправка на свободные поверхности (плечевые единицы): h исправленная = h − Δh
+    double rsDworst = std::numeric_limits<double>::quiet_NaN(); // 6.6.3: Δ наихудшего варианта (единицы массы); NaN — D
+    // Крен-балласт группами (вместо одной массы P и плеча от начального): группы (название, масса в единицах массы) и
+    // перемещения — шаг i (переход положений i → i + 1): плечо перемещения каждой группы со знаком (+ к правому
+    // борту, плечевые единицы; 0 — группу не двигали). ΔM_i = Σ m_g·l_ig.
+    bool rsGroupMode = false;
+    std::vector<RsGroup> rsGroups;
+    std::vector<std::vector<double>> rsMoves; // [шаг][группа]
 
     plateau::Params Plateau() const
     {
@@ -513,6 +532,18 @@ inline Summary Compute(const Settings& s, const std::vector<File>& files, std::v
             pts.push_back(pt);
             where.push_back(&pd);
         }
+    }
+    // Группы крен-балласта: первый учтённый замер — начальное положение (плечо 0), крен — от его крена по посту
+    if (s.rsGroupMode)
+    {
+        double ref[kMaxPosts];
+        for (double& v : ref)
+            v = kNaN;
+        for (const Point& pt : pts)
+            if (!std::isfinite(ref[pt.post]))
+                ref[pt.post] = pt.thetaDeg;
+        for (Point& pt : pts)
+            pt.thetaDeg -= ref[pt.post];
     }
     const Result r = Solve(pts, s.units.ToTonnes(s.D), s.units.ToTonnes(s.P), s.thresholdDeg);
     for (std::size_t i = 0; i < where.size(); i++)

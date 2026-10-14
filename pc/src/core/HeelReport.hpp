@@ -379,24 +379,43 @@ inline std::vector<xlsx::Sheet> BuildPositionsReport(const Settings& s, const st
     return {std::move(res), std::move(raw)};
 }
 
-// Лист «Проверки» (Правила РС): оба расчёта h, оценка качества 6.6, требования (✓ / ✗ / —), таблица 6.5, период качки.
+// Лист «Проверки» (Правила РС): оба расчёта h, поправка на свободные поверхности, оценка качества 6.6, требования
+// (✓ / ✗ / —), табл. 6.5 (Δθ и h_i по каждому прибору, среднее, расхождение приборов), период качки.
 inline xlsx::Sheet BuildRsSheet(const Settings& s, const RsCase& k)
 {
     using xlsx::Num;
     using xlsx::Text;
     xlsx::Sheet sh("Проверки");
     const rs::Result& r = k.r;
+    const bool dh = k.dh != 0.0;
     auto yes = [](int st) { return st > 0 ? "✓" : st == 0 ? "✗" : "—"; };
+    std::string inst = "среднее приращений приборов: ";
+    for (std::size_t i = 0; i < k.postIds.size(); i++)
+        inst += (i ? ", " : "") + s.PostName(k.postIds[i]);
+    if (k.in.instrument >= 0)
+        inst = "по прибору «" + s.PostName(k.postIds[static_cast<std::size_t>(k.in.instrument)]) + "»";
     sh.AddRow({Text("Проверка опыта кренования по Правилам РС (Ч. IV 1.5; прил. 3 к разд. 2 Руководства, табл. 6.5, п. 6.6)")});
     sh.AddRow(std::vector<xlsx::Cell>{});
     sh.AddRow({Text("Метацентрическая высота"), Text("Значение (м)"), Text("Примечание")});
     sh.AddRow({Text("От начального положения + МНК (среднее по точкам)"), Num(k.hCurrent, 3),
-               Text(s.rsMain == 0 ? "основной расчёт" : "")});
+               Text(s.RsMain() == 0 ? "основной расчёт" : "")});
     sh.AddRow({Text("По приращениям, табл. 6.5: h_k"), Num(r.hk, 3), Text(r.note)});
     sh.AddRow({Text(r.reduced ? "Итог по 6.6.5: h_k − вероятная ошибка" : "Итог по табл. 6.5 (качество 6.6 выполнено)"),
-               Num(r.hFinal, 3),
-               Text(std::string(s.rsMain == 1 ? "основной расчёт" : "") +
-                    (r.reduced ? std::string(s.rsMain == 1 ? "; " : "") + "условия 6.6 не выполнены — h_k уменьшена" : ""))});
+               Num(r.hFinalRaw, 3),
+               Text(std::string(s.RsMain() == 1 && !dh ? "основной расчёт" : "") +
+                    (r.reduced ? std::string(s.RsMain() == 1 && !dh ? "; " : "") + "условия 6.6 не выполнены — h_k уменьшена" : ""))});
+    sh.AddRow({Text("Поправка на свободные поверхности Δh"), Num(k.dh, 3), Text(dh ? "h исправленная = h − Δh" : "не задана")});
+    if (dh)
+    {
+        sh.AddRow({Text("Исправленная h (табл. 6.5): итог − Δh"), Num(r.hFinal, 3),
+                   Text(s.RsMain() == 1 ? "основной расчёт, ИСПРАВЛЕННАЯ" : "ИСПРАВЛЕННАЯ")});
+        sh.AddRow({Text("Исправленная h (от начального): h − Δh"), Num(k.hCurrent - k.dh, 3),
+                   Text(s.RsMain() == 0 ? "основной расчёт, ИСПРАВЛЕННАЯ" : "ИСПРАВЛЕННАЯ")});
+    }
+    sh.AddRow({Text("Крен (Δθ табл. 6.5)"), Text(inst)});
+    sh.AddRow({Text("Кренящий момент"), Text(k.groupMode ? "по группам крен-балласта и перемещениям (лист «Перемещения»)"
+                                                         : k.legacy ? "одна масса P, плечи без знака — знак по крену"
+                                                                    : "одна масса P, плечо от начального со знаком (+ к ПБ)")});
     sh.AddRow({Text("Замеров в h_k, n"), Num(r.n, 0)});
     sh.AddRow({Text("σ = √(Σ(h_i − h_k)²/(n − 1))"), Num(r.sigma, 4)});
     sh.AddRow({Text("t_αn (табл. 6.6.2)"), Num(r.tA, 1)});
@@ -404,12 +423,15 @@ inline xlsx::Sheet BuildRsSheet(const Settings& s, const RsCase& k)
     sh.AddRow({Text("Допустимая ошибка 6.6.2"), Num(r.errLimit, 4), Text(r.hk > 2 ? "0,01(4 + h_k)" : "0,02(1 + h_k)")});
     sh.AddRow({Text("ε (6.6.3)"), Num(r.eps, 3),
                Text(r.ok663 < 0 ? "нужны h и l_max по Информации об остойчивости" : "min(0,05h; 0,10 l_max), не менее 0,04 м")});
+    sh.AddRow({Text("Δ0/Δ (6.6.3)"), Num(r.Dratio, 4),
+               Text(std::isfinite(k.in.Dworst) ? "Δ — наихудшего варианта загрузки" : "Δ — водоизмещение при креновании (наихудший вариант не задан)")});
+    sh.AddRow({Text("Вероятная ошибка · Δ0/Δ (6.6.3)"), Num(r.err663, 4)});
+    sh.AddRow({Text("Наибольшее расхождение приращений Δθ приборов, °"), Num(r.maxSpread, 3),
+               Text(r.maxSpreadAt >= 0 ? "замер " + std::to_string(r.maxSpreadAt + 1) : std::string("один прибор"))});
     sh.AddRow({Text("Период бортовой качки Tc (оценка по записи), с"), Num(k.tc, 1),
                Text(k.tcN ? "медиана по " + std::to_string(k.tcN) + " участкам, от " + detail::Num(k.tcMin, 1) + " до " +
                                 detail::Num(k.tcMax, 1) + " с"
                           : std::string("колебаний не видно"))});
-    sh.AddRow({Text("Плечи"), Text(k.legacy ? "введены без знака — знак по крену относительно начального"
-                                            : "со знаком: + к правому борту")});
     if (k.virtualZero)
         sh.AddRow({Text("Начальное положение"), Text("условное: крен 0 (ноль датчика), плечо 0")});
     sh.AddRow(std::vector<xlsx::Cell>{});
@@ -417,8 +439,24 @@ inline xlsx::Sheet BuildRsSheet(const Settings& s, const RsCase& k)
     for (const rs::Check& c : k.checks)
         sh.AddRow({Text(c.req), Text(c.ref), Text(c.value), Text(yes(c.state))});
     sh.AddRow(std::vector<xlsx::Cell>{});
-    sh.AddRow({Text("Таблица 6.5: замер"), Text("Положения"), Text("ΔM (т·м)"), Text("Δθ (°)"), Text("Δθ (рад)"),
-               Text("h_i (м)"), Text("h_i − h_k (м)"), Text("(h_i − h_k)²"), Text("В расчёте")});
+    const bool many = k.postIds.size() > 1;
+    {
+        std::vector<xlsx::Cell> h = {Text("Таблица 6.5: замер"), Text("Положения"), Text("ΔM (т·м)")};
+        if (many)
+            for (const int p : k.postIds)
+                h.push_back(Text("Δθ " + s.PostName(p) + " (рад)"));
+        h.push_back(Text(many ? "Δθ среднее / расчётное (рад)" : "Δθ (рад)"));
+        h.push_back(Text("Δθ (°)"));
+        if (many)
+            for (const int p : k.postIds)
+                h.push_back(Text("h_i " + s.PostName(p) + " (м)"));
+        for (const char* t : {"h_i (м)", "h_i − h_k (м)", "(h_i − h_k)²"})
+            h.push_back(Text(t));
+        if (many)
+            h.push_back(Text("Расхождение Δθ (°)"));
+        h.push_back(Text("В расчёте"));
+        sh.AddRow(h);
+    }
     for (std::size_t i = 0; i < r.m.size(); i++)
     {
         const rs::Meas& q = r.m[i];
@@ -429,13 +467,74 @@ inline xlsx::Sheet BuildRsSheet(const Settings& s, const RsCase& k)
                                : q.manual == 1     ? "да (вручную)"
                                                    : "да";
         const double d = std::isfinite(q.h) && std::isfinite(r.hk) ? q.h - r.hk : kNaN;
-        sh.AddRow({Num(static_cast<double>(i + 1), 0),
-                   Text(k.label[static_cast<std::size_t>(q.from)] + " → " + k.label[static_cast<std::size_t>(q.to)]),
-                   Num(q.dM, 4), Num(q.dTheta, 3), Num(q.dTheta * kPi / 180.0, 5), Num(q.h, 4), ok ? Num(d, 4) : xlsx::Empty(),
-                   ok ? Num(d * d, 6) : xlsx::Empty(), Text(st)});
+        std::vector<xlsx::Cell> row = {Num(static_cast<double>(i + 1), 0),
+                                       Text(k.label[static_cast<std::size_t>(q.from)] + " → " +
+                                            k.label[static_cast<std::size_t>(q.to)]),
+                                       Num(q.dM, 4)};
+        if (many)
+            for (std::size_t j = 0; j < k.postIds.size(); j++)
+                row.push_back(Num(j < q.dThetaPost.size() ? q.dThetaPost[j] * kPi / 180.0 : kNaN, 5));
+        row.push_back(Num(q.dTheta * kPi / 180.0, 5));
+        row.push_back(Num(q.dTheta, 3));
+        if (many)
+            for (std::size_t j = 0; j < k.postIds.size(); j++)
+                row.push_back(Num(j < q.hPost.size() ? q.hPost[j] : kNaN, 4));
+        row.push_back(Num(q.h, 4));
+        row.push_back(ok ? Num(d, 4) : xlsx::Empty());
+        row.push_back(ok ? Num(d * d, 6) : xlsx::Empty());
+        if (many)
+        {
+            const bool bad = std::isfinite(q.spread) && q.spread > k.c.spreadLimit;
+            row.push_back(std::isfinite(q.spread) ? Text(detail::Num(q.spread, 3) + (bad ? " — больше порога" : ""))
+                                                  : xlsx::Empty());
+        }
+        row.push_back(Text(st));
+        sh.AddRow(row);
     }
     detail::AutoWidths(sh);
     sh.widths[0] = std::min(60.0, std::max(sh.widths[0], 46.0));
+    return sh;
+}
+
+// Лист «Перемещения» (режим групп): группы крен-балласта и перемещения по шагам, ΔM.
+inline xlsx::Sheet BuildMovesSheet(const Settings& s, const RsCase& k)
+{
+    using xlsx::Num;
+    using xlsx::Text;
+    xlsx::Sheet sh("Перемещения");
+    const bool mm = s.units.model;
+    sh.AddRow({Text("Группы крен-балласта")});
+    sh.AddRow({Text("Группа"), Text("Название"), Text(std::string("Масса (") + s.units.Mass() + ")")});
+    for (std::size_t g = 0; g < s.rsGroups.size(); g++)
+        sh.AddRow({Num(static_cast<double>(g + 1), 0), Text(s.rsGroups[g].name), Num(s.rsGroups[g].mass, mm ? 3 : 3)});
+    sh.AddRow(std::vector<xlsx::Cell>{});
+    sh.AddRow({Text("Перемещения: плечо со знаком (+ к правому борту), " + std::string(s.units.Arm()) + "; 0 — не двигали")});
+    {
+        std::vector<xlsx::Cell> h = {Text("Шаг (замер)"), Text("Положения")};
+        for (const RsGroup& g : s.rsGroups)
+            h.push_back(Text(g.name.empty() ? std::string("группа") : g.name));
+        h.push_back(Text("ΔM (т·м)"));
+        h.push_back(Text("Накопленный момент (т·м)"));
+        sh.AddRow(h);
+    }
+    double cum = 0;
+    for (std::size_t i = 0; i < k.r.m.size(); i++)
+    {
+        const rs::Meas& q = k.r.m[i];
+        std::vector<xlsx::Cell> row = {Num(static_cast<double>(i + 1), 0),
+                                       Text(k.label[static_cast<std::size_t>(q.from)] + " → " +
+                                            k.label[static_cast<std::size_t>(q.to)])};
+        for (std::size_t g = 0; g < s.rsGroups.size(); g++)
+        {
+            const double l = i < s.rsMoves.size() && g < s.rsMoves[i].size() ? s.rsMoves[i][g] : 0.0;
+            row.push_back(l != 0.0 && std::isfinite(l) ? Num(l, mm ? 1 : 3) : xlsx::Empty());
+        }
+        cum += std::isfinite(q.dM) ? q.dM : 0.0;
+        row.push_back(Num(q.dM, 3));
+        row.push_back(Num(cum, 3));
+        sh.AddRow(row);
+    }
+    detail::AutoWidths(sh);
     return sh;
 }
 

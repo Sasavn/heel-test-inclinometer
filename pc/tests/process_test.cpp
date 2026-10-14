@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "TestUtil.hpp"
+#include "VodnikData.hpp"
 #include "core/CsvLog.hpp"
 #include "core/Deflate.hpp"
 #include "core/Expr.hpp"
@@ -1018,7 +1019,7 @@ void TestRules()
         CHECK_MSG(bad == 0 && unknown == 1, "нарушено %d, без данных %d", bad, unknown); // без данных — только 6.6.3
         CHECK(checks[5].req == "Крен 1°–4° на каждый борт" && checks[5].state == 1); // ±3,22°
         CHECK(checks[7].state == 1 && checks[7].value == "положение 7");           // возврат в ноль
-        c.spread = 0.08;                                                            // посты разошлись
+        c.spread = 0.15;                                                            // приборы разошлись
         c.instruments = 1;
         c.theta0 = 0.7;
         const auto checks2 = rs::Checks(r, c);
@@ -1211,6 +1212,133 @@ void TestRules()
             CHECK_NEAR(km.M[3], k.M[3] * 1e6, 1e-3, "момент в кг·мм");
         }
     }
+}
+
+// Настоящий опыт кренования (протокол при инспекторе РС, tests/VodnikData.hpp): два прибора (вески) — посты Д2 и Д3,
+// 11 замеров «файл = замер», две группы крен-балласта и 10 перемещений, поправка на свободные поверхности, Δ
+// наихудшего варианта. Наш расчёт без обходов должен дать числа протокола.
+void TestVodnik()
+{
+    SECTION("протокол кренования: группы крен-балласта, среднее двух приборов, Δh, Δ наихудшего — числа протокола");
+    const fs::path dir = fs::temp_directory_path() / L"krenomer_process_test_водник";
+    std::error_code ec;
+    fs::remove_all(dir, ec);
+    fs::create_directories(dir, ec);
+    for (int pos = 0; pos < vodnik::kPositions; pos++)
+        for (int v = 0; v < 2; v++)
+        {
+            // Постоянный крен 30 с, 10 Гц; подмешивание ±0,00045° — среднее записанных с 0,001° равно истинному
+            const double th = vodnik::ThetaDeg(v, pos);
+            std::vector<std::pair<double, double>> xy;
+            for (int j = 0; j < 300; j++)
+                xy.push_back({th + ((j % 10) - 4.5) * 0.0001, 0.0});
+            char name[64];
+            std::snprintf(name, sizeof(name), "2026-05-04_M%03d_D%d.CSV", pos + 1, v + 2);
+            WriteText(dir / name, Fw14(xy));
+        }
+    heel::Settings s;
+    s.D = vodnik::kD;
+    s.P = vodnik::kMass[0];
+    s.rsD0 = vodnik::kD0;
+    s.rsDworst = vodnik::kDworst;
+    s.rsH = vodnik::kH;
+    s.rsLmax = vodnik::kLmax;
+    s.rsDh = vodnik::kDh;
+    s.rsGroupMode = true;
+    s.rsGroups = {{"Группа 1", vodnik::kMass[0]}, {"Группа 2", vodnik::kMass[1]}};
+    for (int i = 0; i < 10; i++)
+    {
+        std::vector<double> row(2, 0.0);
+        row[static_cast<std::size_t>(vodnik::kGroup[i])] = vodnik::kArm[i];
+        s.rsMoves.push_back(row);
+    }
+    const auto loaded = heel::LoadAll(heel::ListCsv(dir), text::PathToUtf8(dir), nullptr, &s);
+    auto ms = heel::Group(loaded.files, {});
+    CHECK_MSG(ms.size() == 11, "замеров %zu", ms.size());
+    // режим групп: плечо замера — эквивалентное (как делает программа)
+    const auto arms = heel::GroupArms(s, ms.size());
+    for (std::size_t i = 0; i < ms.size() && i < arms.size(); i++)
+        ms[i].arm = arms[i];
+    CHECK_NEAR(arms[2], (1.1 * 2.80 + 2.116 * 2.40) / 1.1, 1e-12, "эквивалентное плечо = накопленный момент / P");
+    const auto sum = heel::Compute(s, loaded.files, ms);
+    auto k = heel::RsFromMeasurements(s, loaded.files, ms, {}, sum.h);
+    const rs::Result& r = k.r;
+    CHECK(k.groupMode && !k.virtualZero && k.postIds.size() == 2 && k.c.instruments == 2);
+    CHECK_MSG(r.m.size() == 10, "замеров табл. 6.5: %zu", r.m.size());
+    if (r.m.size() == 10)
+    {
+        CHECK_NEAR(r.m[0].dM, 1.1 * 2.80, 1e-9, "ΔM_1 = m·l");
+        CHECK_NEAR(r.m[3].dM, -2.116 * 4.88, 1e-9, "ΔM_4 = m·l");
+        CHECK_NEAR(r.m[0].dTheta * kDeg, 0.5 * (21.4 / 2528 + 21.1 / 2495), 2e-6, "Δθ_1 — среднее двух весков, рад");
+        CHECK(r.m[0].dThetaPost.size() == 2 && r.m[0].hPost.size() == 2);
+        CHECK_NEAR(r.m[1].h, 1.230, 0.001, "h_2 (протокол 1,230)");
+        CHECK(r.m[1].autoExcluded);
+        int out = 0;
+        for (const auto& q : r.m)
+            out += q.excluded;
+        CHECK(out == 1);
+    }
+    CHECK(r.n == 9 && r.ok661 && r.ok662 && r.ok664 && r.ok663 == 1 && !r.reduced);
+    CHECK_NEAR(r.hk, 1.154, 0.001, "h_k (протокол 1,154)");
+    CHECK_NEAR(r.tA, 5.0, 1e-12, "t_αn при n = 9");
+    CHECK_NEAR(r.err, 0.024, 0.001, "вероятная ошибка (протокол 0,024)");
+    CHECK_NEAR(r.errLimit, 0.043, 0.0005, "допуск 6.6.2 (протокол 0,043)");
+    CHECK_NEAR(r.hFinal, 1.123, 0.001, "исправленная h (протокол 1,123)");
+    CHECK_NEAR(r.hFinalRaw - r.hFinal, 0.031, 1e-12, "поправка на свободные поверхности");
+    CHECK_NEAR(r.eps, 0.0554, 1e-9, "ε = min(0,05·1,293; 0,10·0,554) (протокол взял 0,04)");
+    CHECK_NEAR(r.Dratio, 290.23 / 350.88, 1e-12, "Δ0/Δ наихудшего");
+    CHECK_NEAR(r.err663, r.err * 290.23 / 350.88, 1e-12, "6.6.3 (протокол 0,02)");
+    CHECK_RANGE(r.maxSpread, 0.03, 0.07, "сверка приборов: расхождение приращений, °"); // весков 0,055° на шаге 10
+    CHECK(r.maxSpreadAt == 9);
+    CHECK_RANGE(sum.h, 1.12, 1.26, "«от начального» (первый замер — начальное)");
+    // Режим групп без явного выбора: основной расчёт — табл. 6.5, исправленная h протокола
+    CHECK(s.rsMainGroups == -1 && s.RsMain() == 1);
+    CHECK_NEAR(k.hMain, 1.123, 0.001, "основной в режиме групп по умолчанию — табл. 6.5, испр. (протокол 1,123)");
+    CHECK_NEAR(k.c.h, k.hMain, 1e-12, "h ≥ 0,20 м — по основному");
+    {
+        heel::Settings s0 = s;
+        s0.rsMainGroups = 0; // явно выбран «от начального» в режиме групп
+        CHECK(s0.RsMain() == 0);
+        CHECK_NEAR(heel::RsFromMeasurements(s0, loaded.files, ms, {}, sum.h).hMain, sum.h - 0.031, 1e-12,
+                   "явный выбор в режиме групп: от начального, исправленный");
+        heel::Settings s1 = s;
+        s1.rsGroupMode = false; // «Одна масса P» — как раньше (rsMain = 0)
+        CHECK(s1.RsMain() == 0);
+    }
+    // Сверка по шагам: весок 1 в наклонении 0 как напечатан в протоколе (418,9) — расхождение 0,57° на шаге 1
+    {
+        rs::Input bad = k.in;
+        bad.post[0][0] = -418.9 / 2528.0 * 180.0 / heel::kPi;
+        const auto rb = rs::Evaluate(bad);
+        CHECK(rb.maxSpreadAt == 0 && rb.maxSpread > 0.5);
+        rs::Conditions c = k.c;
+        c.spread = rb.maxSpread;
+        CHECK(rs::Checks(rb, c)[9].state == 0);
+    }
+    // Один прибор (весок 2): другой итог — без исключения
+    {
+        heel::Settings s2 = s;
+        s2.rsInstrument = 1;
+        const auto k2 = heel::RsFromMeasurements(s2, loaded.files, ms, {}, sum.h);
+        CHECK(k2.in.instrument == 1 && k2.r.n == 10 && k2.r.excludedCount == 0);
+        CHECK_NEAR(k2.r.hk, 1.171, 0.002, "по одному веску 2");
+    }
+    // Отчёт: «Проверки» со столбцами по приборам, «Перемещения»
+    const auto sh = heel::BuildRsSheet(s, k);
+    bool perPost = false, corrected = false;
+    for (const auto& row : sh.rows)
+        for (const auto& c : row)
+        {
+            perPost |= c.text == "Δθ Нос (рад)" || c.text == "h_i Корма (м)";
+            corrected |= c.text.find("ИСПРАВЛЕННАЯ") != std::string::npos;
+        }
+    CHECK(perPost && corrected);
+    const auto mv = heel::BuildMovesSheet(s, k);
+    CHECK(mv.name == "Перемещения" && mv.rows.size() == 17);
+    // Группы строкой (настройки)
+    const auto g = heel::ParseGroups(heel::GroupsText({{"№1; кран=весы", 1.1}, {"№2", 2.116}}));
+    CHECK(g.size() == 2 && g[0].name == "№1, кран,весы" && std::fabs(g[1].mass - 2.116) < 1e-12);
+    fs::remove_all(dir, ec);
 }
 
 // Книги Excel как источник: своя (Xlsx.hpp, со сжатием и без), как пишет Excel (общие строки, даты числами —
@@ -1753,6 +1881,7 @@ int main(int argc, char** argv)
     TestPlateaus();
     TestContinuous();
     TestRules();
+    TestVodnik();
     TestXlsxRead();
     TestRealRecord();
     TestFilters();

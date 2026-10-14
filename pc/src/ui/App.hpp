@@ -28,7 +28,7 @@
 namespace ui
 {
 
-inline constexpr const char* kAppVersion = "1.4";
+inline constexpr const char* kAppVersion = "1.5";
 
 enum class Page
 {
@@ -155,7 +155,30 @@ public:
         settings_.rsD0 = D0;
         proc_.dirty = true;
     }
-    void ProcessSetRsMain(int main) { settings_.rsMain = main; proc_.dirty = true; }
+    // Основной расчёт h — для текущего режима момента (в режиме групп -1 — «не выбран»: табл. 6.5)
+    void ProcessSetRsMain(int main)
+    {
+        (settings_.rsGroupMode ? settings_.rsMainGroups : settings_.rsMain) = main;
+        proc_.dirty = true;
+    }
+    // Табл. 6.5 по среднему приборов (-1) или по посту; поправки Δh и Δ наихудшего варианта; судно (D, P)
+    void ProcessSetRsInstrument(int post) { settings_.rsInstrument = post; proc_.dirty = true; }
+    void ProcessSetRsCorrections(double dh, double Dworst)
+    {
+        settings_.rsDh = dh;
+        settings_.rsDworst = Dworst;
+        proc_.dirty = true;
+    }
+    void ProcessSetShip(double D, double P)
+    {
+        settings_.heelD = D;
+        settings_.heelP = P;
+        proc_.dirty = true;
+    }
+    // Крен-балласт группами: режим, группы, плечо перемещения группы на шаге (0 — не двигали)
+    void ProcessSetRsGroupMode(bool on) { settings_.rsGroupMode = on; proc_.dirty = true; }
+    void ProcessSetRsGroups(const std::vector<heel::RsGroup>& g);
+    void ProcessSetRsMove(int step, int group, double arm);
     void ProcessSetRsManual(int number, int state);
     const heel::RsCase& ProcessRs() const { return proc_.rs; }
 
@@ -253,6 +276,9 @@ private:
     void ProcRsView(float w, float h);                          // требования, оценка 6.6, табл. 6.5
     std::string ProcRsStatus(int* state) const;                 // строка итога проверки для карточки h
     void ProcResultStrip(float w);                              // свёрнутая карточка h (виды Правил РС)
+    void ProcMovesView(float w, float h);                       // группы крен-балласта и перемещения, табл. 6.5 полностью
+    const std::vector<heel::RsGroup>& ProcGroups() const;       // группы (из настроек при первом обращении)
+    void ProcSaveGroups();
     void ProcSaveButtons(float saveW, float openW);             // «Сохранить отчёт», «Открыть папку»
     void ProcLogLines();                                        // строки журнала
     void SaveSettingsSoon(); // настройки — в файл через ~1 с (не только при выходе)
@@ -443,6 +469,10 @@ private:
         int view = 0;                     // карточка графиков: 0 — крен, 1 — график контроля, 2 — Правила РС
         heel::RsCase rs;                  // табл. 6.5, оценка 6.6, требования (ProcRecompute)
         std::map<int, int> rsManual;      // замер табл. 6.5 (номер конечного положения / замера): 0 — исключить, 1 — учитывать
+        std::vector<heel::RsGroup> rsGroups;  // группы крен-балласта (сохраняются в настройках)
+        bool rsGroupsLoaded = false;
+        std::vector<std::vector<double>> rsMoves; // перемещения: [шаг][группа] — плечо со знаком (единицы плеча)
+        std::vector<double> groupArm;     // режим групп: эквивалентное плечо положения (накопленный момент / P)
         bool rsLegacyLogged = false;      // в журнале уже сказано про плечи без знака
     } proc_;
     std::int64_t settingsSaveAt_ = 0;     // SaveSettingsSoon: когда записать (0 — не нужно)

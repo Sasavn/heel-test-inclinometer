@@ -42,12 +42,23 @@ struct Input
     std::vector<double> arm;        // плечо от начального положения, м (со знаком: + к правому борту)
     std::vector<int> manual;        // по замерам (переход в положение i, i ≥ 1): -1 — авто, 0 — исключить, 1 — учитывать
     double hInfo = kNaN, lMax = kNaN, D0 = kNaN; // 6.6.3: h и l_max по Информации об остойчивости, Δ0 — порожнем, т
+    // Несколько приборов (постов): крен положения по каждому, °, [прибор][положение]. Если задано — Δθ замера берётся
+    // отсюда: среднее приращений приборов (instrument = -1) или приращение прибора instrument; theta — только для
+    // подписей и знака старого ввода плеч.
+    std::vector<std::vector<double>> post;
+    int instrument = -1;
+    // Приращения кренящего момента по замерам, т·м (группы крен-балласта, табл. перемещений); пусто — P·Δl по arm.
+    std::vector<double> dM;
+    double Dworst = kNaN;           // 6.6.3: Δ наихудшего варианта загрузки, т (NaN — D)
+    double dh = 0.0;                // поправка на свободные поверхности, м: h исправленная = h − dh
 };
 
 struct Meas
 {
     int from = 0, to = 0;           // индексы положений
-    double dM = kNaN, dTheta = kNaN, h = kNaN; // т·м, °, м
+    double dM = kNaN, dTheta = kNaN, h = kNaN; // т·м, ° (среднее приборов или выбранный), м
+    std::vector<double> dThetaPost, hPost;     // по приборам (Input::post): Δθ, ° и h_i, м
+    double spread = kNaN;                      // расхождение Δθ приборов (наибольшее − наименьшее), °
     bool excluded = false;          // не в расчёте h_k
     bool autoExcluded = false;      // исключён по 6.6.1 автоматически
     int manual = -1;
@@ -65,8 +76,14 @@ struct Result
     bool ok661 = false, ok662 = false, ok664 = false;
     int ok663 = -1;                 // 1 — да, 0 — нет, -1 — нет данных
     int excludedCount = 0;
-    double hFinal = kNaN;           // итог: h_k, а при невыполнении 6.6.1–6.6.4 — h_k минус вероятная ошибка (6.6.5)
+    double hFinal = kNaN;           // итог: h_k, а при невыполнении 6.6.1–6.6.4 — h_k минус вероятная ошибка (6.6.5);
+                                    // с поправкой на свободные поверхности: минус dh
+    double hFinalRaw = kNaN;        // тот же итог без поправки на свободные поверхности
+    double dh = 0.0;                // поправка на свободные поверхности, м
     bool reduced = false;           // 6.6.5 применён
+    double maxSpread = kNaN;        // наибольшее расхождение Δθ приборов по замерам, °
+    int maxSpreadAt = -1;           // замер (индекс) с наибольшим расхождением
+    double Dratio = kNaN;           // 6.6.3: Δ0/Δ (Δ — наихудшего варианта или D)
     std::string note;               // почему не посчитано
 };
 
@@ -100,17 +117,55 @@ inline void Stats(Result& r)
 inline Result Evaluate(const Input& in)
 {
     Result r;
-    const std::size_t k = std::min(in.theta.size(), in.arm.size());
+    std::size_t k = in.theta.size();
+    if (in.dM.empty())
+        k = std::min(k, in.arm.size());
+    else
+        k = std::min(k, in.dM.size() + 1);
+    auto height = [&](double dM, double dThetaDeg) {
+        const double rad = dThetaDeg * kPi / 180.0;
+        // табл. 6.5: IV = II / (III·Δ); без перемещения груза (ΔM = 0) или без изменения крена — не замер
+        return std::fabs(rad) > 1e-9 && std::fabs(dM) > 1e-12 ? dM / (in.D * rad) : kNaN;
+    };
     for (std::size_t i = 1; i < k; i++)
     {
         Meas q;
         q.from = static_cast<int>(i) - 1;
         q.to = static_cast<int>(i);
-        q.dM = in.P * (in.arm[i] - in.arm[i - 1]);
-        q.dTheta = in.theta[i] - in.theta[i - 1];
-        const double rad = q.dTheta * kPi / 180.0;
-        // табл. 6.5: IV = II / (III·Δ); без перемещения груза (ΔM = 0) или без изменения крена — не замер
-        q.h = std::fabs(rad) > 1e-9 && std::fabs(q.dM) > 1e-12 ? q.dM / (in.D * rad) : kNaN;
+        q.dM = in.dM.empty() ? in.P * (in.arm[i] - in.arm[i - 1]) : in.dM[i - 1];
+        if (in.post.empty())
+            q.dTheta = in.theta[i] - in.theta[i - 1];
+        else
+        {
+            // по приборам: приращение каждого, среднее (или выбранный), расхождение
+            double sum = 0, lo = 1e300, hi = -1e300;
+            int c = 0;
+            q.dThetaPost.assign(in.post.size(), kNaN);
+            q.hPost.assign(in.post.size(), kNaN);
+            for (std::size_t p = 0; p < in.post.size(); p++)
+            {
+                if (i >= in.post[p].size())
+                    continue;
+                const double d = in.post[p][i] - in.post[p][i - 1];
+                if (!std::isfinite(d))
+                    continue;
+                q.dThetaPost[p] = d;
+                q.hPost[p] = height(q.dM, d);
+                sum += d;
+                lo = std::min(lo, d);
+                hi = std::max(hi, d);
+                c++;
+            }
+            q.spread = c >= 2 ? hi - lo : kNaN;
+            const bool one = in.instrument >= 0 && static_cast<std::size_t>(in.instrument) < in.post.size();
+            q.dTheta = one ? q.dThetaPost[static_cast<std::size_t>(in.instrument)] : c ? sum / c : kNaN;
+            if (std::isfinite(q.spread) && !(q.spread <= r.maxSpread))
+            {
+                r.maxSpread = q.spread;
+                r.maxSpreadAt = static_cast<int>(i) - 1;
+            }
+        }
+        q.h = height(q.dM, q.dTheta);
         q.manual = i - 1 < in.manual.size() ? in.manual[i - 1] : -1;
         q.excluded = q.manual == 0 || !std::isfinite(q.h);
         r.m.push_back(q);
@@ -166,7 +221,8 @@ inline Result Evaluate(const Input& in)
         if (std::isfinite(in.lMax))
             e = std::min(e, 0.10 * in.lMax);
         r.eps = std::max(e, 0.04);
-        const double ratio = in.D0 > 0 ? in.D0 / in.D : 1.0;
+        const double ratio = in.D0 > 0 ? in.D0 / (in.Dworst > 0 ? in.Dworst : in.D) : 1.0;
+        r.Dratio = ratio;
         r.err663 = r.err * ratio;
         r.ok663 = std::isfinite(r.err663) ? (r.err663 <= r.eps ? 1 : 0) : 0;
     }
@@ -175,7 +231,9 @@ inline Result Evaluate(const Input& in)
     // 6.6.5
     const bool ok = r.ok661 && r.ok662 && r.ok664 && r.ok663 != 0;
     r.reduced = !ok && std::isfinite(r.err);
-    r.hFinal = r.reduced ? r.hk - r.err : r.hk;
+    r.hFinalRaw = r.reduced ? r.hk - r.err : r.hk;
+    r.dh = std::isfinite(in.dh) ? in.dh : 0.0;
+    r.hFinal = r.hFinalRaw - r.dh;
     if (r.n < 8)
         r.note = "замеров " + std::to_string(r.n) + " — меньше 8: t_αn по табл. 6.6.2 нет, вероятная ошибка не считается";
     else if (r.n > 16)
@@ -196,7 +254,7 @@ struct Conditions
     double theta0 = kNaN;          // начальный крен (абсолютный), °
     std::vector<double> dTheta;    // крен положений относительно начального, °
     int instruments = 0;           // постов (датчиков) с данными
-    double spread = kNaN, spreadLimit = 0.05; // наибольшее расхождение постов, °
+    double spread = kNaN, spreadLimit = 0.1;  // наибольшее расхождение приращений Δθ приборов на замере, °
     double h = kNaN;               // h для проверки ≥ 0,20 м (основной расчёт)
     bool signedArms = true;        // плечи введены со знаком
     std::vector<std::string> labels; // подписи положений (номера); пусто — 1, 2, …
@@ -252,8 +310,9 @@ inline std::vector<Check> Checks(const Result& r, const Conditions& c)
         zero >= 0 || r.ok661 ? 1 : 0);
     add("Не менее 2 приборов (весков / датчиков)", "разд. 3 прил. 3", std::to_string(c.instruments),
         c.instruments >= 2 ? 1 : 0);
-    add("Сверка приборов: расхождение ≤ " + F("%.2f°", c.spreadLimit), "разд. 3 прил. 3",
-        std::isfinite(c.spread) ? F("%.3f°", c.spread) : std::string("один прибор"),
+    add("Сверка приборов: расхождение приращений Δθ на замере ≤ " + F("%.2f°", c.spreadLimit), "разд. 3 прил. 3",
+        std::isfinite(c.spread) ? F("%.3f°", c.spread) + (r.maxSpreadAt >= 0 ? ", замер " + std::to_string(r.maxSpreadAt + 1) : std::string())
+                                : std::string("один прибор"),
         std::isfinite(c.spread) ? (c.spread <= c.spreadLimit ? 1 : 0) : -1);
     add("Плечи со знаком (+ к правому борту)", "табл. 6.5", c.signedArms ? "да" : "без знака — по знаку крена",
         c.signedArms ? 1 : -1);

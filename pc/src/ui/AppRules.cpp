@@ -42,8 +42,8 @@ void App::ProcResultStrip(float w)
         const bool cont = ProcCont();
         const heel::Summary& s = cont ? proc_.posSum : proc_.sum;
         const heel::RsCase& rc = proc_.rs;
-        const bool byTable = settings_.rsMain == 1;
-        const double hMain = byTable ? rc.r.hFinal : s.h, hOther = byTable ? s.h : rc.r.hk;
+        const bool byTable = ProcSettings().RsMain() == 1;
+        const double hMain = byTable ? rc.r.hFinal : s.h - rc.dh, hOther = byTable ? s.h - rc.dh : rc.r.hFinal;
         const float right = ImGui::GetCursorScreenPos().x + ImGui::GetContentRegionAvail().x;
         const float saveW = std::max(S(150), ImGui::CalcTextSize("Сохранение…").x + S(24));
         const float openW = ImGui::CalcTextSize("Открыть папку").x + S(24);
@@ -61,7 +61,8 @@ void App::ProcResultStrip(float w)
         }
         ImGui::SameLine(0, S(6));
         ImGui::AlignTextToFramePadding();
-        Muted("%s", byTable ? (rc.r.reduced ? "табл. 6.5, 6.6.5" : "табл. 6.5") : "от начального");
+        Muted("%s%s", byTable ? (rc.r.reduced ? "табл. 6.5, 6.6.5" : "табл. 6.5") : "от начального",
+              rc.dh != 0.0 ? ", испр. (−Δh)" : "");
         // Дальше — что поместится до кнопок: второй расчёт, итог проверки (полный или короткий)
         auto fits = [&](const std::string& t) {
             return ImGui::GetItemRectMax().x + S(16) + ImGui::CalcTextSize(t.c_str()).x <= buttonsX - S(12);
@@ -98,15 +99,15 @@ void App::ProcResultStrip(float w)
 
 void App::ProcViewSwitch()
 {
-    const char* labels[] = {ProcCont() ? "Запись крена" : "Графики крена", "Контроль M – tg θ", "Правила РС"};
-    static const int values[] = {0, 1, 2};
+    const char* labels[] = {"Крен", "Контроль", "Правила РС", "Перемещения"};
+    static const int values[] = {0, 1, 2, 3};
     int v = proc_.view;
-    if (Segmented("view", &v, labels, values, 3))
+    if (Segmented("view", &v, labels, values, 4))
         proc_.view = v;
     if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("Правила РС (прил. 3 к разд. 2 Руководства по техническому наблюдению за постройкой судов):\n"
-                          "«Контроль» — график контроля замеров (п. 5.5), «Правила РС» — оценка качества (6.6) и\n"
-                          "требования к опыту (разд. 3)");
+        ImGui::SetTooltip("«Крен» — графики крена (запись), «Контроль» — график контроля «кренящий момент – tg θ» (п. 5.5),\n"
+                          "«Правила РС» — оценка качества (6.6) и требования (разд. 3), «Перемещения» — группы\n"
+                          "крен-балласта, перемещения и табл. 6.5 по каждому прибору (прил. 3 к разд. 2 Руководства)");
 }
 
 std::string App::ProcRsStatus(int* state) const
@@ -292,38 +293,74 @@ void App::ProcRsView(float w, float h)
              "(как в старой программе), «По табл. 6.5» — h_i по приращениям момента и крена между соседними "
              "положениями, h_k — среднее, при невыполнении 6.6 — h_k минус вероятная ошибка (6.6.5). Основной — "
              "крупно в карточке h и в проверке h ≥ 0,20 м.");
-        int main = settings_.rsMain;
+        int main = ProcSettings().RsMain(); // в режиме групп по умолчанию — табл. 6.5
         static const char* mains[] = {"От начального", "Табл. 6.5"};
         static const int mainValues[] = {0, 1};
         Segmented("rs_main", &main, mains, mainValues, 2);
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("«От начального» — h по каждому положению от начального + МНК (как раньше);\n"
                               "«Табл. 6.5» — h_k по приращениям, итог по 6.6.5");
-        if (main != settings_.rsMain)
+        if (main != ProcSettings().RsMain())
         {
-            settings_.rsMain = main;
+            (settings_.rsGroupMode ? settings_.rsMainGroups : settings_.rsMain) = main;
             proc_.dirty = true;
             SaveSettingsSoon();
+        }
+        // Крен для табл. 6.5: среднее приборов или один прибор
+        if (k.postIds.size() > 1)
+        {
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextUnformatted("Δθ:");
+            ImGui::SameLine(0, S(8));
+            std::vector<std::string> names = {"среднее приборов"};
+            std::vector<int> vals = {-1};
+            for (const int p : k.postIds)
+            {
+                names.push_back("по прибору «" + SensorTitleOfPost(p) + "»");
+                vals.push_back(p);
+            }
+            int sel = 0;
+            for (std::size_t i = 0; i < vals.size(); i++)
+                if (vals[i] == settings_.rsInstrument)
+                    sel = static_cast<int>(i);
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            if (ImGui::BeginCombo("##rs_inst", names[static_cast<std::size_t>(sel)].c_str()))
+            {
+                for (std::size_t i = 0; i < vals.size(); i++)
+                    if (ImGui::Selectable(names[i].c_str(), static_cast<int>(i) == sel) && static_cast<int>(i) != sel)
+                    {
+                        settings_.rsInstrument = vals[i];
+                        proc_.dirty = true;
+                        SaveSettingsSoon();
+                    }
+                ImGui::EndCombo();
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Δθ замера в табл. 6.5: среднее приращений всех приборов (как в протоколе — среднее\n"
+                                  "весков) или приращение одного прибора. По каждому — вид «Перемещения».");
         }
         ImGui::Spacing();
         {
             FontScope f(fontBold);
-            ImGui::TextUnformatted("Для 6.6.3 и сверки постов");
+            ImGui::TextUnformatted("Поправки, 6.6.3, сверка");
         }
         ImGui::SameLine();
-        Hint("Из Информации об остойчивости (необязательно): h и l_max по наихудшему варианту загрузки, Δ0 — "
-             "водоизмещение порожнем (нет — берётся D). 0 — не задано: 6.6.3 — «нужны данные».\n\n"
-             "Сверка постов: наибольшее расхождение крена между датчиками на одном положении. По умолчанию 0,05° — "
-             "пять шагов отображения датчика (0,01°) и около 2,5 % крена 2° (середина требуемых 1°–4°), т. е. "
-             "заметно больше шума усреднённого крена (сотые доли градуса) и заметно меньше ошибки, которая "
-             "испортила бы h.");
+        Hint("Δh — поправка на свободные поверхности жидких грузов: h исправленная = h − Δh (в итоге, основном "
+             "расчёте и отчёте помечено «испр.»). Из Информации об остойчивости (необязательно): h и l_max по "
+             "наихудшему варианту загрузки, Δ этого варианта и Δ0 — водоизмещение порожнем; 6.6.3: ошибка·Δ0/Δ ≤ ε "
+             "(Δ не задано — берётся D). 0 — не задано: 6.6.3 — «нужны данные».\n\n"
+             "Сверка приборов: на каждом замере — расхождение приращений Δθ приборов (наибольшее − наименьшее). По "
+             "умолчанию 0,1°: десять шагов датчика (0,01°) и 3–5 % обычного приращения 2–3°; разные приборы стоят в "
+             "разных местах, нули у них свои — поэтому сравниваются приращения, а не уровни.");
         // Подписи (с единицами) — столбцом, поля — за самой длинной до края; 0 — «не задано» серым в поле
         const std::string lh = std::string("h по Информации, ") + (model ? "мм" : "м");
         const std::string ll = std::string("l_max, ") + (model ? "мм" : "м");
         const std::string ld = std::string("Δ0 порожнем, ") + (model ? "кг" : "т");
-        const char* sp = "Сверка постов, °";
+        const char* sp = "Сверка приборов, °";
+        const std::string ldh = std::string("Δh своб. поверхн., ") + (model ? "мм" : "м");
+        const std::string ldw = std::string("Δ наихудшего, ") + (model ? "кг" : "т");
         float labW = 0;
-        for (const char* l : {lh.c_str(), ll.c_str(), ld.c_str(), sp})
+        for (const char* l : {lh.c_str(), ll.c_str(), ld.c_str(), sp, ldh.c_str(), ldw.c_str()})
             labW = std::max(labW, ImGui::CalcTextSize(l).x);
         const float fieldX = labW + S(10);
         const float fw = std::max(S(60), ImGui::GetContentRegionAvail().x - fieldX);
@@ -358,6 +395,8 @@ void App::ProcRsView(float w, float h)
             if (ImGui::IsItemHovered())
                 ImGui::SetTooltip("%s", tip);
         };
+        field(ldh.c_str(), "##rs_dh", &settings_.rsDh, model ? "%.1f" : "%.3f", 0.0, 1e6, true,
+              "Поправка на влияние свободных поверхностей жидких грузов: h исправленная = h − Δh.\n0 — нет поправки.");
         field(lh.c_str(), "##rs_h", &settings_.rsH, model ? "%.1f" : "%.3f", 0.0, 1e6, true,
               "Метацентрическая высота по наихудшему варианту загрузки (Информация об остойчивости) — для ε в 6.6.3.\n"
               "0 — не задано.");
@@ -365,10 +404,13 @@ void App::ProcRsView(float w, float h)
               "Наибольшее плечо диаграммы статической остойчивости по наихудшему варианту загрузки — для ε в 6.6.3.\n"
               "0 — не задано.");
         field(ld.c_str(), "##rs_d0", &settings_.rsD0, model ? "%.3f" : "%.1f", 0.0, 1e9, true,
-              "Водоизмещение судна порожнем Δ0 — множитель Δ0/Δ в 6.6.3. 0 — не задано (берётся D, множитель 1).");
+              "Водоизмещение судна порожнем Δ0 — множитель Δ0/Δ в 6.6.3. 0 — не задано (множитель 1).");
+        field(ldw.c_str(), "##rs_dw", &settings_.rsDworst, model ? "%.3f" : "%.1f", 0.0, 1e9, true,
+              "Δ — водоизмещение судна при наихудшем (по h или l_max) варианте загрузки, для Δ0/Δ в 6.6.3.\n"
+              "0 — не задано: берётся D при креновании.");
         field(sp, "##rs_sp", &settings_.rsSpread, "%.3f", 0.001, 10.0, false,
-              "Наибольшее допустимое расхождение крена между датчиками (постами) на одном положении, °.\n"
-              "По умолчанию 0,05°: пять шагов датчика (0,01°) и ~2,5 % крена 2°.");
+              "Наибольшее допустимое расхождение приращений Δθ приборов на одном замере, °.\n"
+              "По умолчанию 0,1°: десять шагов датчика (0,01°) и 3–5 % приращения 2–3°.");
         ImGui::Spacing();
         {
             FontScope f(fontBold);
@@ -386,9 +428,17 @@ void App::ProcRsView(float w, float h)
             KV("Допустимая (6.6.2)", num(r.errLimit, "%.4f м"));
             KV("ε (6.6.3)", r.ok663 < 0 ? std::string("нужны h и l_max") : num(r.eps, "%.3f м"));
             const ImVec4 fc = r.reduced ? pal.warn : pal.text;
-            KV(r.reduced ? "Итог (6.6.5)" : "Итог", r.reduced ? num(r.hFinal, "%.3f м = h_k − ошибка") : num(r.hFinal, "%.3f м"),
+            KV(r.reduced ? "Итог (6.6.5)" : "Итог", r.reduced ? num(r.hFinalRaw, "%.3f м = h_k − ошибка") : num(r.hFinalRaw, "%.3f м"),
                &fc);
-            KV("От начального", num(k.hCurrent, "%.3f м"));
+            if (k.dh != 0.0)
+            {
+                const ImVec4 wc = pal.warn;
+                KV("Испр. (−Δh)", Fmt("%.3f м (Δh %.3f)", r.hFinal, k.dh), &wc);
+            }
+            KV("Δ0/Δ (6.6.3)", std::isfinite(r.Dratio) ? Fmt("%.4f", r.Dratio) : std::string("—"));
+            KV("Сверка приборов", std::isfinite(r.maxSpread) ? Fmt("%.3f° (замер %d)", r.maxSpread, r.maxSpreadAt + 1)
+                                                             : std::string("один прибор"));
+            KV("От начального", k.dh != 0.0 ? Fmt("%.3f м, испр. %.3f", k.hCurrent, k.hCurrent - k.dh) : num(k.hCurrent, "%.3f м"));
             KV("Период качки Tc",
                k.tcN ? Fmt("%.1f с (%.1f…%.1f, по %d)", k.tc, k.tcMin, k.tcMax, k.tcN) : std::string("не видно"));
             EndKV();
@@ -511,8 +561,9 @@ void App::ProcRsView(float w, float h)
                 ImGui::PushID(static_cast<int>(i));
                 ImGui::TableNextColumn();
                 ImGui::AlignTextToFramePadding();
-                TextColored(c, "%s→%s", k.label[static_cast<std::size_t>(q.from)].c_str(),
-                            k.label[static_cast<std::size_t>(q.to)].c_str());
+                const bool spreadBad = std::isfinite(q.spread) && q.spread > k.c.spreadLimit;
+                TextColored(spreadBad ? pal.warn : c, "%s→%s%s", k.label[static_cast<std::size_t>(q.from)].c_str(),
+                            k.label[static_cast<std::size_t>(q.to)].c_str(), spreadBad ? " ⚠" : "");
                 if (ImGui::TableGetHoveredRow() == ImGui::TableGetRowIndex())
                     ImGui::SetTooltip("Замер %d: из положения %s в %s%s%s", static_cast<int>(i) + 1,
                                       k.label[static_cast<std::size_t>(q.from)].c_str(),
@@ -521,10 +572,15 @@ void App::ProcRsView(float w, float h)
                                       : q.autoExcluded ? " — исключён по 6.6.1 (|h_i − h_k| > 2σ)"
                                       : q.excluded     ? " — исключён вручную"
                                                        : "",
-                                      none || !std::isfinite(r.hk)
-                                          ? ""
-                                          : Fmt("\nh_i = %.4f м, h_i − h_k = %+.4f м, 2σ = %.4f м", q.h, q.h - r.hk,
-                                                2 * r.sigma).c_str());
+                                      (none || !std::isfinite(r.hk)
+                                           ? std::string()
+                                           : Fmt("\nh_i = %.4f м, h_i − h_k = %+.4f м, 2σ = %.4f м", q.h, q.h - r.hk,
+                                                 2 * r.sigma) +
+                                                 (std::isfinite(q.spread)
+                                                      ? Fmt("\nрасхождение приборов %.3f°%s", q.spread,
+                                                            spreadBad ? " — больше порога сверки!" : "")
+                                                      : std::string()))
+                                          .c_str());
                 ImGui::TableNextColumn();
                 TextColored(c, "%+.*f", model ? 0 : 1, q.dM * toUser);
                 ImGui::TableNextColumn();
@@ -576,6 +632,286 @@ void App::ProcRsView(float w, float h)
     ImGui::EndChild();
     if (narrow)
         ImGui::EndGroup();
+    ImGui::PopStyleVar();
+    ImGui::PopStyleColor();
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Крен-балласт группами и перемещения (вид «Перемещения»)
+// ---------------------------------------------------------------------------------------------------------------
+
+const std::vector<heel::RsGroup>& App::ProcGroups() const
+{
+    if (!proc_.rsGroupsLoaded)
+    {
+        auto& self = const_cast<App&>(*this);
+        self.proc_.rsGroups = heel::ParseGroups(settings_.rsGroups);
+        self.proc_.rsGroupsLoaded = true;
+    }
+    return proc_.rsGroups;
+}
+
+void App::ProcSaveGroups()
+{
+    settings_.rsGroups = heel::GroupsText(proc_.rsGroups);
+    proc_.dirty = true;
+    SaveSettingsSoon();
+}
+
+void App::ProcessSetRsGroups(const std::vector<heel::RsGroup>& g)
+{
+    ProcGroups();
+    proc_.rsGroups = g;
+    ProcSaveGroups();
+}
+
+void App::ProcessSetRsMove(int step, int group, double arm)
+{
+    if (step < 0 || group < 0)
+        return;
+    if (proc_.rsMoves.size() <= static_cast<std::size_t>(step))
+        proc_.rsMoves.resize(static_cast<std::size_t>(step) + 1);
+    auto& row = proc_.rsMoves[static_cast<std::size_t>(step)];
+    if (row.size() <= static_cast<std::size_t>(group))
+        row.resize(static_cast<std::size_t>(group) + 1, 0.0);
+    row[static_cast<std::size_t>(group)] = arm;
+    proc_.dirty = true;
+}
+
+// Слева — как задан кренящий момент (одна масса P и плечи от начального или группы крен-балласта) и группы; справа —
+// шаги опыта (переход положений i → i + 1): плечи перемещений групп, ΔM, Δθ и h_i по каждому прибору и расчётные.
+void App::ProcMovesView(float w, float h)
+{
+    ProcGroups();
+    const heel::RsCase& k = proc_.rs;
+    const rs::Result& r = k.r;
+    const bool model = settings_.heelSmall;
+    const bool groups = settings_.rsGroupMode;
+    const float gap = S(12);
+    const float aw = std::clamp(std::floor(w * 0.30f), S(250), S(380));
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, pal.cardAlt);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(S(8), S(6)));
+
+    ImGui::BeginChild("##mv_a", ImVec2(aw, h), ImGuiChildFlags_AlwaysUseWindowPadding);
+    {
+        {
+            FontScope f(fontBold);
+            ImGui::TextUnformatted("Кренящий момент");
+        }
+        ImGui::SameLine();
+        Hint("«Одна масса P» — как раньше: масса груза P (исходные данные) и плечо переноса от начального положения у "
+             "каждого положения / замера (в таблице).\n\n«Группы» — крен-балласт из нескольких групп своей массы; для "
+             "каждого шага опыта (переход положений i → i + 1) — плечо перемещения каждой группы со знаком (+ к правому "
+             "борту, 0 — группу не двигали): ΔM_i = Σ m_g·l_ig, как в протоколе кренования. Первое учтённое положение "
+             "(замер) — начальное.");
+        int mode = groups ? 1 : 0;
+        static const char* modes[] = {"Одна масса P", "Группы"};
+        static const int modeValues[] = {0, 1};
+        if (Segmented("mv_mode", &mode, modes, modeValues, 2))
+        {
+            settings_.rsGroupMode = mode == 1;
+            proc_.dirty = true;
+            SaveSettingsSoon();
+        }
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("«Одна масса, плечо от начального» или «Группы крен-балласта и перемещения»");
+        ImGui::Spacing();
+        if (!groups)
+        {
+            ImGui::PushStyleColor(ImGuiCol_Text, pal.muted);
+            ImGui::TextWrapped("Одна масса P = %s %s, плечи — в таблице положений (замеров), со знаком: + к правому борту.",
+                               Fmt(NumFmt(settings_.heelP, settings_.digP).c_str(), settings_.heelP).c_str(),
+                               model ? "кг" : "т");
+            ImGui::PopStyleColor();
+        }
+        {
+            FontScope f(fontBold);
+            ImGui::TextUnformatted("Группы крен-балласта");
+        }
+        int remove = -1;
+        bool changed = false;
+        if (ImGui::BeginTable("##mv_groups", 4, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_SizingFixedFit))
+        {
+            ImGui::TableSetupColumn("№", ImGuiTableColumnFlags_WidthFixed, S(22));
+            ImGui::TableSetupColumn("Название", ImGuiTableColumnFlags_WidthStretch);
+            ImGui::TableSetupColumn(model ? "Масса, кг" : "Масса, т", ImGuiTableColumnFlags_WidthFixed, S(84));
+            ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed, S(24));
+            ImGui::TableHeadersRow();
+            for (std::size_t g = 0; g < proc_.rsGroups.size(); g++)
+            {
+                heel::RsGroup& gr = proc_.rsGroups[g];
+                ImGui::PushID(static_cast<int>(g));
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::AlignTextToFramePadding();
+                ImGui::Text("%d", static_cast<int>(g) + 1);
+                ImGui::TableNextColumn();
+                char buf[96];
+                std::snprintf(buf, sizeof(buf), "%s", gr.name.c_str());
+                ImGui::SetNextItemWidth(-FLT_MIN);
+                if (ImGui::InputText("##name", buf, sizeof(buf)))
+                {
+                    gr.name = buf;
+                    changed = true;
+                }
+                ImGui::TableNextColumn();
+                ImGui::SetNextItemWidth(-FLT_MIN);
+                double m = gr.mass;
+                if (ImGui::InputDouble("##mass", &m, 0.0, 0.0, model ? "%.3f" : "%.3f"))
+                {
+                    gr.mass = std::clamp(m, 0.0, 1e7);
+                    changed = true;
+                }
+                ImGui::TableNextColumn();
+                if (Button("✕", BtnKind::Normal, ImVec2(S(22), 0)))
+                    remove = static_cast<int>(g);
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Удалить группу (и её столбец перемещений)");
+                ImGui::PopID();
+            }
+            ImGui::EndTable();
+        }
+        if (remove >= 0)
+        {
+            proc_.rsGroups.erase(proc_.rsGroups.begin() + remove);
+            for (auto& row : proc_.rsMoves)
+                if (row.size() > static_cast<std::size_t>(remove))
+                    row.erase(row.begin() + remove);
+            changed = true;
+        }
+        if (Button("+ Группа", BtnKind::Normal, ImVec2(S(110), 0)))
+        {
+            proc_.rsGroups.push_back({"Группа " + std::to_string(proc_.rsGroups.size() + 1), 0.0});
+            changed = true;
+        }
+        if (changed)
+            ProcSaveGroups();
+        ImGui::Spacing();
+        {
+            FontScope f(fontSmall);
+            ImGui::PushStyleColor(ImGuiCol_Text, pal.muted);
+            ImGui::TextWrapped("Группы сохраняются в настройках программы, перемещения — у открытого опыта (новая папка — "
+                               "заново). В отчёте — лист «Перемещения». Δθ — %s; сверка приборов по приращениям — "
+                               "порог %.2f° (вид «Правила РС»).",
+                               settings_.rsInstrument < 0 ? "среднее приборов" : "по одному прибору", settings_.rsSpread);
+            ImGui::PopStyleColor();
+        }
+    }
+    ImGui::EndChild();
+
+    ImGui::SameLine(0, gap);
+    ImGui::BeginChild("##mv_b", ImVec2(w - aw - gap, h), ImGuiChildFlags_AlwaysUseWindowPadding);
+    {
+        {
+            FontScope f(fontBold);
+            ImGui::TextUnformatted(groups ? "Перемещения и табл. 6.5 по приборам" : "Табл. 6.5 по приборам");
+        }
+        ImGui::SameLine();
+        Hint("Шаг i — переход положений (замеров) i → i + 1 в порядке опыта. ΔM — приращение кренящего момента, Δθ — "
+             "приращение крена по каждому прибору и расчётное (среднее приборов или выбранный), h_i = ΔM / (D·Δθ) — по "
+             "каждому прибору и расчётное. ⚠ — приращения приборов расходятся больше порога сверки.");
+        const std::size_t np = k.postIds.size();
+        const std::size_t ng = groups ? proc_.rsGroups.size() : 0;
+        const int cols = 2 + static_cast<int>(ng) + 1 + (np > 1 ? static_cast<int>(np) : 0) + 1 +
+                         (np > 1 ? static_cast<int>(np) : 0) + 1;
+        if (ImGui::BeginTable("##mv_steps", cols,
+                              ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_ScrollY |
+                                  ImGuiTableFlags_SizingStretchProp,
+                              ImVec2(0, ImGui::GetContentRegionAvail().y)))
+        {
+            ImGui::TableSetupScrollFreeze(0, 1);
+            ImGui::TableSetupColumn("Шаг", ImGuiTableColumnFlags_WidthFixed, S(34));
+            ImGui::TableSetupColumn("Полож.", ImGuiTableColumnFlags_WidthFixed, S(56));
+            std::vector<std::string> hdr;
+            for (std::size_t g = 0; g < ng; g++)
+                hdr.push_back((proc_.rsGroups[g].name.empty() ? "Группа " + std::to_string(g + 1) : proc_.rsGroups[g].name) +
+                              (model ? ", мм" : ", м"));
+            for (std::size_t p = 0; p < np && np > 1; p++)
+                hdr.push_back("Δθ " + SensorTitleOfPost(k.postIds[p]));
+            for (std::size_t p = 0; p < np && np > 1; p++)
+                hdr.push_back("h_i " + SensorTitleOfPost(k.postIds[p]));
+            std::size_t hi = 0;
+            // Ширины — долями (влезает без прокрутки вбок): плечи групп шире, остальное поровну
+            auto column = [&](float weight) { ImGui::TableSetupColumn(hdr[hi++].c_str(), ImGuiTableColumnFlags_WidthStretch, weight); };
+            for (std::size_t g = 0; g < ng; g++)
+                column(1.25f);
+            ImGui::TableSetupColumn(model ? "ΔM, кг·мм" : "ΔM, т·м", ImGuiTableColumnFlags_WidthStretch, 1.0f);
+            for (std::size_t p = 0; p < np && np > 1; p++)
+                column(1.0f);
+            ImGui::TableSetupColumn(np > 1 ? (settings_.rsInstrument < 0 ? "Δθ ср." : "Δθ расч.") : "Δθ",
+                                    ImGuiTableColumnFlags_WidthStretch, 1.0f);
+            for (std::size_t p = 0; p < np && np > 1; p++)
+                column(0.9f);
+            ImGui::TableSetupColumn("h_i, м", ImGuiTableColumnFlags_WidthStretch, 0.9f);
+            ImGui::TableHeadersRow();
+            const double toUser = model ? 1e6 : 1.0;
+            for (std::size_t i = 0; i < r.m.size(); i++)
+            {
+                const rs::Meas& q = r.m[i];
+                const bool spreadBad = std::isfinite(q.spread) && q.spread > k.c.spreadLimit;
+                const ImVec4 c = !std::isfinite(q.h) ? pal.muted : q.excluded ? pal.err : pal.text;
+                ImGui::PushID(static_cast<int>(i));
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::AlignTextToFramePadding();
+                TextColored(spreadBad ? pal.warn : c, "%d%s", static_cast<int>(i) + 1, spreadBad ? " ⚠" : "");
+                if (spreadBad && ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Приращения приборов расходятся на %.3f° (порог %.2f°) — проверьте отсчёты", q.spread,
+                                      k.c.spreadLimit);
+                ImGui::TableNextColumn();
+                TextColored(c, "%s → %s", k.label[static_cast<std::size_t>(q.from)].c_str(),
+                            k.label[static_cast<std::size_t>(q.to)].c_str());
+                for (std::size_t g = 0; g < ng; g++)
+                {
+                    ImGui::TableNextColumn();
+                    ImGui::PushID(static_cast<int>(g));
+                    double l = i < proc_.rsMoves.size() && g < proc_.rsMoves[i].size() ? proc_.rsMoves[i][g] : 0.0;
+                    ImGui::SetNextItemWidth(-FLT_MIN);
+                    ImGui::PushStyleColor(ImGuiCol_Text, l != 0.0 ? pal.accent : pal.muted);
+                    if (ImGui::InputDouble("##l", &l, 0.0, 0.0, model ? "%.1f" : "%.3f"))
+                        ProcessSetRsMove(static_cast<int>(i), static_cast<int>(g), std::clamp(l, -1e7, 1e7));
+                    ImGui::PopStyleColor();
+                    if (ImGui::IsItemHovered())
+                        ImGui::SetTooltip("Плечо перемещения группы на этом шаге, со знаком: + к правому борту; 0 — не двигали");
+                    ImGui::PopID();
+                }
+                ImGui::TableNextColumn();
+                TextColored(c, "%+.*f", model ? 0 : 3, q.dM * toUser);
+                for (std::size_t p = 0; p < np && np > 1; p++)
+                {
+                    ImGui::TableNextColumn();
+                    const double d = p < q.dThetaPost.size() ? q.dThetaPost[p] : heel::kNaN;
+                    TextColored(spreadBad ? pal.warn : c, "%s", std::isfinite(d) ? text::Angle(d, 3).c_str() : "—");
+                }
+                ImGui::TableNextColumn();
+                TextColored(c, "%s", std::isfinite(q.dTheta) ? text::Angle(q.dTheta, 3).c_str() : "—");
+                for (std::size_t p = 0; p < np && np > 1; p++)
+                {
+                    ImGui::TableNextColumn();
+                    const double hp = p < q.hPost.size() ? q.hPost[p] : heel::kNaN;
+                    if (std::isfinite(hp))
+                        TextColored(c, "%.3f", hp);
+                    else
+                        TextColored(pal.muted, "—");
+                }
+                ImGui::TableNextColumn();
+                if (std::isfinite(q.h))
+                    TextColored(c, "%.3f%s", q.h, q.autoExcluded ? " ✗" : q.excluded ? " ✗" : "");
+                else
+                    TextColored(pal.muted, "—");
+                ImGui::PopID();
+            }
+            if (r.m.empty())
+            {
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::TableNextColumn();
+                Muted("нужно два положения и больше");
+            }
+            ImGui::EndTable();
+        }
+    }
+    ImGui::EndChild();
     ImGui::PopStyleVar();
     ImGui::PopStyleColor();
 }
