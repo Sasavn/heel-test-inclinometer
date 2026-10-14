@@ -14,12 +14,14 @@
 #include <vector>
 
 #include "HeelData.hpp"
+#include "HeelRs.hpp"
 #include "Xlsx.hpp"
 
 namespace heel
 {
 
 inline constexpr const char* kReportName = "Отчет_Кренование.xlsx";
+inline constexpr const char* kControlPlotName = "График_контроля.png"; // кренящий момент – tg θ (Правила РС, п. 5.5)
 // Имя картинки поста: «График_Нос.png», «Положения_Мидель.png» (знаки, недопустимые в имени файла, — «_»).
 inline std::string PlotFileName(const char* prefix, const std::string& post)
 {
@@ -127,7 +129,7 @@ inline std::vector<xlsx::Sheet> BuildReport(const Settings& s, const std::vector
             if (pd.st.whole)
                 note += std::string(note.empty() ? "" : "; ") + "файл короче окна — среднее по всему файлу";
             res.AddRow({Text(f.name), Text(s.PostName(p)), m.number > kPcRunBase ? Text(m.label) : Num(m.number, 0),
-                        Num(std::isfinite(m.arm) ? std::fabs(m.arm) : s.L, s.units.model ? 1 : 3), Num(pd.st.mean, 3), Num(pd.st.sd, 3),
+                        Num(std::isfinite(m.arm) ? m.arm : s.L, s.units.model ? 1 : 3), Num(pd.st.mean, 3), Num(pd.st.sd, 3),
                         Num(pd.st.n, 0), pd.res.counted ? Num(pd.res.h, 3) : xlsx::Empty(), Num(pd.batV, 1), Text(note)});
         }
     }
@@ -259,7 +261,7 @@ inline std::vector<xlsx::Sheet> BuildPositionsReport(const Settings& s, const st
                 Num(static_cast<double>(i + 1), 0), Text(p.use ? "да" : "нет"), Num(t0, 1), Num(t1, 1), Num(t1 - t0, 1),
                 Text(s.PostName(post)), Num(p.st[post].mean, 3), Num(p.st[post].sd, 3), Num(p.st[post].n, 0),
                 Num(p.Level(post), 3), Num(r.dTheta, 3),
-                r.reference ? xlsx::Empty() : Num(std::isfinite(p.arm) ? std::fabs(p.arm) : s.L, mm ? 1 : 3),
+                r.reference ? xlsx::Empty() : Num(std::isfinite(p.arm) ? p.arm : s.L, mm ? 1 : 3),
                 std::isfinite(e.winT0) ? Text(detail::Num(e.winT0, 1) + "…" + detail::Num(e.winT1, 1)) : xlsx::Empty(),
                 r.counted ? Num(r.h, 3) : xlsx::Empty()};
             if (mm)
@@ -375,6 +377,66 @@ inline std::vector<xlsx::Sheet> BuildPositionsReport(const Settings& s, const st
         }
     }
     return {std::move(res), std::move(raw)};
+}
+
+// Лист «Проверки» (Правила РС): оба расчёта h, оценка качества 6.6, требования (✓ / ✗ / —), таблица 6.5, период качки.
+inline xlsx::Sheet BuildRsSheet(const Settings& s, const RsCase& k)
+{
+    using xlsx::Num;
+    using xlsx::Text;
+    xlsx::Sheet sh("Проверки");
+    const rs::Result& r = k.r;
+    auto yes = [](int st) { return st > 0 ? "✓" : st == 0 ? "✗" : "—"; };
+    sh.AddRow({Text("Проверка опыта кренования по Правилам РС (Ч. IV 1.5; прил. 3 к разд. 2 Руководства, табл. 6.5, п. 6.6)")});
+    sh.AddRow(std::vector<xlsx::Cell>{});
+    sh.AddRow({Text("Метацентрическая высота"), Text("Значение (м)"), Text("Примечание")});
+    sh.AddRow({Text("От начального положения + МНК (среднее по точкам)"), Num(k.hCurrent, 3),
+               Text(s.rsMain == 0 ? "основной расчёт" : "")});
+    sh.AddRow({Text("По приращениям, табл. 6.5: h_k"), Num(r.hk, 3), Text(r.note)});
+    sh.AddRow({Text(r.reduced ? "Итог по 6.6.5: h_k − вероятная ошибка" : "Итог по табл. 6.5 (качество 6.6 выполнено)"),
+               Num(r.hFinal, 3),
+               Text(std::string(s.rsMain == 1 ? "основной расчёт" : "") +
+                    (r.reduced ? std::string(s.rsMain == 1 ? "; " : "") + "условия 6.6 не выполнены — h_k уменьшена" : ""))});
+    sh.AddRow({Text("Замеров в h_k, n"), Num(r.n, 0)});
+    sh.AddRow({Text("σ = √(Σ(h_i − h_k)²/(n − 1))"), Num(r.sigma, 4)});
+    sh.AddRow({Text("t_αn (табл. 6.6.2)"), Num(r.tA, 1)});
+    sh.AddRow({Text("Вероятная ошибка t_αn·√(Σ(h_i − h_k)²/(n(n − 1)))"), Num(r.err, 4)});
+    sh.AddRow({Text("Допустимая ошибка 6.6.2"), Num(r.errLimit, 4), Text(r.hk > 2 ? "0,01(4 + h_k)" : "0,02(1 + h_k)")});
+    sh.AddRow({Text("ε (6.6.3)"), Num(r.eps, 3),
+               Text(r.ok663 < 0 ? "нужны h и l_max по Информации об остойчивости" : "min(0,05h; 0,10 l_max), не менее 0,04 м")});
+    sh.AddRow({Text("Период бортовой качки Tc (оценка по записи), с"), Num(k.tc, 1),
+               Text(k.tcN ? "медиана по " + std::to_string(k.tcN) + " участкам, от " + detail::Num(k.tcMin, 1) + " до " +
+                                detail::Num(k.tcMax, 1) + " с"
+                          : std::string("колебаний не видно"))});
+    sh.AddRow({Text("Плечи"), Text(k.legacy ? "введены без знака — знак по крену относительно начального"
+                                            : "со знаком: + к правому борту")});
+    if (k.virtualZero)
+        sh.AddRow({Text("Начальное положение"), Text("условное: крен 0 (ноль датчика), плечо 0")});
+    sh.AddRow(std::vector<xlsx::Cell>{});
+    sh.AddRow({Text("Требование"), Text("Пункт"), Text("Значение"), Text("Выполнено")});
+    for (const rs::Check& c : k.checks)
+        sh.AddRow({Text(c.req), Text(c.ref), Text(c.value), Text(yes(c.state))});
+    sh.AddRow(std::vector<xlsx::Cell>{});
+    sh.AddRow({Text("Таблица 6.5: замер"), Text("Положения"), Text("ΔM (т·м)"), Text("Δθ (°)"), Text("Δθ (рад)"),
+               Text("h_i (м)"), Text("h_i − h_k (м)"), Text("(h_i − h_k)²"), Text("В расчёте")});
+    for (std::size_t i = 0; i < r.m.size(); i++)
+    {
+        const rs::Meas& q = r.m[i];
+        const bool ok = !q.excluded && std::isfinite(q.h);
+        const std::string st = !std::isfinite(q.h) ? "нет (нет перемещения или крена)"
+                               : q.autoExcluded    ? "нет — исключён по 6.6.1 (|h_i − h_k| > 2σ)"
+                               : q.excluded        ? "нет — исключён вручную"
+                               : q.manual == 1     ? "да (вручную)"
+                                                   : "да";
+        const double d = std::isfinite(q.h) && std::isfinite(r.hk) ? q.h - r.hk : kNaN;
+        sh.AddRow({Num(static_cast<double>(i + 1), 0),
+                   Text(k.label[static_cast<std::size_t>(q.from)] + " → " + k.label[static_cast<std::size_t>(q.to)]),
+                   Num(q.dM, 4), Num(q.dTheta, 3), Num(q.dTheta * kPi / 180.0, 5), Num(q.h, 4), ok ? Num(d, 4) : xlsx::Empty(),
+                   ok ? Num(d * d, 6) : xlsx::Empty(), Text(st)});
+    }
+    detail::AutoWidths(sh);
+    sh.widths[0] = std::min(60.0, std::max(sh.widths[0], 46.0));
+    return sh;
 }
 
 } // namespace heel

@@ -87,8 +87,11 @@ void HeaderHint(float limit, const std::string& full, const std::string& brief)
     }
 }
 
-// Цвета и размеры графиков ImPlot под тему (forExport — свой контекст картинки: размеры по её масштабу).
-void PlotStyle(bool forExport)
+} // namespace
+
+// Цвета и размеры графиков ImPlot под тему (forExport — свой контекст картинки: размеры по её масштабу). Общая для
+// графиков «Обработки» (и AppRules.cpp).
+void ProcPlotStyle(bool forExport)
 {
     ImPlotStyle& ps = ImPlot::GetStyle();
     ps.Colors[ImPlotCol_PlotBg] = pal.card;
@@ -115,6 +118,35 @@ void PlotStyle(bool forExport)
         ps.PlotBorderSize = S(1);
         ps.LegendInnerPadding = ImVec2(S(5), S(5));
         ps.LegendSpacing = ImVec2(S(5), S(2));
+    }
+}
+
+namespace
+{
+
+const char* kArmTip =
+    "Плечо переноса груза от начального положения — со знаком: «+» — к правому борту, «−» — к левому\n"
+    "(табл. 6.5 Правил РС: h_i по приращениям момента и крена между соседними положениями).\n"
+    "Если все плечи положительные (ввод модулем, как раньше) — борт берётся по знаку крена, в журнале — пометка.";
+
+// Строка заголовков таблицы, как TableHeadersRow, но у столбца hintCol — подсказка при наведении.
+void HeadersRowHint(int hintCol, const char* tip)
+{
+    ImGui::TableNextRow(ImGuiTableRowFlags_Headers);
+    const int n = ImGui::TableGetColumnCount();
+    for (int c = 0; c < n; c++)
+    {
+        if (!ImGui::TableSetColumnIndex(c))
+            continue;
+        ImGui::PushID(c);
+        ImGui::TableHeader(ImGui::TableGetColumnName(c));
+        ImGui::PopID();
+        if (c == hintCol && ImGui::IsItemHovered())
+        {
+            ImGui::BeginTooltip();
+            ImGui::TextUnformatted(tip);
+            ImGui::EndTooltip();
+        }
     }
 }
 
@@ -155,6 +187,11 @@ heel::Settings App::ProcSettings() const
     s.filter.tcS = settings_.fltTc;
     s.filter.sgWindowS = settings_.fltSgWin;
     s.filter.wholeSpan = settings_.fltWhole;
+    s.rsH = settings_.rsH > 0 ? settings_.rsH : heel::kNaN;
+    s.rsLmax = settings_.rsLmax > 0 ? settings_.rsLmax : heel::kNaN;
+    s.rsD0 = settings_.rsD0 > 0 ? settings_.rsD0 : heel::kNaN;
+    s.rsSpread = settings_.rsSpread;
+    s.rsMain = settings_.rsMain;
     return s;
 }
 
@@ -208,6 +245,8 @@ void App::ProcSetSmallShip(bool model)
 
 void App::ProcessSetMode(int mode)
 {
+    if ((mode == 1 ? 1 : 0) != proc_.mode)
+        proc_.rsManual.clear(); // номера замеров табл. 6.5 у режимов разные
     proc_.mode = mode == 1 ? 1 : 0;
     proc_.modeUser = true;
     ProcChooseMode(false);
@@ -217,7 +256,7 @@ void App::ProcessSetPositionArm(int index, double arm)
 {
     if (index >= 0 && index < static_cast<int>(proc_.pos.size()))
     {
-        proc_.pos[static_cast<std::size_t>(index)].arm = std::fabs(arm);
+        proc_.pos[static_cast<std::size_t>(index)].arm = arm;
         proc_.dirty = true;
     }
 }
@@ -265,6 +304,7 @@ void App::ProcFindPositions(bool restore)
     proc_.pos.clear();
     proc_.sel = -1;
     proc_.posEdited = false;
+    proc_.rsManual.clear();
     proc_.editsSaveAt = 0;
     if (!ProcCont() || !proc_.files)
         return;
@@ -331,7 +371,7 @@ bool App::ProcessBusy() const
 
 void App::ProcessSetArm(int number, double arm)
 {
-    proc_.arm[number] = std::fabs(arm);
+    proc_.arm[number] = arm;
     proc_.dirty = true;
 }
 
@@ -419,6 +459,7 @@ void App::ProcRecompute()
     if (!proc_.files)
     {
         proc_.sum = heel::Summary{};
+        proc_.rs = heel::RsCase{};
         return;
     }
     for (auto& m : proc_.meas)
@@ -451,9 +492,32 @@ void App::ProcRecompute()
             }
         if (proc_.posEdited)
             proc_.editsSaveAt = link_->NowMs() + 1000;
+        proc_.rs = heel::RsFromPositions(s, *proc_.files, m, proc_.pos, proc_.rsManual, proc_.posSum.h);
     }
     else
+    {
         proc_.posSum = heel::Summary{};
+        proc_.rs = heel::RsFromMeasurements(ProcSettings(), *proc_.files, proc_.meas, proc_.rsManual, proc_.sum.h);
+    }
+    // Плечи без знака (старый ввод модулем): знак переноса — по крену; сказать один раз
+    if (proc_.rs.legacy && proc_.rs.r.m.size() >= 2 && !proc_.rsLegacyLogged)
+    {
+        proc_.rsLegacyLogged = true;
+        ProcLog("Плечи введены без знака — знак переноса взят по крену (как раньше). Для Правил РС плечо вводится со "
+                "знаком: + к правому борту, − к левому",
+                "Табл. 6.5 считает h_i по приращениям момента и крена между соседними положениями, поэтому ей нужен "
+                "знак плеча. Пока все плечи положительные, программа ставит знак по крену положения относительно "
+                "начального; |Δθ| не больше порога — груз считается на месте (плечо 0).");
+    }
+}
+
+void App::ProcessSetRsManual(int number, int state)
+{
+    if (state < 0)
+        proc_.rsManual.erase(number);
+    else
+        proc_.rsManual[number] = state ? 1 : 0;
+    proc_.dirty = true;
 }
 
 void App::TickProcess()
@@ -467,6 +531,8 @@ void App::TickProcess()
         {
             proc_.arm.clear();
             proc_.off.clear();
+            proc_.rsManual.clear();
+            proc_.rsLegacyLogged = false;
         }
         proc_.outDir = r.folder;
         proc_.files = std::make_shared<const std::vector<heel::File>>(std::move(r.files));
@@ -535,6 +601,12 @@ void App::TickProcess()
                                                      [this, post](float w, float h) { ProcExportPositions(post, w, h); });
             }
         }
+        // График контроля (Правила РС, п. 5.5) — по основному посту
+        std::shared_ptr<offscreen::Frame> ctrlFrame;
+        if (!proc_.rs.r.m.empty())
+            ctrlFrame = offscreen::Capture(kExportW, 720, kExportScale,
+                                           [this](float w, float h) { ProcExportControl(w, h); });
+        const heel::RsCase rsCase = proc_.rs;
         heel::ReportInfo info;
         info.folder = Shown(proc_.outDir);
         info.program = WindowTitle();
@@ -551,15 +623,26 @@ void App::TickProcess()
             std::error_code ec;
             fs::create_directories(dir, ec);
             std::string warn, err;
-            const auto sheets = cont ? heel::BuildPositionsReport(s, *files, meas[static_cast<std::size_t>(rec)], pos,
-                                                                  sum, info, &warn)
-                                     : heel::BuildReport(s, *files, meas, sum, info, &warn);
+            auto sheets = cont ? heel::BuildPositionsReport(s, *files, meas[static_cast<std::size_t>(rec)], pos, sum,
+                                                            info, &warn)
+                               : heel::BuildReport(s, *files, meas, sum, info, &warn);
+            if (!rsCase.in.theta.empty())
+                sheets.insert(sheets.begin() + 1, heel::BuildRsSheet(s, rsCase)); // «Проверки» — после результатов
             if (xlsx::Write(dir / text::PathFromUtf8(heel::kReportName), sheets, &err))
                 out.push_back(std::string("✓ Отчёт сохранён: ") + heel::kReportName);
             else
                 out.push_back(std::string("✗ ") + heel::kReportName + " не сохранён: " + err);
             if (!warn.empty())
                 out.push_back(warn);
+            if (ctrlFrame)
+            {
+                const auto rgb = offscreen::Rasterize(*ctrlFrame);
+                if (png::WriteRgb(dir / text::PathFromUtf8(heel::kControlPlotName), ctrlFrame->w, ctrlFrame->h, rgb))
+                    out.push_back(Fmt("✓ График контроля сохранён: %s (%d × %d)", heel::kControlPlotName, ctrlFrame->w,
+                                      ctrlFrame->h));
+                else
+                    out.push_back(std::string("✗ ") + heel::kControlPlotName + " не сохранён");
+            }
             for (int post = 0; post < heel::kMaxPosts; post++)
             {
                 if (!frames[post])
@@ -633,6 +716,18 @@ void App::PageProcess()
     ImGui::Dummy(ImVec2(0, gap - sp));
 
     const float rowH = ImGui::GetFontSize() + S(4) + 2 * S(3);
+    // Правила РС (график контроля, проверка) — карточка раскрывается на всю высоту: таблица и итог — в ней же
+    if (proc_.view != 0)
+    {
+        ProcResultStrip(W); // h обоими расчётами, итог проверки, отчёт
+        ImGui::Dummy(ImVec2(0, gap - sp));
+        const float h = std::max(S(320), ImGui::GetContentRegionAvail().y);
+        if (ProcCont())
+            ProcSeriesCard(W, h);
+        else
+            ProcPlots(W, h);
+        return;
+    }
     if (ProcCont())
     {
         // Одна запись — весь опыт: положения и итог, ниже — вся запись с положениями
@@ -985,14 +1080,16 @@ void App::ProcTable(float w, float h)
                 for (const auto& m : proc_.meas)
                     numW = std::max(numW, ImGui::CalcTextSize(m.label.c_str()).x + S(20));
                 ImGui::TableSetupColumn("Замер", ImGuiTableColumnFlags_WidthFixed, std::min(numW, S(170)));
-                ImGui::TableSetupColumn(settings_.heelSmall ? "Плечо l, мм" : "Плечо l, м", ImGuiTableColumnFlags_WidthFixed, S(76));
+                const char* armHdr = settings_.heelSmall ? "Плечо l, мм (?)" : "Плечо l, м (?)";
+                ImGui::TableSetupColumn(armHdr, ImGuiTableColumnFlags_WidthFixed,
+                                        std::max(S(76), ImGui::CalcTextSize(armHdr).x + S(6)));
                 for (std::size_t k = 0; k < usedPosts.size(); k++)
                 {
                     ImGui::TableSetupColumn(hdr[k].c_str(), ImGuiTableColumnFlags_WidthStretch);
                     ImGui::TableSetupColumn(hdrH[k].c_str(), ImGuiTableColumnFlags_WidthFixed,
                                             std::max(S(66), ImGui::CalcTextSize(hdrH[k].c_str()).x + S(4)));
                 }
-                ImGui::TableHeadersRow();
+                HeadersRowHint(2, kArmTip);
                 for (std::size_t mi = 0; mi < proc_.meas.size(); mi++)
                 {
                     heel::Measurement& m = proc_.meas[mi];
@@ -1041,14 +1138,15 @@ void App::ProcTable(float w, float h)
                         ImGui::PushStyleColor(ImGuiCol_Text, own ? pal.accent : tc);
                         if (ImGui::InputDouble("##arm", &arm, 0.0, 0.0, NumFmt(arm, std::max(3, settings_.digArm)).c_str()))
                         {
-                            proc_.arm[m.number] = std::clamp(std::fabs(arm), 0.0, 1e7);
+                            proc_.arm[m.number] = std::clamp(arm, -1e7, 1e7);
                             proc_.dirty = true;
                         }
                         ImGui::PopStyleColor();
                         if (ImGui::IsItemHovered())
                             ImGui::SetTooltip(own ? "Своё плечо переноса этого замера, м (L = %.2f м — кнопка «Всем»)"
                                                   : "Плечо переноса груза, м: пока = L (%.2f м); можно задать своё.\n"
-                                                    "Знак не нужен: борт берётся по знаку крена.",
+                                                    "Со знаком: + к правому борту, − к левому (все положительные —\n"
+                                                    "борт по знаку крена, как раньше).",
                                               settings_.heelL);
                     }
                     // Посты
@@ -1114,30 +1212,50 @@ void App::ProcResult(float w, float h)
             Hint("Одна запись — весь опыт. Положение 1 (первое учтённое) — начальное: его крен — ноль. Для каждого "
                  "следующего положения Δθ = крен положения − крен начального, l — плечо переноса груза от начального "
                  "положения; h = P·l / (D·tg|Δθ|); |Δθ| не больше порога — не учитывается; итог — среднее.\n\n"
-                 "По МНК — наклон k прямой tg Δθ = k·(P·l/D) + b по тем же точкам, h = 1/k.\n\nФормулы будут "
-                 "уточняться (модуль Heel.hpp).");
+                 "По МНК — наклон k прямой tg Δθ = k·(P·l/D) + b по тем же точкам, h = 1/k.\n\n"
+                 "По табл. 6.5 Правил РС — h_i = ΔM / (D·Δθ) по приращениям момента и крена между соседними "
+                 "положениями, h_k — среднее, оценка качества — п. 6.6 (вид «Правила РС»). Какой расчёт основной (крупно) "
+                 "— выбирается там же.");
         else
             Hint("h = P·l / (D·tg|θ|) по каждому замеру и посту (θ — средний крен за окно, l — плечо замера); "
                  "|θ| не больше порога — не учитывается; итог — среднее по всем учтённым значениям.\n\n"
                  "По МНК — наклон k прямой tg θ = k·(P·l/D) + b по тем же точкам, h = 1/k (свободный член b "
-                 "учитывает начальный крен).\n\nФормулы — как в исходной программе обработки (BWM427_Analyzer) и "
-                 "будут уточняться.");
+                 "учитывает начальный крен).\n\nФормулы — как в исходной программе обработки (BWM427_Analyzer).\n\n"
+                 "По табл. 6.5 Правил РС — h_i = ΔM / (D·Δθ) по приращениям момента и крена между соседними замерами "
+                 "(по номеру), h_k — среднее, оценка качества — п. 6.6 (вид «Правила РС»). Какой расчёт основной "
+                 "(крупно) — выбирается там же.");
+        const heel::RsCase& rc = proc_.rs;
+        const bool byTable = settings_.rsMain == 1; // основной расчёт — по табл. 6.5
+        const double hMain = byTable ? rc.r.hFinal : s.h;
         {
             FontScope f(fontHuge);
-            if (std::isfinite(s.h))
-                TextColored(pal.text, "%.3f м", s.h);
+            if (std::isfinite(hMain))
+                TextColored(pal.text, "%.3f м", hMain);
             else
                 Muted("—");
         }
-        if (std::isfinite(s.h) && settings_.heelSmall)
+        if (std::isfinite(hMain) && settings_.heelSmall)
         {
             ImGui::SameLine(0, S(10));
             FontScope fb(fontBold);
-            Muted("= %.1f мм", s.h * 1000.0);
+            Muted("= %.1f мм", hMain * 1000.0);
         }
         {
             FontScope f(fontSmall);
-            if (s.n)
+            if (byTable)
+            {
+                const std::string line =
+                    rc.r.n ? Fmt("по табл. 6.5: h_k по %d %s%s", rc.r.n,
+                                 text::Plural(static_cast<std::uint64_t>(rc.r.n), "замеру", "замерам", "замерам"),
+                                 rc.r.reduced ? " минус вероятная ошибка (6.6.5)" : "")
+                           : std::string("по табл. 6.5: ") + (rc.r.note.empty() ? "нет замеров" : rc.r.note);
+                ImGui::PushStyleColor(ImGuiCol_Text, rc.r.reduced ? pal.warn : pal.muted);
+                ImGui::PushTextWrapPos(0.f);
+                ImGui::TextUnformatted(line.c_str());
+                ImGui::PopTextWrapPos();
+                ImGui::PopStyleColor();
+            }
+            else if (s.n)
             {
                 // Перенос по ширине: карточка итога в режиме записи уже
                 const std::string line =
@@ -1180,22 +1298,47 @@ void App::ProcResult(float w, float h)
             else
                 Muted(" ");
         }
+        // Второй расчёт h — рядом (руководитель: показывать оба), и итог проверки по Правилам РС
+        {
+            FontScope f(fontBold);
+            if (byTable)
+            {
+                if (std::isfinite(s.h))
+                    ImGui::Text("От начального: %.3f м", s.h);
+                else
+                    Muted("От начального: —");
+            }
+            else if (std::isfinite(rc.r.hk))
+            {
+                if (rc.r.reduced && std::isfinite(rc.r.hFinal))
+                    ImGui::Text("По табл. 6.5: %.3f м → %.3f", rc.r.hk, rc.r.hFinal);
+                else
+                    ImGui::Text("По табл. 6.5: %.3f м", rc.r.hk);
+            }
+            else
+                Muted("По табл. 6.5: —");
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip(byTable ? "Среднее h по точкам: крен от начального положения (как в старой программе)"
+                                          : "h_k по приращениям момента и крена между соседними положениями (табл. 6.5 "
+                                            "прил. 3 Правил РС);\nстрелка — итог по 6.6.5 (h_k минус вероятная ошибка), "
+                                            "если условия 6.6 не выполнены");
+        }
+        {
+            FontScope f(fontSmall);
+            int st = -1;
+            const std::string line = ProcRsStatus(&st);
+            ImGui::PushStyleColor(ImGuiCol_Text, st > 0 ? pal.ok : st == 0 ? pal.err : pal.muted);
+            ImGui::PushTextWrapPos(0.f);
+            ImGui::TextUnformatted(line.c_str());
+            ImGui::PopTextWrapPos();
+            ImGui::PopStyleColor();
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Подробно — вид «Правила РС» в карточке графиков");
+            if (ImGui::IsItemClicked())
+                proc_.view = 2;
+        }
         ImGui::Spacing();
-        const bool saving = proc_.save.valid() || proc_.saveRequested;
-        const bool canSave = proc_.files && !proc_.meas.empty() && !proc_.load.valid() && (!cont || !proc_.pos.empty());
-        const float bw = std::floor((ImGui::GetContentRegionAvail().x - S(8)) * 0.55f);
-        if (Button(saving ? "Сохранение…" : "Сохранить отчёт", BtnKind::Primary, ImVec2(bw, 0), saving || !canSave,
-                   saving ? "Отчёт сохраняется" : cont ? "Нет положений" : "Нет замеров"))
-            ProcessSaveReport();
-        if (ImGui::IsItemHovered() && !saving && canSave)
-            ImGui::SetTooltip(cont ? "В папку с файлами: %s (листы «Положения», «Сырые_данные», при нескольких постах —\n"
-                                     "«Сравнение постов»), картинки по постам: График_<пост>.png, Положения_<пост>.png"
-                                   : "В папку с файлами: %s (листы «Результаты», «Сырые_данные», при нескольких постах —\n"
-                                     "«Сравнение постов»), картинки по постам: График_<пост>.png",
-                              heel::kReportName);
-        ImGui::SameLine(0, S(8));
-        if (Button("Открыть папку", BtnKind::Normal, ImVec2(-FLT_MIN, 0), proc_.outDir.empty() && !proc_.dir[0]))
-            dialogs::OpenFolder(proc_.outDir.empty() ? std::string(proc_.dir) : proc_.outDir);
+        ProcSaveButtons(std::floor((ImGui::GetContentRegionAvail().x - S(8)) * 0.55f), -FLT_MIN);
 
         // Журнал (коротко)
         ImGui::Spacing();
@@ -1204,31 +1347,7 @@ void App::ProcResult(float w, float h)
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(S(8), S(4)));
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(S(6), S(1)));
         ImGui::BeginChild("##proclog", ImVec2(0, lh), ImGuiChildFlags_AlwaysUseWindowPadding);
-        {
-            FontScope f(fontSmall);
-            if (proc_.log.empty())
-                Muted("Журнал: здесь — что прочитано, что пропущено и куда сохранён отчёт.");
-            for (const auto& [l, tip] : proc_.log)
-            {
-                const bool bad = l.rfind("✗", 0) == 0, good = l.rfind("✓", 0) == 0;
-                ImGui::PushStyleColor(ImGuiCol_Text, bad ? pal.err : good ? pal.ok : pal.textDim);
-                ImGui::TextWrapped("%s", l.c_str());
-                ImGui::PopStyleColor();
-                if (!tip.empty() && ImGui::IsItemHovered())
-                {
-                    ImGui::BeginTooltip();
-                    ImGui::PushTextWrapPos(S(640));
-                    ImGui::TextUnformatted(tip.c_str());
-                    ImGui::PopTextWrapPos();
-                    ImGui::EndTooltip();
-                }
-            }
-            if (proc_.logScroll)
-            {
-                ImGui::SetScrollHereY(1.f);
-                proc_.logScroll = false;
-            }
-        }
+        ProcLogLines();
         ImGui::EndChild();
         ImGui::PopStyleVar(2);
         ImGui::PopStyleColor();
@@ -1236,17 +1355,70 @@ void App::ProcResult(float w, float h)
     EndCard();
 }
 
+// «Сохранить отчёт» и «Открыть папку» (карточка h и полоса итога видов Правил РС); openW < 0 — до края.
+void App::ProcSaveButtons(float saveW, float openW)
+{
+    const bool cont = ProcCont();
+    const bool saving = proc_.save.valid() || proc_.saveRequested;
+    const bool canSave = proc_.files && !proc_.meas.empty() && !proc_.load.valid() && (!cont || !proc_.pos.empty());
+    {
+        const float bw = saveW;
+        if (Button(saving ? "Сохранение…" : "Сохранить отчёт", BtnKind::Primary, ImVec2(bw, 0), saving || !canSave,
+                   saving ? "Отчёт сохраняется" : cont ? "Нет положений" : "Нет замеров"))
+            ProcessSaveReport();
+        if (ImGui::IsItemHovered() && !saving && canSave)
+            ImGui::SetTooltip(cont ? "В папку с файлами: %s (листы «Положения», «Проверки» (Правила РС), «Сырые_данные»,\n"
+                                     "при нескольких постах — «Сравнение постов»), картинки по постам: График_<пост>.png,\n"
+                                     "Положения_<пост>.png и график контроля %s"
+                                   : "В папку с файлами: %s (листы «Результаты», «Проверки» (Правила РС), «Сырые_данные»,\n"
+                                     "при нескольких постах — «Сравнение постов»), картинки по постам: График_<пост>.png\n"
+                                     "и график контроля %s",
+                              heel::kReportName, heel::kControlPlotName);
+        ImGui::SameLine(0, S(8));
+        if (Button("Открыть папку", BtnKind::Normal, ImVec2(openW, 0), proc_.outDir.empty() && !proc_.dir[0]))
+            dialogs::OpenFolder(proc_.outDir.empty() ? std::string(proc_.dir) : proc_.outDir);
+    }
+}
+
+// Строки журнала (внутри дочернего окна).
+void App::ProcLogLines()
+{
+    {
+        FontScope f(fontSmall);
+        if (proc_.log.empty())
+            Muted("Журнал: здесь — что прочитано, что пропущено и куда сохранён отчёт.");
+        for (const auto& [l, tip] : proc_.log)
+        {
+            const bool bad = l.rfind("✗", 0) == 0, good = l.rfind("✓", 0) == 0;
+            ImGui::PushStyleColor(ImGuiCol_Text, bad ? pal.err : good ? pal.ok : pal.textDim);
+            ImGui::TextWrapped("%s", l.c_str());
+            ImGui::PopStyleColor();
+            if (!tip.empty() && ImGui::IsItemHovered())
+            {
+                ImGui::BeginTooltip();
+                ImGui::PushTextWrapPos(S(640));
+                ImGui::TextUnformatted(tip.c_str());
+                ImGui::PopTextWrapPos();
+                ImGui::EndTooltip();
+            }
+        }
+        if (proc_.logScroll)
+        {
+            ImGui::SetScrollHereY(1.f);
+            proc_.logScroll = false;
+        }
+    }
+}
+
 void App::ProcPlots(float w, float h)
 {
     if (BeginCard("##proc_plots", ImVec2(w, h)))
     {
         ImGui::AlignTextToFramePadding();
+        ProcViewSwitch();
+        if (proc_.view == 0)
         {
-            FontScope f(fontBold);
-            ImGui::TextUnformatted("Графики крена");
-        }
-        ImGui::SameLine(0, S(14));
-        {
+            ImGui::SameLine(0, S(14));
             const std::vector<int> used = PostsInUse();
             std::vector<std::string> labels;
             std::vector<const char*> lp;
@@ -1262,13 +1434,22 @@ void App::ProcPlots(float w, float h)
             }
         }
         const float right = ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x;
-        HeaderHint(right - ModeSwitchWidth() - S(16),
-                   Fmt("ось %s · пунктир — среднее за последние %.0f с · легенда — средний крен замера",
-                       settings_.heelAxis == 0 ? "X" : "Y", settings_.heelWinS),
-                   Fmt("ось %s · пунктир — среднее за %.0f с", settings_.heelAxis == 0 ? "X" : "Y", settings_.heelWinS));
+        if (proc_.view == 0)
+            HeaderHint(right - ModeSwitchWidth() - S(16),
+                       Fmt("ось %s · пунктир — среднее за последние %.0f с · легенда — средний крен замера",
+                           settings_.heelAxis == 0 ? "X" : "Y", settings_.heelWinS),
+                       Fmt("ось %s · пунктир — среднее за %.0f с", settings_.heelAxis == 0 ? "X" : "Y", settings_.heelWinS));
+        else if (proc_.view == 1)
+            HeaderHint(right - ModeSwitchWidth() - S(16),
+                       "п. 5.5 прил. 3 · точки — замеры, красная — исключённый, прямая — МНК", "п. 5.5 прил. 3");
         ProcModeSwitch(right);
         const ImVec2 avail = ImGui::GetContentRegionAvail();
-        ProcPanes(proc_.show, avail.x, avail.y, false, false);
+        if (proc_.view == 1)
+            ProcControlPlot(avail.x, avail.y, false);
+        else if (proc_.view == 2)
+            ProcRsView(avail.x, avail.y);
+        else
+            ProcPanes(proc_.show, avail.x, avail.y, false, false);
     }
     EndCard();
 }
@@ -1316,7 +1497,7 @@ void App::ProcPanes(int post, float w, float h, bool stacked, bool forExport)
 {
     const auto* files = proc_.files.get();
     const int axis = settings_.heelAxis;
-    PlotStyle(forExport);
+    ProcPlotStyle(forExport);
     const float lineW = S(forExport ? 1.5f : 1.6f);
     const float gap = S(12);
     const float pw = stacked ? w : std::floor((w - gap) * 0.5f);
@@ -1530,7 +1711,9 @@ void App::ProcPositions(float w, float h)
                 ImGui::TableSetupColumn("№", ImGuiTableColumnFlags_WidthFixed, S(34));
                 ImGui::TableSetupColumn("Начало, с", ImGuiTableColumnFlags_WidthFixed, S(62));
                 ImGui::TableSetupColumn("Конец, с", ImGuiTableColumnFlags_WidthFixed, S(62));
-                ImGui::TableSetupColumn(settings_.heelSmall ? "Плечо l, мм" : "Плечо l, м", ImGuiTableColumnFlags_WidthFixed, S(68));
+                const char* armHdr = settings_.heelSmall ? "Плечо l, мм (?)" : "Плечо l, м (?)";
+                ImGui::TableSetupColumn(armHdr, ImGuiTableColumnFlags_WidthFixed,
+                                        std::max(S(68), ImGui::CalcTextSize(armHdr).x + S(6)));
                 std::string hdr[heel::kMaxPosts], hdrH[heel::kMaxPosts];
                 for (int k = 0; k < np; k++)
                 {
@@ -1544,7 +1727,7 @@ void App::ProcPositions(float w, float h)
                                             np == 1 ? S(52.f) : std::max(S(70.f), ImGui::CalcTextSize(hdrH[k].c_str()).x + S(4)));
                 }
                 ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed, 3 * S(24) + 2 * S(3));
-                ImGui::TableHeadersRow();
+                HeadersRowHint(4, kArmTip);
                 int action = 0, actionAt = -1; // 1 — разделить, 2 — слить со следующим, 3 — удалить
                 for (std::size_t i = 0; i < proc_.pos.size(); i++)
                 {
@@ -1614,7 +1797,7 @@ void App::ProcPositions(float w, float h)
                         ImGui::PushStyleColor(ImGuiCol_Text, own ? pal.accent : tc);
                         if (ImGui::InputDouble("##arm", &arm, 0.0, 0.0, NumFmt(arm, std::max(3, settings_.digArm)).c_str()))
                         {
-                            ps.arm = std::clamp(std::fabs(arm), 0.0, 1e7);
+                            ps.arm = std::clamp(arm, -1e7, 1e7);
                             proc_.posEdited = true;
                             proc_.dirty = true;
                         }
@@ -1622,7 +1805,8 @@ void App::ProcPositions(float w, float h)
                         if (ImGui::IsItemHovered())
                             ImGui::SetTooltip(own ? "Плечо переноса груза от начального положения, м (L = %.2f м — кнопка «Всем»)"
                                                   : "Плечо переноса груза от начального положения, м: пока = L (%.2f м).\n"
-                                                    "Знак не нужен: борт берётся по знаку Δθ.",
+                                                    "Со знаком: + к правому борту, − к левому (все положительные —\n"
+                                                    "борт по знаку Δθ, как раньше).",
                                               settings_.heelL);
                     }
                     // Посты: крен ± СКО, Δθ, h
@@ -1744,11 +1928,9 @@ void App::ProcSeriesCard(float w, float h)
     if (BeginCard("##proc_series", ImVec2(w, h)))
     {
         ImGui::AlignTextToFramePadding();
-        {
-            FontScope f(fontBold);
-            ImGui::TextUnformatted("Запись крена");
-        }
+        ProcViewSwitch();
         const int post = ProcShownPost();
+        if (proc_.view == 0)
         {
             const std::vector<int> used = PostsInUse();
             if (used.size() > 1)
@@ -1765,16 +1947,28 @@ void App::ProcSeriesCard(float w, float h)
                     proc_.show = show;
             }
         }
-        ImGui::SameLine(0, S(14));
-        ProcFilterButton();
+        if (proc_.view == 0)
+        {
+            ImGui::SameLine(0, S(14));
+            ProcFilterButton();
+        }
         const float right = ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x;
-        HeaderHint(right - ModeSwitchWidth() - S(16),
-                   Fmt("ось %s · щелчок по положению — выбрать (крупно справа), границы перетаскиваются",
-                       settings_.heelAxis == 0 ? "X" : "Y"),
-                   Fmt("ось %s", settings_.heelAxis == 0 ? "X" : "Y"));
+        if (proc_.view == 0)
+            HeaderHint(right - ModeSwitchWidth() - S(16),
+                       Fmt("ось %s · щелчок по положению — выбрать (крупно справа), границы перетаскиваются",
+                           settings_.heelAxis == 0 ? "X" : "Y"),
+                       Fmt("ось %s", settings_.heelAxis == 0 ? "X" : "Y"));
+        else if (proc_.view == 1)
+            HeaderHint(right - ModeSwitchWidth() - S(16),
+                       "п. 5.5 прил. 3 · точки — положения груза, красная — конец исключённого замера, прямая — МНК",
+                       "п. 5.5 прил. 3");
         ProcModeSwitch(right);
         const ImVec2 avail = ImGui::GetContentRegionAvail();
-        if (proc_.sel >= 0 && proc_.sel < static_cast<int>(proc_.pos.size()))
+        if (proc_.view == 1)
+            ProcControlPlot(avail.x, avail.y, false);
+        else if (proc_.view == 2)
+            ProcRsView(avail.x, avail.y);
+        else if (proc_.sel >= 0 && proc_.sel < static_cast<int>(proc_.pos.size()))
         {
             // Выбрано положение: слева вся запись, справа — положение крупно (исходный, обработанный, среднее)
             const float gap = S(12);
@@ -1803,7 +1997,7 @@ void App::ProcSeriesPlot(int post, float w, float h, bool forExport)
     if (rows.empty())
         return;
     const int axis = settings_.heelAxis;
-    PlotStyle(forExport);
+    ProcPlotStyle(forExport);
     double lo = std::numeric_limits<double>::infinity(), hi = -lo;
     for (const auto& r : rows)
         if (const double v = r.Calc(axis); std::isfinite(v))
@@ -2066,7 +2260,7 @@ void App::ProcPositionPlot(int post, int index, float w, float h, bool forExport
     const double t0 = std::min(p.t0, p.t1), t1 = std::max(p.t0, p.t1);
     const double margin = std::max(3.0, 0.12 * (t1 - t0));
     const double a = t0 - margin, b = t1 + margin;
-    PlotStyle(forExport);
+    ProcPlotStyle(forExport);
     double lo = std::numeric_limits<double>::infinity(), hi = -lo;
     for (const auto& r : rows)
         if (r.t >= t0 && r.t <= t1)
@@ -2656,7 +2850,7 @@ void App::ProcMethodPreview(const um::Method& m, float w, float h)
               text::Angle(mine.level, 3).c_str(),
               std::isfinite(mine.level) && std::isfinite(p.Level(post)) ? Fmt("%.3f°", mine.level - p.Level(post)).c_str() : "—");
     }
-    PlotStyle(false);
+    ProcPlotStyle(false);
     const double margin = std::max(3.0, 0.12 * (t1 - t0));
     double lo = 1e300, hi = -1e300;
     for (std::size_t i = 0; i < t.size(); i++)

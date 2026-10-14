@@ -41,6 +41,10 @@ struct PcSettings
     std::string sensorNames;  // названия датчиков: «ключ=название;…» (ключ — heel::SensorKey)
     double fltFc = 0.5, fltTc = 0.0, fltSgWin = 4.0;
     bool fltWhole = false;
+    // Правила РС: h и l_max по Информации об остойчивости (плечевые единицы), Δ0 порожнем (единицы массы); 0 — не
+    // задано. Порог сверки постов, °. Основной расчёт h: 0 — от начального + МНК, 1 — по приращениям (табл. 6.5).
+    double rsH = 0.0, rsLmax = 0.0, rsD0 = 0.0, rsSpread = 0.05;
+    int rsMain = 0;
 
     static std::filesystem::path Dir()
     {
@@ -141,6 +145,11 @@ struct PcSettings
         fltTc = real("flt_tc", fltTc, 0.0, 120.0);
         fltSgWin = real("flt_sg_win", fltSgWin, 0.2, 60.0);
         fltWhole = flag("flt_whole", fltWhole);
+        rsH = real("rs_h", rsH, 0.0, 1e6);
+        rsLmax = real("rs_lmax", rsLmax, 0.0, 1e7);
+        rsD0 = real("rs_d0", rsD0, 0.0, 1e9);
+        rsSpread = real("rs_spread", rsSpread, 0.001, 10.0);
+        rsMain = num("rs_main", rsMain, 0, 1);
     }
 
     void Save(const std::filesystem::path& file = Dir() / L"krenomer.ini") const
@@ -175,6 +184,8 @@ struct PcSettings
             out << "flt_v=2\nflt_user=" << fltUser << "\nsensor_names=" << sensorNames << "\n";
             out << "flt_method=" << fltMethod << "\nflt_median=" << fltMedianN << "\nflt_fc=" << fltFc << "\nflt_tc=" << fltTc
                 << "\nflt_sg_win=" << fltSgWin << "\nflt_whole=" << (fltWhole ? 1 : 0) << "\n";
+            out << "rs_h=" << rsH << "\nrs_lmax=" << rsLmax << "\nrs_d0=" << rsD0 << "\nrs_spread=" << rsSpread
+                << "\nrs_main=" << rsMain << "\n";
             if (!out)
                 return;
         }

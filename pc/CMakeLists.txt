@@ -7,7 +7,7 @@ if(WIN32 AND VCPKG_TARGET_TRIPLET MATCHES "-static(-|$)")
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 endif()
 
-project(Krenomer VERSION 1.0.0 LANGUAGES CXX RC)
+project(Krenomer VERSION 1.4.0 LANGUAGES CXX RC)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -46,8 +46,10 @@ set(KRENOMER_FONT_MONO "${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts/DejaVuSansMono.
 set(KRENOMER_ICON "${CMAKE_CURRENT_SOURCE_DIR}/src/app.ico")
 set(KRENOMER_VERSION "${PROJECT_VERSION}")
 string(REPLACE "." "," KRENOMER_VERSION_COMMA "${PROJECT_VERSION}.0")
+set(KRENOMER_VERSION_DOTS "${PROJECT_VERSION}.0") # 1.4.0.0 — в сведениях о файле и в манифесте
 configure_file(src/fonts.rc.in "${CMAKE_CURRENT_BINARY_DIR}/fonts.rc" @ONLY)
 configure_file(src/app.rc.in "${CMAKE_CURRENT_BINARY_DIR}/app.rc" @ONLY)
+configure_file(src/app.manifest.in "${CMAKE_CURRENT_BINARY_DIR}/krenomer.manifest" @ONLY)
 
 # Ядро без интерфейса: связь, протокол, разбор (тесты линкуются с ним).
 add_library(krenomer_core STATIC src/comm/DeviceLink.cpp)
@@ -65,9 +67,11 @@ add_library(krenomer_ui STATIC
     src/ui/AppSettings.cpp
     src/ui/AppFiles.cpp
     src/ui/AppProcess.cpp
+    src/ui/AppRules.cpp
     src/ui/AppFirmware.cpp
     src/ui/AppTerminal.cpp)
 target_include_directories(krenomer_ui PUBLIC src ${CSerialPort_INCLUDE_DIR})
+target_compile_definitions(krenomer_ui PRIVATE KRENOMER_PROJECT_VERSION="${PROJECT_VERSION}")
 target_link_libraries(krenomer_ui PUBLIC krenomer_core imgui::imgui implot::implot ${CSerialPort_LIBRARY})
 if(WIN32)
     target_link_libraries(krenomer_ui PUBLIC setupapi ole32 shell32 comdlg32 uuid advapi32)
@@ -78,6 +82,11 @@ add_executable(krenomer
     src/ui/Renderer.cpp
     "${CMAKE_CURRENT_BINARY_DIR}/fonts.rc"
     "${CMAKE_CURRENT_BINARY_DIR}/app.rc")
+if(MSVC)
+    # Манифест: asInvoker, supportedOS Windows 7–11, DPI (src/app.manifest.in) — вместо UAC-фрагмента компоновщика
+    target_sources(krenomer PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/krenomer.manifest")
+    target_link_options(krenomer PRIVATE "/MANIFESTUAC:NO")
+endif()
 target_link_libraries(krenomer PRIVATE krenomer_ui glfw OpenGL::GL)
 
 if(WIN32)

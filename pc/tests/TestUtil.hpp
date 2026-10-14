@@ -21,6 +21,7 @@
 #include <cstring>
 #include <filesystem>
 #include <string>
+#include <vector>
 
 #ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN
@@ -157,6 +158,37 @@ inline std::string TestDataPath(const char* name)
     const auto p = dir / name;
     std::error_code ec;
     return std::filesystem::exists(p, ec) ? p.string() : std::string{};
+}
+
+// Плечи опыта (со знаком, от начального положения) под известное h по табл. 6.5 Правил РС: по крену положений
+// theta (°) h_i = 0,8·(1 + e_i) — e_i маленький равномерный разброс (±0,6 %, чтобы σ не была нулём); у переноса bad
+// (номер замера, 1…) записанное плечо переноса больше истинного на err (0,12 — ошибка 12 %), т. е. у всех
+// следующих положений записанное плечо сдвинуто на err·d.
+inline std::vector<double> RsArms(const std::vector<double>& theta, double D, double P, double h, int bad = -1,
+                                  double err = 0.12)
+{
+    static const double e[] = {0.006, -0.006, 0.003, -0.003, 0.0045, -0.0045, 0.0015, -0.0015, 0.0, 0.002, -0.002,
+                               0.005, -0.005, 0.001, -0.001, 0.0};
+    std::vector<double> arm(theta.size(), 0.0);
+    double shift = 0.0;
+    for (std::size_t i = 1; i < theta.size(); i++)
+    {
+        const double rad = (theta[i] - theta[i - 1]) * 3.14159265358979323846 / 180.0;
+        const double d = h * (1.0 + e[(i - 1) % 16]) * D * rad / P; // истинное плечо переноса
+        if (static_cast<int>(i) == bad)
+            shift += err * d;
+        arm[i] = arm[i - 1] + d;
+    }
+    // записанные плечи: истинные + накопленная ошибка с переноса bad
+    double acc = 0.0;
+    std::vector<double> out(theta.size(), 0.0);
+    for (std::size_t i = 1; i < theta.size(); i++)
+    {
+        if (static_cast<int>(i) == bad)
+            acc = shift;
+        out[i] = arm[i] + acc;
+    }
+    return out;
 }
 
 } // namespace testutil

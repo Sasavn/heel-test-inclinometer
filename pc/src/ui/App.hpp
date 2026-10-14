@@ -19,6 +19,7 @@
 #include "../comm/SimDevice.hpp"
 #include "../core/Download.hpp"
 #include "../core/HeelData.hpp"
+#include "../core/HeelRs.hpp"
 #include "../core/UserMethod.hpp"
 #include "../core/PcRecorder.hpp"
 #include "../core/PcSettings.hpp"
@@ -27,7 +28,7 @@
 namespace ui
 {
 
-inline constexpr const char* kAppVersion = "1.3.2";
+inline constexpr const char* kAppVersion = "1.4";
 
 enum class Page
 {
@@ -144,6 +145,19 @@ public:
     int ProcessAxis() const { return settings_.heelAxis; }
     void ProcessSetSmallShip(bool model) { ProcSetSmallShip(model); }
     void ProcessSetArmDefault(double L) { settings_.heelL = L; proc_.dirty = true; }
+    // Правила РС: вид карточки графиков (0 — крен, 1 — график контроля, 2 — проверка), данные 6.6.3, основной
+    // расчёт, ручное «исключить / учитывать» замера табл. 6.5 (номер положения или замера, -1 — авто)
+    void ProcessSetView(int view) { proc_.view = view; }
+    void ProcessSetRsInfo(double h, double lMax, double D0)
+    {
+        settings_.rsH = h;
+        settings_.rsLmax = lMax;
+        settings_.rsD0 = D0;
+        proc_.dirty = true;
+    }
+    void ProcessSetRsMain(int main) { settings_.rsMain = main; proc_.dirty = true; }
+    void ProcessSetRsManual(int number, int state);
+    const heel::RsCase& ProcessRs() const { return proc_.rs; }
 
 private:
     // Каркас
@@ -232,6 +246,15 @@ private:
     void ProcSeriesPlot(int post, float w, float h, bool forExport);
     void ProcExportSeries(int post, float w, float h);
     int ProcShownPost() const;
+    // Правила РС (AppRules.cpp)
+    void ProcViewSwitch();                                      // «Крен | Контроль | Правила РС» в заголовке карточки
+    void ProcControlPlot(float w, float h, bool forExport);     // график контроля «кренящий момент – tg θ» (п. 5.5)
+    void ProcExportControl(float w, float h);                   // он же — картинкой для отчёта
+    void ProcRsView(float w, float h);                          // требования, оценка 6.6, табл. 6.5
+    std::string ProcRsStatus(int* state) const;                 // строка итога проверки для карточки h
+    void ProcResultStrip(float w);                              // свёрнутая карточка h (виды Правил РС)
+    void ProcSaveButtons(float saveW, float openW);             // «Сохранить отчёт», «Открыть папку»
+    void ProcLogLines();                                        // строки журнала
     void SaveSettingsSoon(); // настройки — в файл через ~1 с (не только при выходе)
     void SaveSettingsNow();
     // Поле пути: как InputText, а при подмене путей (стенд) — показ подменённого пути без правки.
@@ -416,6 +439,11 @@ private:
         bool posEdited = false;           // положения правились руками
         std::int64_t editsSaveAt = 0;     // правки — в файл (через ~1 с после последней)
         std::vector<double> procT[heel::kMaxPosts], procY[heel::kMaxPosts]; // обработанный сигнал записи по постам
+        // Правила РС
+        int view = 0;                     // карточка графиков: 0 — крен, 1 — график контроля, 2 — Правила РС
+        heel::RsCase rs;                  // табл. 6.5, оценка 6.6, требования (ProcRecompute)
+        std::map<int, int> rsManual;      // замер табл. 6.5 (номер конечного положения / замера): 0 — исключить, 1 — учитывать
+        bool rsLegacyLogged = false;      // в журнале уже сказано про плечи без знака
     } proc_;
     std::int64_t settingsSaveAt_ = 0;     // SaveSettingsSoon: когда записать (0 — не нужно)
 };

@@ -8,6 +8,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <map>
 #include <random>
 #include <string>
@@ -22,6 +23,8 @@
 #include "core/Heel.hpp"
 #include "core/HeelData.hpp"
 #include "core/HeelReport.hpp"
+#include "core/HeelRs.hpp"
+#include "core/RsCheck.hpp"
 #include "core/PcSettings.hpp"
 #include "core/Plateaus.hpp"
 #include "core/Png.hpp"
@@ -34,6 +37,7 @@ namespace
 {
 
 const double kDeg = heel::kPi / 180.0;
+const double kNaNt = std::numeric_limits<double>::quiet_NaN();
 
 std::string Fmt3(double v)
 {
@@ -960,6 +964,255 @@ void TestContinuous()
     }
 }
 
+// Правила РС: табл. 6.5 (h_i по приращениям), оценка качества 6.6 (автоисключение по 6.6.1, вероятная ошибка с t_αn
+// по табл. 6.6.2, ε по 6.6.3, не менее 8 замеров, 6.6.5), требования, плечи со знаком, вход из положений и замеров.
+void TestRules()
+{
+    SECTION("Правила РС: t_αn по табл. 6.6.2 (n = 8…16), вне таблицы — нет");
+    {
+        const double want[] = {5.4, 5.0, 4.8, 4.6, 4.5, 4.3, 4.2, 4.1, 4.0};
+        for (int n = 8; n <= 16; n++)
+            CHECK_NEAR(rs::TAlpha(n), want[n - 8], 1e-12, "t_αn");
+        CHECK(std::isnan(rs::TAlpha(7)) && std::isnan(rs::TAlpha(17)) && std::isnan(rs::TAlpha(0)));
+    }
+
+    // Опыт по Инструктивным указаниям: 0 → ПБ (три переноса) → 0 → ЛБ (три) → 0; начальный крен 0,3°
+    const double D = 1500, P = 15, h = 0.8, theta0 = 0.3;
+    const double armsTrue[] = {0, 1.5, 3.0, 4.5, 3.0, 1.5, 0, -1.5, -3.0, -4.5, -3.0, -1.5, 0};
+    std::vector<double> theta;
+    for (const double a : armsTrue)
+        theta.push_back(theta0 + P * a / (D * h) / kDeg); // крен по табл. 6.5 линеен по моменту (рад)
+
+    SECTION("Правила РС: h_i по приращениям = 0,8 м точно, h_k, σ, вероятная ошибка, требования");
+    {
+        rs::Input in;
+        in.D = D;
+        in.P = P;
+        in.theta = theta;
+        in.arm.assign(std::begin(armsTrue), std::end(armsTrue));
+        const auto r = rs::Evaluate(in);
+        CHECK(r.m.size() == 12 && r.n == 12);
+        for (const auto& q : r.m)
+            CHECK_NEAR(q.h, h, 1e-9, "h_i (табл. 6.5)");
+        CHECK_NEAR(r.hk, h, 1e-9, "h_k");
+        CHECK_NEAR(r.m[0].dM, P * 1.5, 1e-12, "ΔM = P·Δl");
+        CHECK(r.ok661 && r.excludedCount == 0 && r.ok664 && r.ok663 == -1 && !r.reduced);
+        CHECK_NEAR(r.hFinal, h, 1e-9, "итог = h_k");
+        CHECK_NEAR(r.tA, 4.5, 1e-12, "t_αn при n = 12");
+        CHECK_NEAR(r.errLimit, 0.02 * 1.8, 1e-12, "допуск 6.6.2 при h_k ≤ 2 м");
+        rs::Conditions c;
+        c.theta0 = theta0;
+        for (const double t : theta)
+            c.dTheta.push_back(t - theta0);
+        c.instruments = 2;
+        c.spread = 0.03;
+        c.h = r.hFinal;
+        const auto checks = rs::Checks(r, c);
+        CHECK(checks.size() == 11);
+        int bad = 0, unknown = 0;
+        for (const auto& k : checks)
+        {
+            bad += k.state == 0;
+            unknown += k.state < 0;
+        }
+        CHECK_MSG(bad == 0 && unknown == 1, "нарушено %d, без данных %d", bad, unknown); // без данных — только 6.6.3
+        CHECK(checks[5].req == "Крен 1°–4° на каждый борт" && checks[5].state == 1); // ±3,22°
+        CHECK(checks[7].state == 1 && checks[7].value == "положение 7");           // возврат в ноль
+        c.spread = 0.08;                                                            // посты разошлись
+        c.instruments = 1;
+        c.theta0 = 0.7;
+        const auto checks2 = rs::Checks(r, c);
+        CHECK(checks2[6].state == 0 && checks2[8].state == 0 && checks2[9].state == 0);
+    }
+
+    SECTION("Правила РС: замер с ошибкой 12 % исключается по 6.6.1 (один), h_k = 0,8 м; ручное «учитывать» — 6.6.5");
+    {
+        rs::Input in;
+        in.D = D;
+        in.P = P;
+        in.theta = theta;
+        in.arm = testutil::RsArms(theta, D, P, h, 5); // перенос 5 (3,0 → 1,5 м) записан на 12 % длиннее
+        auto r = rs::Evaluate(in);
+        CHECK_NEAR(r.m[4].h, h * 1.12 * (1 + 0.0045), 1e-9, "h_5 с ошибкой 12 %");
+        CHECK(r.m[4].excluded && r.m[4].autoExcluded && r.excludedCount == 1);
+        int autoOut = 0;
+        for (const auto& q : r.m)
+            autoOut += q.autoExcluded;
+        CHECK(autoOut == 1 && r.n == 11 && r.ok661 && r.ok664);
+        CHECK_NEAR(r.hk, h, 0.004, "h_k без исключённого");
+        CHECK_NEAR(r.tA, 4.6, 1e-12, "t_αn при n = 11");
+        double v = 0;
+        for (const auto& q : r.m)
+            if (!q.excluded)
+                v += (q.h - r.hk) * (q.h - r.hk);
+        CHECK_NEAR(r.err, 4.6 * std::sqrt(v / (11.0 * 10.0)), 1e-12, "вероятная ошибка 6.6.2");
+        CHECK(r.ok662 && !r.reduced);
+        // 6.6.3: ε = min(0,05·1,0; 0,10·0,3) = 0,03 -> не менее 0,04 м; Δ0/Δ = 1000/1500
+        in.hInfo = 1.0;
+        in.lMax = 0.3;
+        in.D0 = 1000;
+        r = rs::Evaluate(in);
+        CHECK_NEAR(r.eps, 0.04, 1e-12, "ε не менее 4 см");
+        CHECK_NEAR(r.err663, r.err * 1000.0 / 1500.0, 1e-12, "ошибка·Δ0/Δ");
+        CHECK(r.ok663 == 1);
+        in.hInfo = 2.0;
+        in.lMax = kNaNt;
+        CHECK_NEAR(rs::Evaluate(in).eps, 0.10, 1e-12, "ε = 0,05·h без l_max");
+        in.hInfo = kNaNt;
+        CHECK(rs::Evaluate(in).ok663 == -1); // нет данных — не проверяется
+        // Вручную «учитывать» плохой замер: 6.6.1 не выполнен -> 6.6.5: h_k минус вероятная ошибка
+        in.manual.assign(12, -1);
+        in.manual[4] = 1;
+        r = rs::Evaluate(in);
+        CHECK(!r.m[4].excluded && r.excludedCount == 0 && r.n == 12 && !r.ok661);
+        CHECK(r.reduced && std::isfinite(r.err));
+        CHECK_NEAR(r.hFinal, r.hk - r.err, 1e-12, "6.6.5: h_k − вероятная ошибка");
+        // Вручную исключён другой: автоисключения нет, плохой остаётся -> 6.6.1 не выполнен
+        in.manual.assign(12, -1);
+        in.manual[1] = 0;
+        r = rs::Evaluate(in);
+        CHECK(r.m[1].excluded && !r.m[1].autoExcluded && !r.m[4].excluded && !r.ok661 && r.n == 11);
+        // Вручную исключён сам плохой: как автоматически
+        in.manual.assign(12, -1);
+        in.manual[4] = 0;
+        r = rs::Evaluate(in);
+        CHECK(r.m[4].excluded && !r.m[4].autoExcluded && r.ok661 && r.n == 11);
+    }
+
+    SECTION("Правила РС: граничные случаи — n < 8, h_k > 2 м, нет перемещения, мало положений");
+    {
+        rs::Input in;
+        in.D = D;
+        in.P = P;
+        in.theta.assign(theta.begin(), theta.begin() + 6);
+        in.arm.assign(std::begin(armsTrue), std::begin(armsTrue) + 6);
+        auto r = rs::Evaluate(in);
+        CHECK(r.n == 5 && !r.ok664 && std::isnan(r.tA) && std::isnan(r.err) && !r.ok662);
+        CHECK(r.note.find("меньше 8") != std::string::npos && !r.reduced);
+        CHECK_NEAR(r.hFinal, h, 1e-9, "n < 8: итог — h_k (ошибку не посчитать)");
+        const auto ch = rs::Checks(r, rs::Conditions{});
+        CHECK(ch[0].state == 0 && ch[2].state == 0 && ch[2].value == "n вне 8…16");
+        // h_k = 2,5 м: допуск 0,01(4 + h_k)
+        rs::Input big = in;
+        big.theta.clear();
+        for (const double a : armsTrue)
+            big.theta.push_back(P * a / (D * 2.5) / kDeg);
+        big.arm.assign(std::begin(armsTrue), std::end(armsTrue));
+        r = rs::Evaluate(big);
+        CHECK_NEAR(r.hk, 2.5, 1e-9, "h_k = 2,5 м");
+        CHECK_NEAR(r.errLimit, 0.01 * 6.5, 1e-12, "допуск 6.6.2 при h_k > 2 м");
+        CHECK(rs::Checks(r, rs::Conditions{})[2].req == "Вероятная ошибка ≤ 0,01(4 + h_k)");
+        // Груз не перемещали (ΔM = 0): не замер
+        rs::Input same = in;
+        same.arm[1] = same.arm[0]; // первый перенос не записан: груз «не двигался»
+        r = rs::Evaluate(same);
+        CHECK(std::isnan(r.m[0].h) && r.m[0].excluded && r.n == 4 && r.excludedCount == 0);
+        // Одно положение — нет замеров; нет D
+        rs::Input one;
+        one.D = D;
+        one.P = P;
+        one.theta = {0.1};
+        one.arm = {0.0};
+        CHECK(rs::Evaluate(one).note == "нужно два положения и больше");
+        rs::Input noD = in;
+        noD.D = kNaNt;
+        CHECK(rs::Evaluate(noD).note == "не задано водоизмещение");
+    }
+
+    SECTION("плечи со знаком (+ к правому борту) = старый ввод модулем со знаком по крену");
+    {
+        std::vector<heel::Point> sgn, mod;
+        for (std::size_t i = 1; i < 13; i++)
+        {
+            sgn.push_back({static_cast<int>(i), 0, theta[i] - theta0, armsTrue[i]});
+            mod.push_back({static_cast<int>(i), 0, theta[i] - theta0, std::fabs(armsTrue[i])});
+        }
+        const auto a = heel::Solve(sgn, D, P, 0.1), b = heel::Solve(mod, D, P, 0.1);
+        CHECK(a.n == b.n && a.n == 10); // возвраты в ноль — ниже порога
+        CHECK_NEAR(a.h, b.h, 1e-12, "среднее h: со знаком = модулем");
+        CHECK_NEAR(a.ls.h, b.ls.h, 1e-12, "МНК: со знаком = модулем");
+        // Знак плеча задаёт борт: плечо +, крен − (неверный знак) -> точка не на прямой
+        sgn[7].arm = -sgn[7].arm;
+        CHECK(std::fabs(heel::Solve(sgn, D, P, 0.1).ls.h - a.ls.h) > 0.01);
+    }
+
+    SECTION("Правила РС на записи: положения (синтетика), плечи со знаком и без, Tc, лист «Проверки»");
+    {
+        const fs::path dir = testutil::TestDataDir() / "continuous";
+        heel::Settings s;
+        const auto loaded = heel::LoadAll(heel::ListCsv(dir), text::PathToUtf8(dir), nullptr, &s);
+        const auto ms = heel::Group(loaded.files, {});
+        CHECK(ms.size() == 1);
+        if (ms.size() == 1)
+        {
+            auto pos = heel::FindPositions(s, loaded.files, ms[0]);
+            heel::ComputePositions(s, loaded.files, ms[0], pos);
+            std::vector<double> lv;
+            for (const auto& q : pos)
+                lv.push_back(q.Level(0));
+            const auto arms = testutil::RsArms(lv, s.D, s.P, 0.8, 5);
+            for (std::size_t i = 0; i < pos.size(); i++)
+                pos[i].arm = arms[i];
+            const auto sum = heel::ComputePositions(s, loaded.files, ms[0], pos);
+            auto k = heel::RsFromPositions(s, loaded.files, ms[0], pos, {}, sum.h);
+            CHECK(!k.legacy && k.in.theta.size() == 10 && k.r.m.size() == 9);
+            CHECK(k.r.m[4].autoExcluded && k.r.n == 8 && k.r.ok661 && k.r.ok664);
+            CHECK_NEAR(k.r.hk, 0.8, 0.004, "h_k на записи");
+            CHECK(k.excluded[5] && !k.excluded[4] && k.label[5] == "6");
+            CHECK_NEAR(k.tanT[3], std::tan((lv[3] - lv[0]) * kDeg), 1e-12, "график контроля: tg θ");
+            CHECK_NEAR(k.M[3], s.P * arms[3], 1e-9, "график контроля: M = P·l");
+            CHECK_RANGE(1.0 / (k.fit.k * s.D), 0.70, 0.90, "h по прямой графика контроля");
+            CHECK_RANGE(k.tc, 3.0, 15.0, "период качки Tc по записи"); // синтетика: 6–10 с
+            CHECK(k.c.instruments == 1 && std::isnan(k.c.spread));
+            CHECK_NEAR(k.hMain, sum.h, 1e-12, "основной расчёт по умолчанию — от начального");
+            // Ручное «учитывать» по номеру положения
+            k = heel::RsFromPositions(s, loaded.files, ms[0], pos, {{6, 1}}, sum.h);
+            CHECK(!k.r.m[4].excluded && k.r.reduced);
+            // Основной — табл. 6.5
+            heel::Settings s2 = s;
+            s2.rsMain = 1;
+            k = heel::RsFromPositions(s2, loaded.files, ms[0], pos, {}, sum.h);
+            CHECK_NEAR(k.hMain, k.r.hFinal, 1e-12, "основной расчёт — табл. 6.5");
+            // Лист «Проверки»
+            const auto sh = heel::BuildRsSheet(s2, k);
+            CHECK(sh.name == "Проверки" && sh.rows.size() > 30);
+            bool t65 = false, auto661 = false, tc = false;
+            for (const auto& row : sh.rows)
+                for (const auto& c : row)
+                {
+                    t65 |= c.text == "Таблица 6.5: замер";
+                    auto661 |= c.text.find("исключён по 6.6.1") != std::string::npos;
+                    tc |= c.text.find("Период бортовой качки") != std::string::npos;
+                }
+            CHECK(t65 && auto661 && tc);
+            // Плечи без знака (старый ввод): знак по крену — тот же результат
+            const auto good = testutil::RsArms(lv, s.D, s.P, 0.8); // без ошибки: знак плеча = знак Δθ
+            auto posSgn = pos, posAbs = pos;
+            for (std::size_t i = 0; i < pos.size(); i++)
+            {
+                posSgn[i].arm = good[i];
+                posAbs[i].arm = std::fabs(good[i]);
+            }
+            const auto kSgn = heel::RsFromPositions(s, loaded.files, ms[0], posSgn, {}, sum.h);
+            const auto kAbs = heel::RsFromPositions(s, loaded.files, ms[0], posAbs, {}, sum.h);
+            CHECK(!kSgn.legacy && kAbs.legacy && !kAbs.c.signedArms);
+            CHECK_NEAR(kAbs.r.hk, kSgn.r.hk, 1e-12, "без знака = со знаком (знак по крену)");
+            CHECK_NEAR(kSgn.r.hk, 0.8, 0.002, "h_k без ошибки");
+            // Малое судно: кг и мм — тот же h_k
+            heel::Settings sm = s;
+            sm.units.model = true;
+            sm.D = s.D * 1000;
+            sm.P = s.P * 1000;
+            auto posMm = pos;
+            for (auto& q : posMm)
+                q.arm *= 1000;
+            const auto km = heel::RsFromPositions(sm, loaded.files, ms[0], posMm, {}, sum.h);
+            CHECK_NEAR(km.r.hk, k.r.hk, 1e-12, "табл. 6.5: т и м = кг и мм");
+            CHECK_NEAR(km.M[3], k.M[3] * 1e6, 1e-3, "момент в кг·мм");
+        }
+    }
+}
+
 // Книги Excel как источник: своя (Xlsx.hpp, со сжатием и без), как пишет Excel (общие строки, даты числами —
 // часть книги руководителя), openpyxl (inlineStr, данные на втором листе); распаковка deflate; отбор книг в папке.
 void TestXlsxRead()
@@ -1499,6 +1752,7 @@ int main(int argc, char** argv)
     TestOldFormats();
     TestPlateaus();
     TestContinuous();
+    TestRules();
     TestXlsxRead();
     TestRealRecord();
     TestFilters();

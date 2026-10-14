@@ -66,6 +66,13 @@ struct Settings
 
     const std::string& PostName(int p) const { return postNames[static_cast<std::size_t>(std::clamp(p, 0, kMaxPosts - 1))]; }
     filt::Params filter;       // обработка сигнала положения (Filters.hpp): метод и его параметры
+    // Проверка по Правилам РС (HeelRs.hpp): h и l_max по Информации об остойчивости (плечевые единицы), Δ0 — порожнем
+    // (единицы массы); NaN — не задано. Порог расхождения постов, °. Основной расчёт h: 0 — от начального + МНК
+    // (среднее по точкам), 1 — по приращениям (табл. 6.5).
+    double rsH = std::numeric_limits<double>::quiet_NaN(), rsLmax = std::numeric_limits<double>::quiet_NaN(),
+           rsD0 = std::numeric_limits<double>::quiet_NaN();
+    double rsSpread = 0.05;
+    int rsMain = 0;
 
     plateau::Params Plateau() const
     {
@@ -502,7 +509,7 @@ inline Summary Compute(const Settings& s, const std::vector<File>& files, std::v
             pt.number = m.number;
             pt.post = p;
             pt.thetaDeg = pd.st.mean;
-            pt.arm = s.units.ToMetres(std::isfinite(m.arm) ? std::fabs(m.arm) : s.L);
+            pt.arm = s.units.ToMetres(std::isfinite(m.arm) ? m.arm : s.L); // со знаком (+ к ПБ) или модулем
             pts.push_back(pt);
             where.push_back(&pd);
         }
@@ -622,7 +629,7 @@ inline Summary ComputePositions(const Settings& s, const std::vector<File>& file
             pt.number = static_cast<int>(i) + 1;
             pt.post = p;
             pt.thetaDeg = ps.Level(p);
-            pt.arm = s.units.ToMetres(std::isfinite(ps.arm) ? std::fabs(ps.arm) : s.L);
+            pt.arm = s.units.ToMetres(std::isfinite(ps.arm) ? ps.arm : s.L); // со знаком (+ к ПБ) или модулем
             pts.push_back(pt);
             use.push_back(ps.use);
             where.push_back({i, p});

@@ -13,6 +13,22 @@
 #include "../core/TextUtil.hpp"
 #include "Widgets.hpp"
 
+#ifdef KRENOMER_PROJECT_VERSION
+namespace
+{
+// kAppVersion («1.4») — начало версии из CMakeLists.txt (project VERSION 1.4.0): сведения о файле и окно — одно.
+constexpr bool VersionMatches(const char* project, const char* app)
+{
+    while (*app)
+        if (*project++ != *app++)
+            return false;
+    return *project == '\0' || *project == '.';
+}
+static_assert(VersionMatches(KRENOMER_PROJECT_VERSION, ui::kAppVersion),
+              "kAppVersion (App.hpp) не совпадает с project(VERSION) в CMakeLists.txt");
+} // namespace
+#endif
+
 namespace ui
 {
 

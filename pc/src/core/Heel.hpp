@@ -143,6 +143,11 @@ inline Result Solve(const std::vector<Point>& in, double D, double P, double thr
     Result r;
     r.points.resize(in.size());
     std::vector<double> xs, ys, hs;
+    // Плечи со знаком (+ к правому борту): хоть одно отрицательное — знак абсциссы МНК по плечу; все без знака — как
+    // раньше, по знаку крена.
+    bool signedArms = false;
+    for (const Point& p : in)
+        signedArms |= p.arm < 0;
     for (std::size_t i = 0; i < in.size(); i++)
     {
         const Point& p = in[i];
@@ -157,19 +162,19 @@ inline Result Solve(const std::vector<Point>& in, double D, double P, double thr
             o.note = "крен не больше порога";
             continue;
         }
-        if (!(p.arm > 0.0))
+        if (!(std::fabs(p.arm) > 0.0))
         {
             o.note = "плечо l не задано";
             continue;
         }
-        o.h = Height(P, p.arm, D, p.thetaDeg);
+        o.h = Height(P, std::fabs(p.arm), D, p.thetaDeg);
         if (!std::isfinite(o.h))
         {
             o.note = "D не задано";
             continue;
         }
         o.counted = true;
-        o.x = (p.thetaDeg < 0 ? -1.0 : 1.0) * P * p.arm / D;
+        o.x = (signedArms ? (p.arm < 0 ? -1.0 : 1.0) : (p.thetaDeg < 0 ? -1.0 : 1.0)) * P * std::fabs(p.arm) / D;
         o.tanTheta = std::tan(p.thetaDeg * kPi / 180.0);
         xs.push_back(o.x);
         ys.push_back(o.tanTheta);

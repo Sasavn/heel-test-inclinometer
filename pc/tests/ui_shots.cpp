@@ -557,7 +557,7 @@ int main(int argc, char** argv)
         app.ProcessOpen(text::PathToUtf8(dir));
         wait();
         for (int m = 0; m < 8; m++)
-            if (std::fabs(kHeelArm[m]) > 0 && std::fabs(kHeelArm[m]) != 4.5)
+            if (kHeelArm[m] != 4.5) // плечи со знаком (+ к правому борту); возврат в ноль — плечо 0
                 app.ProcessSetArm(m + 1, kHeelArm[m]);
         st.Run(500);
         CHECK(app.ProcessMeasurements() == 8);
@@ -644,6 +644,45 @@ int main(int argc, char** argv)
         fs::copy_file(dir / L"Отчет_Кренование.xlsx", fs::path(g_out) / "19_process_continuous_report.xlsx",
                       fs::copy_options::overwrite_existing, ec);
 
+        // Правила РС на синтетике: плечи со знаком под h = 0,8 м по табл. 6.5, перенос 5 записан на 12 % длиннее —
+        // замер 5 исключается по 6.6.1; график контроля и проверка; отчёт — лист «Проверки» и График_контроля.png
+        {
+            std::vector<double> lv;
+            for (const auto& q : app.ProcessPositions())
+                lv.push_back(q.Level(0));
+            const auto rsArms = testutil::RsArms(lv, 1500.0, 15.0, 0.8, 5);
+            for (int i = 1; i < static_cast<int>(rsArms.size()); i++)
+                app.ProcessSetPositionArm(i, rsArms[static_cast<std::size_t>(i)]);
+            st.Run(7000); // уведомление о сохранении погасло
+            const auto& rc = app.ProcessRs();
+            CHECK(!rc.legacy && rc.r.m.size() == 9);
+            CHECK(rc.r.m.size() == 9 && rc.r.m[4].autoExcluded && rc.r.n == 8);
+            CHECK_RANGE(rc.r.hk, 0.795, 0.805, "h_k по табл. 6.5 (синтетика)");
+            app.ProcessSetView(1);
+            st.Run(300);
+            st.Shot("26_rules_control", true);
+            app.ProcessSetView(2);
+            st.Run(300);
+            st.Shot("26_rules_checks", true);
+            st.size = ImVec2(1024, 700);
+            st.Shot("26_rules_checks_1024x700");
+            st.size = ImVec2(1280, 800);
+            ui::ApplyTheme(true, 1.f);
+            ImPlot::StyleColorsDark();
+            st.Shot("26_rules_checks_dark", true);
+            ui::ApplyTheme(false, 1.f);
+            ImPlot::StyleColorsLight();
+            app.ProcessSaveReport();
+            st.Run(100);
+            wait();
+            CHECK_MSG(fs::file_size(dir / L"График_контроля.png", ec) > 10000, "нет графика контроля");
+            fs::copy_file(dir / L"График_контроля.png", fs::path(g_out) / "26_rules_control_export.png",
+                          fs::copy_options::overwrite_existing, ec);
+            fs::copy_file(dir / L"Отчет_Кренование.xlsx", fs::path(g_out) / "26_rules_report.xlsx",
+                          fs::copy_options::overwrite_existing, ec);
+            app.ProcessSetView(0);
+        }
+
         // Файлы старых прошивок и после Excel: всё понято, непонятное — в журнале
         const fs::path old = ShotsWorkDir() / L"Старые файлы";
         fs::remove_all(old, ec);
@@ -677,6 +716,15 @@ int main(int argc, char** argv)
         CHECK(app.ProcessContinuous());
         CHECK_MSG(app.ProcessPositions().size() == 10, "положений %zu", app.ProcessPositions().size());
         st.Shot("21_process_real", true);
+        // Правила РС на записи руководителя: большое судно, плечи не заданы (= L, без знака — знак по крену)
+        app.ProcessSetView(2);
+        st.Run(300);
+        CHECK(app.ProcessRs().legacy && app.ProcessRs().r.m.size() == 9);
+        st.Shot("27_rules_real_big", true);
+        app.ProcessSetView(1);
+        st.Run(300);
+        st.Shot("27_rules_real_big_control", true);
+        app.ProcessSetView(0);
         app.ProcessSaveReport();
         st.Run(100);
         wait();
@@ -700,6 +748,25 @@ int main(int argc, char** argv)
             app.ProcessSetPositionArm(i, 50.0 * i);
         st.Run(300);
         st.Shot("23_process_small_ship", true);
+        // Правила РС на модели (кг, мм): плечей в записи нет — для снимка плечи со знаком, как их записал бы
+        // оператор (с точностью 5 мм) у модели с h ≈ 60 мм (D = 50 кг, P = 1 кг)
+        {
+            const auto& pp = app.ProcessPositions();
+            for (int i = 1; i < static_cast<int>(pp.size()); i++)
+            {
+                const double rad = (pp[static_cast<std::size_t>(i)].Level(0) - pp[0].Level(0)) * 3.14159265358979 / 180.0;
+                app.ProcessSetPositionArm(i, 5.0 * std::round(60.0 * 50.0 * rad / 1.0 / 5.0));
+            }
+        }
+        st.Run(300);
+        CHECK(!app.ProcessRs().legacy);
+        app.ProcessSetView(1);
+        st.Run(300);
+        st.Shot("27_rules_real_small_control", true);
+        app.ProcessSetView(2);
+        st.Run(300);
+        st.Shot("27_rules_real_small", true);
+        app.ProcessSetView(0);
         app.ProcessSetSmallShip(false);
         // Окно «Свой метод обработки»: пресет «статья» формулами, предпросмотр на положении 2 рядом с Калманом
         app.ProcessSelectPosition(1);
