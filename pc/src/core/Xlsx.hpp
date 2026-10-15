@@ -1,8 +1,13 @@
 #pragma once
 // Запись книги Excel (.xlsx) без библиотек: SpreadsheetML в ZIP (deflate — Deflate.hpp). Открывается в Excel 2007+
 // и LibreOffice. Ячейки — текст или число с заданным числом знаков после запятой (формат ячейки "0.000": Excel
-// показывает разделитель по настройкам Windows — в русской запятую). Строки — inline (без общей таблицы строк),
-// первая строка листа может быть жирной шапкой с закреплением.
+// показывает разделитель по настройкам Windows — в русской запятую) или своим форматом (Style::fmt). Строки — inline
+// (без общей таблицы строк), первая строка листа может быть жирной шапкой с закреплением.
+//
+// Оформление (для печатного отчёта): у ячейки — Style (жирный, курсив, размер и цвет шрифта, заливка, рамка,
+// перенос по словам, выравнивание, формат числа); у листа — объединённые ячейки, высоты строк, закрепление строк,
+// сетка вкл/выкл, печать (A4, книжная/альбомная, «по ширине страницы», поля, повтор строк шапки — definedName
+// _xlnm.Print_Titles) и рисунки PNG (xl/drawings, xl/media, связи; привязка oneCellAnchor к ячейке + размер).
 //
 //   xlsx::Sheet s("Результаты");
 //   s.widths = {28, 12, 14};
@@ -18,6 +23,7 @@
 #include <filesystem>
 #include <fstream>
 #include <initializer_list>
+#include <map>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -27,6 +33,20 @@
 
 namespace xlsx
 {
+
+// Оформление ячейки. По умолчанию — как раньше (без рамок и заливки, шрифт 11).
+struct Style
+{
+    bool bold = false, italic = false;
+    int size = 0;          // кегль, пт; 0 — 11
+    int color = 0;         // цвет шрифта: 0 — авто, 1 — зелёный, 2 — красный, 3 — серый, 4 — синий
+    int fill = 0;          // заливка: 0 — нет, 1 — шапка (серо-голубая), 2 — выделение (жёлтая), 3 — светло-серая
+    bool border = false;   // тонкая рамка со всех сторон
+    bool wrap = false;     // перенос по словам
+    int align = 0;         // по горизонтали: 0 — общее, 1 — влево, 2 — по центру, 3 — вправо
+    int valign = 0;        // по вертикали: 0 — снизу (как в Excel), 1 — по центру, 2 — сверху
+    std::string fmt;       // формат числа (код Excel, например 0.000"°"); пусто — по Cell::decimals
+};
 
 struct Cell
 {
@@ -40,6 +60,8 @@ struct Cell
     double num = 0.0;
     int decimals = -1; // число: 0..3 знака после запятой; -1 — общий формат
     std::string text;  // UTF-8
+    Style st;
+    bool styled = false; // задан st (пустая ячейка со стилем — тоже пишется: рамки таблиц, объединения)
 };
 
 inline Cell Text(std::string s)
@@ -63,6 +85,30 @@ inline Cell Num(double v, int decimals = -1)
 
 inline Cell Empty() { return Cell{}; }
 
+// Та же ячейка с оформлением.
+inline Cell With(Cell c, const Style& s)
+{
+    c.st = s;
+    c.styled = true;
+    return c;
+}
+
+// Рисунок PNG на листе: левый верхний угол — в ячейке (col, row, от 0) со сдвигом (dx, dy) в пикселях; размер на
+// листе — width × height пикселей (96 dpi).
+struct Image
+{
+    std::vector<unsigned char> png;
+    int col = 0, row = 0;
+    int dx = 0, dy = 0;
+    int width = 0, height = 0;
+    std::string name; // подпись (описание рисунка)
+};
+
+struct Merge
+{
+    int r0 = 0, c0 = 0, r1 = 0, c1 = 0; // включительно, от 0
+};
+
 struct Sheet
 {
     explicit Sheet(std::string n = "Лист1") : name(std::move(n)) {}
@@ -70,6 +116,19 @@ struct Sheet
     std::vector<std::vector<Cell>> rows;  // строки сверху вниз
     std::vector<double> widths;           // ширины столбцов в знаках (0 — по умолчанию)
     bool header = true;                   // первая строка — жирная шапка, закреплена при прокрутке
+    // Оформление и печать
+    std::vector<Merge> merges;
+    std::vector<double> heights;          // высоты строк, пт (0 — авто)
+    int freezeRows = -1;                  // закрепить строк сверху; -1 — по header (1 или 0)
+    bool gridLines = true;                // сетка на экране
+    bool print = false;                   // параметры печати заданы (ниже)
+    bool landscape = false;
+    bool fitWidth = true;                 // по ширине страницы (высота — сколько получится)
+    int printTitleRows = 0;               // повторять на каждой странице строки 1…N
+    std::string printArea;                // область печати («A1:J1»; пусто — весь лист) — _xlnm.Print_Area
+    bool footer = true;                   // колонтитул: имя листа и номер страницы
+    double marginLR = 0.5, marginTB = 0.6; // поля, дюймы
+    std::vector<Image> images;
 
     void AddRow(std::initializer_list<Cell> cells) { rows.emplace_back(cells); }
     void AddRow(std::vector<Cell> cells) { rows.push_back(std::move(cells)); }
@@ -112,12 +171,26 @@ inline void AppendEscaped(std::string& out, std::string_view s)
     }
 }
 
+inline std::string Escaped(std::string_view s)
+{
+    std::string o;
+    AppendEscaped(o, s);
+    return o;
+}
+
 // Число без локали (точка) и с 15 значащими цифрами — как хранит Excel
 inline void AppendNumber(std::string& out, double v)
 {
     char b[40];
     std::snprintf(b, sizeof(b), "%.15g", v);
     out += b;
+}
+
+inline std::string NumberText(double v)
+{
+    std::string s;
+    AppendNumber(s, v);
+    return s;
 }
 
 inline std::string SafeSheetName(const std::string& name, std::size_t index)
@@ -139,25 +212,185 @@ inline std::string SafeSheetName(const std::string& name, std::size_t index)
     return s;
 }
 
-// Стили: 0 — обычный, 1 — жирный, 2..5 — число с 0..3 знаками после запятой
-inline int StyleOf(const Cell& c, bool bold)
+// Таблица стилей книги: шрифты, заливки, рамки, форматы чисел и их сочетания (cellXfs). Первые шесть сочетаний —
+// как в прежних версиях: 0 — обычный, 1 — жирный, 2..5 — число с 0..3 знаками после запятой.
+class Styles
 {
-    if (bold)
-        return 1;
-    if (c.kind == Cell::Kind::Number && c.decimals >= 0)
-        return 2 + c.decimals;
-    return 0;
-}
+public:
+    Styles()
+    {
+        Font(false, false, 0, 0);
+        Font(true, false, 0, 0);
+        xf_.push_back({0, 0, 0, 0, false, 0, 0});
+        xf_.push_back({0, 1, 0, 0, false, 0, 0});
+        xf_.push_back({1, 0, 0, 0, false, 0, 0});
+        xf_.push_back({NumFmt("0.0"), 0, 0, 0, false, 0, 0});
+        xf_.push_back({2, 0, 0, 0, false, 0, 0});
+        xf_.push_back({NumFmt("0.000"), 0, 0, 0, false, 0, 0});
+    }
 
-inline std::string SheetXml(const Sheet& sh)
+    // Номер стиля ячейки (bold — жирная шапка листа).
+    int Of(const Cell& c, bool bold)
+    {
+        if (!c.styled)
+        {
+            if (bold)
+                return 1;
+            if (c.kind == Cell::Kind::Number && c.decimals >= 0)
+                return 2 + c.decimals;
+            return 0;
+        }
+        const Style& s = c.st;
+        Xf x;
+        x.font = Font(s.bold || bold, s.italic, s.size, s.color);
+        x.fill = s.fill > 0 && s.fill <= 3 ? s.fill + 1 : 0; // 0 — нет, 1 — gray125 (обязательная), 2.. — свои
+        x.border = s.border ? 1 : 0;
+        x.wrap = s.wrap;
+        x.align = s.align;
+        x.valign = s.valign;
+        if (!s.fmt.empty())
+            x.numFmt = NumFmt(s.fmt);
+        else if (c.kind == Cell::Kind::Number && c.decimals >= 0)
+            x.numFmt = c.decimals == 0 ? 1 : c.decimals == 2 ? 2 : NumFmt(c.decimals == 1 ? "0.0" : "0.000");
+        for (std::size_t i = 0; i < xf_.size(); i++)
+            if (xf_[i] == x)
+                return static_cast<int>(i);
+        xf_.push_back(x);
+        return static_cast<int>(xf_.size() - 1);
+    }
+
+    std::string Xml() const
+    {
+        std::string x = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n"
+                        "<styleSheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">";
+        x += "<numFmts count=\"" + std::to_string(fmts_.size()) + "\">";
+        for (std::size_t i = 0; i < fmts_.size(); i++)
+            x += "<numFmt numFmtId=\"" + std::to_string(164 + i) + "\" formatCode=\"" + Escaped(fmts_[i]) + "\"/>";
+        x += "</numFmts>";
+        static const char* colors[] = {nullptr, "FF1E7B34", "FFC0392B", "FF707070", "FF1F4E9A"};
+        x += "<fonts count=\"" + std::to_string(fonts_.size()) + "\">";
+        for (const FontKey& f : fonts_)
+        {
+            x += "<font>";
+            if (f.bold)
+                x += "<b/>";
+            if (f.italic)
+                x += "<i/>";
+            x += "<sz val=\"" + std::to_string(f.size > 0 ? f.size : 11) + "\"/>";
+            if (f.color > 0 && f.color <= 4)
+                x += std::string("<color rgb=\"") + colors[f.color] + "\"/>";
+            x += "<name val=\"Calibri\"/><family val=\"2\"/></font>";
+        }
+        x += "</fonts>";
+        x += "<fills count=\"5\"><fill><patternFill patternType=\"none\"/></fill>"
+             "<fill><patternFill patternType=\"gray125\"/></fill>"
+             "<fill><patternFill patternType=\"solid\"><fgColor rgb=\"FFDCE6F1\"/><bgColor indexed=\"64\"/></patternFill></fill>"
+             "<fill><patternFill patternType=\"solid\"><fgColor rgb=\"FFFFF2CC\"/><bgColor indexed=\"64\"/></patternFill></fill>"
+             "<fill><patternFill patternType=\"solid\"><fgColor rgb=\"FFF2F2F2\"/><bgColor indexed=\"64\"/></patternFill></fill>"
+             "</fills>";
+        x += "<borders count=\"2\"><border><left/><right/><top/><bottom/><diagonal/></border>"
+             "<border><left style=\"thin\"><color rgb=\"FF8EA9C1\"/></left><right style=\"thin\"><color rgb=\"FF8EA9C1\"/></right>"
+             "<top style=\"thin\"><color rgb=\"FF8EA9C1\"/></top><bottom style=\"thin\"><color rgb=\"FF8EA9C1\"/></bottom>"
+             "<diagonal/></border></borders>";
+        x += "<cellStyleXfs count=\"1\"><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\"/></cellStyleXfs>";
+        x += "<cellXfs count=\"" + std::to_string(xf_.size()) + "\">";
+        static const char* h[] = {nullptr, "left", "center", "right"};
+        static const char* v[] = {nullptr, "center", "top"};
+        for (const Xf& f : xf_)
+        {
+            x += "<xf numFmtId=\"" + std::to_string(f.numFmt) + "\" fontId=\"" + std::to_string(f.font) + "\" fillId=\"" +
+                 std::to_string(f.fill) + "\" borderId=\"" + std::to_string(f.border) + "\" xfId=\"0\"";
+            if (f.numFmt)
+                x += " applyNumberFormat=\"1\"";
+            if (f.font)
+                x += " applyFont=\"1\"";
+            if (f.fill)
+                x += " applyFill=\"1\"";
+            if (f.border)
+                x += " applyBorder=\"1\"";
+            const bool al = f.wrap || f.align || f.valign;
+            if (al)
+            {
+                x += " applyAlignment=\"1\"><alignment";
+                if (f.align > 0 && f.align <= 3)
+                    x += std::string(" horizontal=\"") + h[f.align] + "\"";
+                if (f.valign > 0 && f.valign <= 2)
+                    x += std::string(" vertical=\"") + v[f.valign] + "\"";
+                if (f.wrap)
+                    x += " wrapText=\"1\"";
+                x += "/></xf>";
+            }
+            else
+                x += "/>";
+        }
+        x += "</cellXfs><cellStyles count=\"1\"><cellStyle name=\"Normal\" xfId=\"0\" builtinId=\"0\"/></cellStyles>"
+             "</styleSheet>";
+        return x;
+    }
+
+private:
+    struct FontKey
+    {
+        bool bold, italic;
+        int size, color;
+        bool operator==(const FontKey&) const = default;
+    };
+    struct Xf
+    {
+        int numFmt = 0, font = 0, fill = 0, border = 0;
+        bool wrap = false;
+        int align = 0, valign = 0;
+        bool operator==(const Xf&) const = default;
+    };
+    int Font(bool b, bool i, int size, int color)
+    {
+        const FontKey k{b, i, size == 11 ? 0 : size, color};
+        for (std::size_t n = 0; n < fonts_.size(); n++)
+            if (fonts_[n] == k)
+                return static_cast<int>(n);
+        fonts_.push_back(k);
+        return static_cast<int>(fonts_.size() - 1);
+    }
+    int NumFmt(const std::string& code)
+    {
+        if (code == "0")
+            return 1;
+        if (code == "0.00")
+            return 2;
+        for (std::size_t i = 0; i < fmts_.size(); i++)
+            if (fmts_[i] == code)
+                return static_cast<int>(164 + i);
+        fmts_.push_back(code);
+        return static_cast<int>(164 + fmts_.size() - 1);
+    }
+    std::vector<FontKey> fonts_;
+    std::vector<std::string> fmts_;
+    std::vector<Xf> xf_;
+};
+
+// Лист. drawingRel — номер связи рисунков листа (0 — рисунков нет).
+inline std::string SheetXml(const Sheet& sh, Styles& styles, bool drawing)
 {
     std::string x;
     x.reserve(64 + sh.rows.size() * 96);
     x += "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n"
-         "<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">";
-    if (sh.header && sh.rows.size() > 1)
-        x += "<sheetViews><sheetView workbookViewId=\"0\"><pane ySplit=\"1\" topLeftCell=\"A2\" activePane=\"bottomLeft\""
-             " state=\"frozen\"/></sheetView></sheetViews>";
+         "<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" "
+         "xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\">";
+    if (sh.print && sh.fitWidth)
+        x += "<sheetPr><pageSetUpPr fitToPage=\"1\"/></sheetPr>";
+    const int freeze = sh.freezeRows >= 0 ? sh.freezeRows : (sh.header && sh.rows.size() > 1 ? 1 : 0);
+    x += "<sheetViews><sheetView workbookViewId=\"0\"";
+    if (!sh.gridLines)
+        x += " showGridLines=\"0\"";
+    if (freeze > 0)
+    {
+        const std::string tl = "A" + std::to_string(freeze + 1);
+        x += "><pane ySplit=\"" + std::to_string(freeze) + "\" topLeftCell=\"" + tl +
+             "\" activePane=\"bottomLeft\" state=\"frozen\"/><selection pane=\"bottomLeft\" activeCell=\"" + tl +
+             "\" sqref=\"" + tl + "\"/></sheetView></sheetViews>";
+    }
+    else
+        x += "/></sheetViews>";
     bool anyWidth = false;
     for (const double w : sh.widths)
         anyWidth |= w > 0;
@@ -179,14 +412,21 @@ inline std::string SheetXml(const Sheet& sh)
     for (std::size_t r = 0; r < sh.rows.size(); r++)
     {
         const std::string rn = std::to_string(r + 1);
-        x += "<row r=\"" + rn + "\">";
+        x += "<row r=\"" + rn + "\"";
+        if (r < sh.heights.size() && sh.heights[r] > 0)
+        {
+            x += " ht=\"";
+            AppendNumber(x, sh.heights[r]);
+            x += "\" customHeight=\"1\"";
+        }
+        x += ">";
         const auto& row = sh.rows[r];
         for (std::size_t c = 0; c < row.size(); c++)
         {
             const Cell& cell = row[c];
-            if (cell.kind == Cell::Kind::Empty)
+            if (cell.kind == Cell::Kind::Empty && !cell.styled)
                 continue;
-            const int st = StyleOf(cell, sh.header && r == 0);
+            const int st = styles.Of(cell, sh.header && r == 0);
             x += "<c r=\"" + ColName(c) + rn + "\"";
             if (st)
                 x += " s=\"" + std::to_string(st) + "\"";
@@ -196,16 +436,69 @@ inline std::string SheetXml(const Sheet& sh)
                 AppendNumber(x, cell.num);
                 x += "</v></c>";
             }
-            else
+            else if (cell.kind == Cell::Kind::Text)
             {
                 x += " t=\"inlineStr\"><is><t xml:space=\"preserve\">";
                 AppendEscaped(x, cell.text);
                 x += "</t></is></c>";
             }
+            else
+                x += "/>";
         }
         x += "</row>";
     }
-    x += "</sheetData></worksheet>";
+    x += "</sheetData>";
+    if (!sh.merges.empty())
+    {
+        x += "<mergeCells count=\"" + std::to_string(sh.merges.size()) + "\">";
+        for (const Merge& m : sh.merges)
+            x += "<mergeCell ref=\"" + ColName(static_cast<std::size_t>(m.c0)) + std::to_string(m.r0 + 1) + ":" +
+                 ColName(static_cast<std::size_t>(m.c1)) + std::to_string(m.r1 + 1) + "\"/>";
+        x += "</mergeCells>";
+    }
+    if (sh.print)
+    {
+        x += "<printOptions horizontalCentered=\"1\"/>";
+        x += "<pageMargins left=\"" + NumberText(sh.marginLR) + "\" right=\"" + NumberText(sh.marginLR) + "\" top=\"" +
+             NumberText(sh.marginTB) + "\" bottom=\"" + NumberText(sh.marginTB) + "\" header=\"0.3\" footer=\"0.3\"/>";
+        x += "<pageSetup paperSize=\"9\" orientation=\"";
+        x += sh.landscape ? "landscape" : "portrait";
+        x += "\"";
+        if (sh.fitWidth)
+            x += " fitToWidth=\"1\" fitToHeight=\"0\"";
+        x += "/>";
+        if (sh.footer)
+            x += "<headerFooter><oddFooter>&amp;L&amp;8&amp;A&amp;R&amp;8&amp;P / &amp;N</oddFooter></headerFooter>";
+    }
+    if (drawing)
+        x += "<drawing r:id=\"rId1\"/>";
+    x += "</worksheet>";
+    return x;
+}
+
+// Рисунки листа: oneCellAnchor (угол — в ячейке, размер — в EMU: 9525 на пиксель при 96 dpi).
+inline std::string DrawingXml(const Sheet& sh)
+{
+    std::string x = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n"
+                    "<xdr:wsDr xmlns:xdr=\"http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing\" "
+                    "xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\" "
+                    "xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\">";
+    for (std::size_t i = 0; i < sh.images.size(); i++)
+    {
+        const Image& im = sh.images[i];
+        const std::string id = std::to_string(i + 1);
+        auto emu = [](long long px) { return std::to_string(px * 9525LL); };
+        x += "<xdr:oneCellAnchor><xdr:from><xdr:col>" + std::to_string(im.col) + "</xdr:col><xdr:colOff>" + emu(im.dx) +
+             "</xdr:colOff><xdr:row>" + std::to_string(im.row) + "</xdr:row><xdr:rowOff>" + emu(im.dy) +
+             "</xdr:rowOff></xdr:from><xdr:ext cx=\"" + emu(im.width) + "\" cy=\"" + emu(im.height) + "\"/>";
+        x += "<xdr:pic><xdr:nvPicPr><xdr:cNvPr id=\"" + std::to_string(i + 2) + "\" name=\"Рисунок " + id + "\" descr=\"" +
+             Escaped(im.name) + "\"/><xdr:cNvPicPr><a:picLocks noChangeAspect=\"1\"/></xdr:cNvPicPr></xdr:nvPicPr>";
+        x += "<xdr:blipFill><a:blip r:embed=\"rId" + id + "\"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill>";
+        x += "<xdr:spPr><a:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\"" + emu(im.width) + "\" cy=\"" + emu(im.height) +
+             "\"/></a:xfrm><a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic><xdr:clientData/>"
+             "</xdr:oneCellAnchor>";
+    }
+    x += "</xdr:wsDr>";
     return x;
 }
 
@@ -318,28 +611,41 @@ private:
     std::uint16_t date_ = (46 << 9) | (1 << 5) | 1, time_ = 0; // 01.01.2026
 };
 
+
 } // namespace detail
 
 // Книга целиком в памяти (байты файла .xlsx). when — время изменения файлов внутри ZIP; compress = false — части
 // без сжатия (тесты читают XML прямо из байтов).
-inline std::string Build(const std::vector<Sheet>& sheets, std::time_t when = std::time(nullptr), bool compress = true)
+inline std::string Build(const std::vector<Sheet>& sheetsIn, std::time_t when = std::time(nullptr), bool compress = true)
 {
     detail::ZipWriter z;
     z.compress = compress;
     z.SetTime(when);
-    const std::size_t n = sheets.empty() ? 1 : sheets.size();
+    const std::vector<Sheet> empty(1);
+    const std::vector<Sheet>& sheets = sheetsIn.empty() ? empty : sheetsIn;
+    const std::size_t n = sheets.size();
 
+    bool anyImage = false;
+    for (const Sheet& s : sheets)
+        anyImage |= !s.images.empty();
     std::string ct = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n"
                      "<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\">"
                      "<Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/>"
-                     "<Default Extension=\"xml\" ContentType=\"application/xml\"/>"
-                     "<Override PartName=\"/xl/workbook.xml\" "
-                     "ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/>"
-                     "<Override PartName=\"/xl/styles.xml\" "
-                     "ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml\"/>";
+                     "<Default Extension=\"xml\" ContentType=\"application/xml\"/>";
+    if (anyImage)
+        ct += "<Default Extension=\"png\" ContentType=\"image/png\"/>";
+    ct += "<Override PartName=\"/xl/workbook.xml\" "
+          "ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/>"
+          "<Override PartName=\"/xl/styles.xml\" "
+          "ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml\"/>";
     for (std::size_t i = 0; i < n; i++)
+    {
         ct += "<Override PartName=\"/xl/worksheets/sheet" + std::to_string(i + 1) +
               ".xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/>";
+        if (!sheets[i].images.empty())
+            ct += "<Override PartName=\"/xl/drawings/drawing" + std::to_string(i + 1) +
+                  ".xml\" ContentType=\"application/vnd.openxmlformats-officedocument.drawing+xml\"/>";
+    }
     ct += "</Types>";
     z.Add("[Content_Types].xml", ct);
 
@@ -355,10 +661,11 @@ inline std::string Build(const std::vector<Sheet>& sheets, std::time_t when = st
                      "xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><sheets>";
     std::string rels = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n"
                        "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">";
+    std::string names; // definedNames: повтор строк шапки при печати
     std::vector<std::string> used;
     for (std::size_t i = 0; i < n; i++)
     {
-        std::string name = detail::SafeSheetName(sheets.empty() ? std::string() : sheets[i].name, i);
+        std::string name = detail::SafeSheetName(sheets[i].name, i);
         for (int k = 2; std::find(used.begin(), used.end(), name) != used.end(); k++)
             name = detail::SafeSheetName(name.substr(0, name.size() > 26 ? 26 : name.size()) + " (" +
                                              std::to_string(k) + ")",
@@ -372,40 +679,76 @@ inline std::string Build(const std::vector<Sheet>& sheets, std::time_t when = st
                 "\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" "
                 "Target=\"worksheets/sheet" +
                 id + ".xml\"/>";
+        std::string esc; // имя листа в ссылке: в апострофах, апостроф — удвоенный
+        for (const char c : name)
+            esc += c == '\'' ? std::string("''") : std::string(1, c);
+        if (sheets[i].print && !sheets[i].printArea.empty())
+        {
+            // «A1:J1» -> «$A$1:$J$1»
+            std::string ref;
+            for (std::size_t k = 0; k < sheets[i].printArea.size(); k++)
+            {
+                const char c = sheets[i].printArea[k];
+                const bool letter = c >= 'A' && c <= 'Z';
+                const bool prevLetter = k > 0 && sheets[i].printArea[k - 1] >= 'A' && sheets[i].printArea[k - 1] <= 'Z';
+                if ((letter && !prevLetter) || (c >= '0' && c <= '9' && prevLetter))
+                    ref += '$';
+                ref += c;
+            }
+            names += "<definedName name=\"_xlnm.Print_Area\" localSheetId=\"" + std::to_string(i) + "\">";
+            detail::AppendEscaped(names, "'" + esc + "'!" + ref);
+            names += "</definedName>";
+        }
+        if (sheets[i].print && sheets[i].printTitleRows > 0)
+        {
+            names += "<definedName name=\"_xlnm.Print_Titles\" localSheetId=\"" + std::to_string(i) + "\">";
+            detail::AppendEscaped(names, "'" + esc + "'!$1:$" + std::to_string(sheets[i].printTitleRows));
+            names += "</definedName>";
+        }
     }
-    wb += "</sheets></workbook>";
+    wb += "</sheets>";
+    if (!names.empty())
+        wb += "<definedNames>" + names + "</definedNames>";
+    wb += "</workbook>";
     rels += "<Relationship Id=\"rId" + std::to_string(n + 1) +
             "\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles\" "
             "Target=\"styles.xml\"/></Relationships>";
     z.Add("xl/workbook.xml", wb);
     z.Add("xl/_rels/workbook.xml.rels", rels);
 
-    // 0 — обычный; 1 — жирный; 2..5 — 0, 0.0, 0.00, 0.000 (1 и 2 — встроенные форматы Excel)
-    z.Add("xl/styles.xml",
-          "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n"
-          "<styleSheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">"
-          "<numFmts count=\"2\"><numFmt numFmtId=\"164\" formatCode=\"0.0\"/>"
-          "<numFmt numFmtId=\"165\" formatCode=\"0.000\"/></numFmts>"
-          "<fonts count=\"2\"><font><sz val=\"11\"/><name val=\"Calibri\"/></font>"
-          "<font><b/><sz val=\"11\"/><name val=\"Calibri\"/></font></fonts>"
-          "<fills count=\"2\"><fill><patternFill patternType=\"none\"/></fill>"
-          "<fill><patternFill patternType=\"gray125\"/></fill></fills>"
-          "<borders count=\"1\"><border><left/><right/><top/><bottom/><diagonal/></border></borders>"
-          "<cellStyleXfs count=\"1\"><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\"/></cellStyleXfs>"
-          "<cellXfs count=\"6\">"
-          "<xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\"/>"
-          "<xf numFmtId=\"0\" fontId=\"1\" fillId=\"0\" borderId=\"0\" xfId=\"0\" applyFont=\"1\"/>"
-          "<xf numFmtId=\"1\" fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\" applyNumberFormat=\"1\"/>"
-          "<xf numFmtId=\"164\" fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\" applyNumberFormat=\"1\"/>"
-          "<xf numFmtId=\"2\" fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\" applyNumberFormat=\"1\"/>"
-          "<xf numFmtId=\"165\" fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\" applyNumberFormat=\"1\"/>"
-          "</cellXfs>"
-          "<cellStyles count=\"1\"><cellStyle name=\"Normal\" xfId=\"0\" builtinId=\"0\"/></cellStyles>"
-          "</styleSheet>");
-
+    // Листы (стили собираются по ходу), рисунки
+    detail::Styles styles;
+    std::vector<std::string> sheetXml(n);
     for (std::size_t i = 0; i < n; i++)
-        z.Add("xl/worksheets/sheet" + std::to_string(i + 1) + ".xml",
-              sheets.empty() ? detail::SheetXml(Sheet()) : detail::SheetXml(sheets[i]));
+        sheetXml[i] = detail::SheetXml(sheets[i], styles, !sheets[i].images.empty());
+    z.Add("xl/styles.xml", styles.Xml());
+    int media = 0;
+    for (std::size_t i = 0; i < n; i++)
+    {
+        const std::string id = std::to_string(i + 1);
+        z.Add("xl/worksheets/sheet" + id + ".xml", sheetXml[i]);
+        const Sheet& sh = sheets[i];
+        if (sh.images.empty())
+            continue;
+        z.Add("xl/worksheets/_rels/sheet" + id + ".xml.rels",
+              "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n"
+              "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">"
+              "<Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing\" "
+              "Target=\"../drawings/drawing" + id + ".xml\"/></Relationships>");
+        z.Add("xl/drawings/drawing" + id + ".xml", detail::DrawingXml(sh));
+        std::string dr = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n"
+                         "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">";
+        for (std::size_t k = 0; k < sh.images.size(); k++)
+        {
+            const std::string m = "image" + std::to_string(++media) + ".png";
+            dr += "<Relationship Id=\"rId" + std::to_string(k + 1) +
+                  "\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/image\" "
+                  "Target=\"../media/" + m + "\"/>";
+            z.Add("xl/media/" + m, std::string(sh.images[k].png.begin(), sh.images[k].png.end()));
+        }
+        dr += "</Relationships>";
+        z.Add("xl/drawings/_rels/drawing" + id + ".xml.rels", dr);
+    }
     return z.Finish();
 }
 

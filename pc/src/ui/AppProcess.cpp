@@ -28,6 +28,7 @@
 #include <implot.h>
 
 #include "../core/HeelReport.hpp"
+#include "../core/HeelProtocol.hpp"
 #include "../core/Png.hpp"
 #include "../core/TextUtil.hpp"
 #include "Dialogs.hpp"
@@ -669,50 +670,51 @@ void App::TickProcess()
             std::error_code ec;
             fs::create_directories(dir, ec);
             std::string warn, err;
-            auto sheets = cont ? heel::BuildPositionsReport(s, *files, meas[static_cast<std::size_t>(rec)], pos, sum,
-                                                            info, &warn)
-                               : heel::BuildReport(s, *files, meas, sum, info, &warn);
-            if (!rsCase.in.theta.empty())
-            {
-                sheets.insert(sheets.begin() + 1, heel::BuildRsSheet(s, rsCase)); // «Проверки» — после результатов
-                if (rsCase.groupMode)
-                    sheets.insert(sheets.begin() + 2, heel::BuildMovesSheet(s, rsCase));
-            }
-            if (xlsx::Write(dir / text::PathFromUtf8(heel::kReportName), sheets, &err))
-                out.push_back(std::string("✓ Отчёт сохранён: ") + heel::kReportName);
-            else
-                out.push_back(std::string("✗ ") + heel::kReportName + " не сохранён: " + err);
-            if (!warn.empty())
-                out.push_back(warn);
-            if (ctrlFrame)
-            {
-                const auto rgb = offscreen::Rasterize(*ctrlFrame);
-                if (png::WriteRgb(dir / text::PathFromUtf8(heel::kControlPlotName), ctrlFrame->w, ctrlFrame->h, rgb))
-                    out.push_back(Fmt("✓ График контроля сохранён: %s (%d × %d)", heel::kControlPlotName, ctrlFrame->w,
-                                      ctrlFrame->h));
+            // Картинки: PNG-файлами рядом и в книгу (лист «Протокол» — контроль и запись основного поста, «Графики» — все)
+            std::vector<heel::ReportImage> images;
+            auto picture = [&](const std::shared_ptr<offscreen::Frame>& fr, const std::string& file, const std::string& caption,
+                               bool control, bool series, const char* what) {
+                if (!fr)
+                    return;
+                const auto rgb = offscreen::Rasterize(*fr);
+                heel::ReportImage im;
+                im.caption = caption;
+                im.png = png::EncodeRgb(fr->w, fr->h, rgb);
+                im.w = fr->w;
+                im.h = fr->h;
+                im.control = control;
+                im.series = series;
+                bool ok = !im.png.empty();
+                if (ok)
+                {
+                    std::ofstream f(dir / text::PathFromUtf8(file), std::ios::binary | std::ios::trunc);
+                    f.write(reinterpret_cast<const char*>(im.png.data()), static_cast<std::streamsize>(im.png.size()));
+                    ok = static_cast<bool>(f);
+                }
+                if (ok)
+                    out.push_back(Fmt("✓ %s сохранён: %s (%d × %d)", what, file.c_str(), fr->w, fr->h));
                 else
-                    out.push_back(std::string("✗ ") + heel::kControlPlotName + " не сохранён");
-            }
+                    out.push_back("✗ " + file + " не сохранён");
+                if (!im.png.empty())
+                    images.push_back(std::move(im));
+            };
+            picture(ctrlFrame, heel::kControlPlotName, "График контроля замеров: кренящий момент – tg θ (п. 5.5 прил. 3)",
+                    true, false, "График контроля");
             for (int post = 0; post < heel::kMaxPosts; post++)
             {
-                if (!frames[post])
-                    continue;
-                const auto rgb = offscreen::Rasterize(*frames[post]);
-                if (png::WriteRgb(dir / text::PathFromUtf8(plotName[post]), frames[post]->w, frames[post]->h, rgb))
-                    out.push_back(Fmt("✓ График сохранён: %s (%d × %d)", plotName[post].c_str(), frames[post]->w,
-                                      frames[post]->h));
-                else
-                    out.push_back(std::string("✗ ") + plotName[post] + " не сохранён");
-                if (!posFrames[post])
-                    continue;
-                const auto rgb2 = offscreen::Rasterize(*posFrames[post]);
-                if (png::WriteRgb(dir / text::PathFromUtf8(posName[post]), posFrames[post]->w,
-                                  posFrames[post]->h, rgb2))
-                    out.push_back(Fmt("✓ Положения сохранены: %s (%d × %d)", posName[post].c_str(), posFrames[post]->w,
-                                      posFrames[post]->h));
-                else
-                    out.push_back(std::string("✗ ") + posName[post] + " не сохранён");
+                const std::string pn = s.PostName(post);
+                picture(frames[post], plotName[post],
+                        (cont ? "Запись крена с положениями груза — пост «" : "Крен по замерам — пост «") + pn + "»", false,
+                        true, "График");
+                picture(posFrames[post], posName[post], "Положения крупно — пост «" + pn + "»", false, false, "Положения");
             }
+            const auto sheets = heel::BuildBook(s, *files, meas, cont, rec, pos, sum, rsCase, info, images, &warn);
+            if (xlsx::Write(dir / text::PathFromUtf8(heel::kReportName), sheets, &err))
+                out.insert(out.begin(), std::string("✓ Отчёт сохранён: ") + heel::kReportName);
+            else
+                out.insert(out.begin(), std::string("✗ ") + heel::kReportName + " не сохранён: " + err);
+            if (!warn.empty())
+                out.push_back(warn);
             return out;
         });
     }

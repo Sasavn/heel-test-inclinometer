@@ -25,6 +25,7 @@
 #include "core/HeelData.hpp"
 #include "core/HeelReport.hpp"
 #include "core/HeelRs.hpp"
+#include "core/HeelProtocol.hpp"
 #include "core/RsCheck.hpp"
 #include "core/PcSettings.hpp"
 #include "core/Plateaus.hpp"
@@ -1416,6 +1417,82 @@ void TestM021()
         CHECK(ko.r.maxSpread > 1.0); // приращения разных знаков — сверка приборов ловит
         const auto back = heel::ApplyInvert(heel::ApplyInvert(loaded.files, {3}), {3});
         CHECK(back[1].log.rows[7].calcY == loaded.files[1].log.rows[7].calcY);
+    }
+
+    SECTION("отчёт в печатной форме (M021): «Протокол» первым, картинки в книге, единая сетка, печать A4");
+    {
+        // Картинка 4 × 3 (PNG) — вместо графиков
+        std::vector<unsigned char> rgb(4 * 3 * 3, 200);
+        heel::ReportImage ctrl{"График контроля", png::EncodeRgb(4, 3, rgb), 4, 3, true, false};
+        heel::ReportImage ser{"Запись крена — пост «Нос»", png::EncodeRgb(4, 3, rgb), 4, 3, false, true};
+        heel::ReportInfo info{"D:\\Кренование\\Модель", "Регистратор крена — программа для ПК (тест)", "2026-10-16 10:00"};
+        const auto book = heel::BuildBook(s, loaded.files, ms, true, 0, pos, sum, k, info, {ctrl, ser});
+        std::vector<std::string> names;
+        for (const auto& sh : book)
+            names.push_back(sh.name);
+        CHECK_MSG(names.size() == 6 && names[0] == "Протокол" && names[1] == "Графики" && names[2] == "Положения" &&
+                      names[3] == "Проверки" && names[4] == "Сырые_данные" && names[5] == "Сравнение постов",
+                  "листы: %s, %s, %s …", names.size() > 0 ? names[0].c_str() : "", names.size() > 1 ? names[1].c_str() : "",
+                  names.size() > 2 ? names[2].c_str() : "");
+        if (book.size() == 6)
+        {
+            const auto& pr = book[0];
+            CHECK(pr.images.size() == 2 && book[1].images.size() == 2 && pr.print && pr.printTitleRows == 1);
+            CHECK(!pr.merges.empty() && pr.freezeRows == 1 && !pr.gridLines);
+            bool sameWidth = true;
+            for (const auto& sh : book)
+                for (const double w : sh.widths)
+                    sameWidth &= w == heel::kColWidth;
+            CHECK(sameWidth); // единая сетка: все столбцы всех листов одной ширины
+            // Протокол: таблица положений (крен по датчикам), табл. 6.5, проверки, итог (основной выделен)
+            bool tbl65 = false, checks = false, mainH = false, sensors = false;
+            for (const auto& row : pr.rows)
+                for (const auto& c : row)
+                {
+                    tbl65 |= c.text.rfind("Таблица 6.5", 0) == 0;
+                    checks |= c.text == "Крен 1°–4° на каждый борт";
+                    mainH |= c.text.rfind("ОСНОВНОЙ:", 0) == 0;
+                    sensors |= c.text.find("«Нос», знак прямой") != std::string::npos;
+                }
+            CHECK(tbl65 && checks && mainH && sensors);
+            // Книга: рисунки, связи, объединения, печать, стили
+            const std::string x = xlsx::Build(book, 0, false);
+            for (const char* part : {"xl/drawings/drawing1.xml", "xl/drawings/_rels/drawing1.xml.rels", "xl/media/image1.png",
+                                     "xl/media/image4.png", "xl/worksheets/_rels/sheet1.xml.rels", "xl/drawings/drawing2.xml"})
+                CHECK_MSG(x.find(part) != std::string::npos, "нет части %s", part);
+            CHECK(x.find("<Default Extension=\"png\" ContentType=\"image/png\"/>") != std::string::npos);
+            CHECK(x.find("ContentType=\"application/vnd.openxmlformats-officedocument.drawing+xml\"") != std::string::npos);
+            CHECK(x.find("Target=\"../media/image1.png\"") != std::string::npos);
+            CHECK(x.find("<drawing r:id=\"rId1\"/>") != std::string::npos);
+            CHECK(x.find("<xdr:oneCellAnchor>") != std::string::npos && x.find("r:embed=\"rId2\"") != std::string::npos);
+            CHECK(x.find("<mergeCell ref=\"A1:J1\"/>") != std::string::npos);
+            CHECK(x.find("<pageSetup paperSize=\"9\" orientation=\"portrait\" fitToWidth=\"1\" fitToHeight=\"0\"/>") !=
+                  std::string::npos);
+            CHECK(x.find("<pageSetUpPr fitToPage=\"1\"/>") != std::string::npos);
+            CHECK(x.find("<definedName name=\"_xlnm.Print_Titles\" localSheetId=\"0\">'Протокол'!$1:$1</definedName>") !=
+                  std::string::npos);
+            CHECK(x.find("patternType=\"solid\"") != std::string::npos && x.find("style=\"thin\"") != std::string::npos);
+            CHECK(x.find("formatCode=\"+0.000&quot;°&quot;;-0.000&quot;°&quot;;0.000&quot;°&quot;\"") != std::string::npos);
+            CHECK(x.find("wrapText=\"1\"") != std::string::npos);
+            // Сырые данные — не в печать: область печати — только строка-пояснение, без колонтитула и повтора шапки
+            const auto& raw = book[4];
+            CHECK(raw.printArea == "A1:M1" && raw.printTitleRows == 0 && !raw.footer && raw.freezeRows == 2);
+            CHECK(raw.rows[0][0].text.find("в печать не включаются") != std::string::npos && raw.rows[1][0].text == "Положение");
+            CHECK(x.find("<definedName name=\"_xlnm.Print_Area\" localSheetId=\"4\">'Сырые_данные'!$A$1:$M$1</definedName>") !=
+                  std::string::npos);
+            // Прежние книги — те же номера стилей (число 0.000 — s="5")
+            xlsx::Sheet old("Старый");
+            old.AddRow({xlsx::Text("a"), xlsx::Text("b")});
+            old.AddRow({xlsx::Num(1.25, 3), xlsx::Text("x")});
+            const std::string ox = xlsx::Build({old}, 0, false);
+            CHECK(ox.find("<c r=\"A2\" s=\"5\"><v>1.25</v></c>") != std::string::npos &&
+                  ox.find("<c r=\"A1\" s=\"1\" t=\"inlineStr\">") != std::string::npos);
+            CHECK(ox.find("drawing") == std::string::npos && ox.find("png") == std::string::npos);
+            // В файл — для проверки снаружи (openpyxl, Excel)
+            const fs::path out = fs::temp_directory_path() / L"krenomer_process_test_протокол.xlsx";
+            std::string err;
+            CHECK_MSG(xlsx::Write(out, book, &err), "%s", err.c_str());
+        }
     }
 }
 
