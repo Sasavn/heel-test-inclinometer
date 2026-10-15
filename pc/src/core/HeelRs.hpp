@@ -286,6 +286,7 @@ inline RsCase RsFromPositions(const Settings& s, const std::vector<File>& files,
     std::vector<double> rawArm, periods;
     std::vector<double> t, v;
     Series(files[static_cast<std::size_t>(m.post[mp].file)].log, s.axis, t, v);
+    double refArm = kNaN; // плечо начального положения от ДП (если задано — плечи остальных тоже от ДП)
     for (std::size_t i = 0; i < pos.size(); i++)
     {
         const Position& ps = pos[i];
@@ -299,7 +300,9 @@ inline RsCase RsFromPositions(const Settings& s, const std::vector<File>& files,
         k.label.push_back(std::to_string(number));
         for (std::size_t j = 0; j < k.postIds.size(); j++)
             k.in.post[j].push_back(ps.Level(k.postIds[j]));
-        rawArm.push_back(rawArm.empty() ? 0.0 : s.units.ToMetres(std::isfinite(ps.arm) ? ps.arm : s.L));
+        if (rawArm.empty())
+            refArm = std::isfinite(ps.arm) ? ps.arm : 0.0;
+        rawArm.push_back(rawArm.empty() ? 0.0 : s.units.ToMetres((std::isfinite(ps.arm) ? ps.arm : s.L) - refArm));
         if (k.in.number.size() > 1)
         {
             const auto it = manual.find(number);

@@ -39,6 +39,7 @@ struct PcSettings
     int fltMethod = 3, fltMedianN = 3; // метод: 0…4 встроенные (3 — Калман, по умолчанию), 5 — свой (fltUser)
     std::string fltUser;      // имя выбранного своего метода (методы — файлы в Dir()/methods)
     std::string sensorNames;  // названия датчиков: «ключ=название;…» (ключ — heel::SensorKey)
+    std::string sensorInvert; // датчики с обратным знаком (ось +X — к левому борту): «ключ,ключ,…»
     double fltFc = 0.5, fltTc = 0.0, fltSgWin = 4.0;
     bool fltWhole = false;
     // Правила РС: h и l_max по Информации об остойчивости (плечевые единицы), Δ0 порожнем (единицы массы); 0 — не
@@ -147,6 +148,8 @@ struct PcSettings
             fltUser = kv["flt_user"];
         if (kv.count("sensor_names"))
             sensorNames = kv["sensor_names"];
+        if (kv.count("sensor_invert"))
+            sensorInvert = kv["sensor_invert"];
         fltMedianN = num("flt_median", fltMedianN, 1, 99);
         fltFc = real("flt_fc", fltFc, 0.001, 100.0);
         fltTc = real("flt_tc", fltTc, 0.0, 120.0);
@@ -195,7 +198,7 @@ struct PcSettings
             out << "heel_axis_v=2\nheel_plateau_s=" << heelPlateauS << "\nheel_step=" << heelStep << "\n";
             out << "heel_small=" << (heelSmall ? 1 : 0) << "\ndig_d=" << digD << "\ndig_p=" << digP << "\ndig_arm=" << digArm
                 << "\ndig_thr=" << digThr << "\ndig_step=" << digStep << "\n";
-            out << "flt_v=2\nflt_user=" << fltUser << "\nsensor_names=" << sensorNames << "\n";
+            out << "flt_v=2\nflt_user=" << fltUser << "\nsensor_names=" << sensorNames << "\nsensor_invert=" << sensorInvert << "\n";
             out << "flt_method=" << fltMethod << "\nflt_median=" << fltMedianN << "\nflt_fc=" << fltFc << "\nflt_tc=" << fltTc
                 << "\nflt_sg_win=" << fltSgWin << "\nflt_whole=" << (fltWhole ? 1 : 0) << "\n";
             out << "rs_h=" << rsH << "\nrs_lmax=" << rsLmax << "\nrs_d0=" << rsD0 << "\nrs_spread_step=" << rsSpread

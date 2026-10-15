@@ -24,6 +24,7 @@
 #include <fstream>
 #include <iterator>
 #include <map>
+#include <set>
 #include <string>
 #include <system_error>
 #include <vector>
@@ -113,9 +114,32 @@ struct File
     std::string other;           // имя не по образцу: имя без расширения (отдельная запись, номер — по порядку)
     csvlog::Log log;
     int plateaus = 0;            // положений груза в файле (Plateaus.hpp, ось и параметры — при чтении)
+    bool inverted = false;       // знак датчика обращён (ApplyInvert): углы X и Y — с обратным знаком
 
     bool Measurement() const { return number >= 0 || !pcRun.empty() || !other.empty(); }
 };
+
+// Датчики, поставленные «задом наперёд» (ось +X — к левому борту, а не к правому): углы их файлов — с обратным
+// знаком (X и Y — как датчик, повёрнутый на 180°: Raw, Offset и Calc). keys — ключи датчиков (SensorKey).
+inline std::vector<File> ApplyInvert(const std::vector<File>& in, const std::set<int>& keys)
+{
+    std::vector<File> out = in;
+    for (File& f : out)
+        if (keys.count(f.sensor))
+        {
+            f.inverted = true;
+            for (csvlog::Row& r : f.log.rows)
+            {
+                r.rawX = -r.rawX;
+                r.rawY = -r.rawY;
+                r.offX = -r.offX;
+                r.offY = -r.offY;
+                r.calcX = -r.calcX;
+                r.calcY = -r.calcY;
+            }
+        }
+    return out;
+}
 
 inline constexpr int kPcRunBase = 1000;    // номера замеров для записей на ПК: 1001, 1002, …
 inline constexpr int kOtherBase = 2000;    // номера для файлов с другими именами: 2001, 2002, …
@@ -637,6 +661,15 @@ inline Summary ComputePositions(const Settings& s, const std::vector<File>& file
     std::vector<Point> pts;
     std::vector<bool> use;
     std::vector<std::pair<std::size_t, int>> where;
+    // Плечи от ДП: если у начального (первого учтённого) положения задано своё плечо, плечи всех положений — от ДП,
+    // и перенос от начального — разность (иначе, как раньше, плечо положения — уже от начального).
+    double refArm = 0.0;
+    for (const Position& ps : pos)
+        if (ps.use)
+        {
+            refArm = std::isfinite(ps.arm) ? ps.arm : 0.0;
+            break;
+        }
     for (int p = 0; p < kMaxPosts; p++)
     {
         std::vector<double> t, v, proc;
@@ -660,7 +693,7 @@ inline Summary ComputePositions(const Settings& s, const std::vector<File>& file
             pt.number = static_cast<int>(i) + 1;
             pt.post = p;
             pt.thetaDeg = ps.Level(p);
-            pt.arm = s.units.ToMetres(std::isfinite(ps.arm) ? ps.arm : s.L); // со знаком (+ к ПБ) или модулем
+            pt.arm = s.units.ToMetres((std::isfinite(ps.arm) ? ps.arm : s.L) - refArm); // со знаком (+ к ПБ) или модулем
             pts.push_back(pt);
             use.push_back(ps.use);
             where.push_back({i, p});

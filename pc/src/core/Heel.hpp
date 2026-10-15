@@ -167,6 +167,12 @@ inline Result Solve(const std::vector<Point>& in, double D, double P, double thr
             o.note = "плечо l не задано";
             continue;
         }
+        if (signedArms && p.arm * p.thetaDeg < 0)
+        {
+            // перенос к одному борту, крен — к другому: знак датчика обратный (или перепутан борт плеча)
+            o.note = "крен в другую сторону, чем перенос груза (знак датчика?)";
+            continue;
+        }
         o.h = Height(P, std::fabs(p.arm), D, p.thetaDeg);
         if (!std::isfinite(o.h))
         {

@@ -1132,9 +1132,10 @@ void TestRules()
         CHECK(a.n == b.n && a.n == 10); // возвраты в ноль — ниже порога
         CHECK_NEAR(a.h, b.h, 1e-12, "среднее h: со знаком = модулем");
         CHECK_NEAR(a.ls.h, b.ls.h, 1e-12, "МНК: со знаком = модулем");
-        // Знак плеча задаёт борт: плечо +, крен − (неверный знак) -> точка не на прямой
+        // Знак плеча задаёт борт: плечо +, крен − (неверный знак датчика или борта) -> точка не учитывается, с пояснением
         sgn[7].arm = -sgn[7].arm;
-        CHECK(std::fabs(heel::Solve(sgn, D, P, 0.1).ls.h - a.ls.h) > 0.01);
+        const auto c = heel::Solve(sgn, D, P, 0.1);
+        CHECK(c.n == a.n - 1 && !c.points[7].counted && c.points[7].note.find("знак датчика") != std::string::npos);
     }
 
     SECTION("Правила РС на записи: положения (синтетика), плечи со знаком и без, Tc, лист «Проверки»");
@@ -1339,6 +1340,83 @@ void TestVodnik()
     const auto g = heel::ParseGroups(heel::GroupsText({{"№1; кран=весы", 1.1}, {"№2", 2.116}}));
     CHECK(g.size() == 2 && g[0].name == "№1, кран,весы" && std::fabs(g[1].mass - 2.116) < 1e-12);
     fs::remove_all(dir, ec);
+}
+
+// Опыт на модели отсека (M021, tests/data/m021: только Ms, CalcX, CalcY): малое судно D = 53,5 кг, груз 2,5 кг, два
+// датчика, 9 положений (расстояние от ПрБ 29,5 … 48 см, ДП — 27,5 см: плечи от ДП −20 … −205 мм). Часть положений
+// короче 10 с и с качкой — детектор их не находит, они задаются вручную; плечо начального — от ДП.
+void TestM021()
+{
+    SECTION("модель отсека M021: два датчика, 9 положений (2 — вручную), плечи от ДП, оба расчёта h, знак датчика");
+    heel::Settings s;
+    s.units.model = true;
+    s.D = 53.5;
+    s.P = 2.5;
+    const fs::path dir = testutil::TestDataDir() / "m021";
+    const auto loaded = heel::LoadAll(heel::ListCsv(dir), text::PathToUtf8(dir), nullptr, &s);
+    CHECK(loaded.files.size() == 2);
+    auto ms = heel::Group(loaded.files, {});
+    CHECK(ms.size() == 1 && heel::SuggestRecord(loaded.files, ms) == 0);
+    if (ms.size() != 1)
+        return;
+    CHECK(ms[0].post[0].file >= 0 && ms[0].post[1].file >= 0);
+    // Детектор: длинные положения находит, короткие (≈7 с, качка ±1°) — нет
+    const auto found = heel::FindPositions(s, loaded.files, ms[0]);
+    CHECK_MSG(found.size() >= 6 && found.size() < 9, "найдено положений %zu", found.size());
+    // 9 положений по записи; плечи от ДП (+ к ПрБ), мм: начальное −20 (груз на 2 см к ЛБ)
+    const double sp[9][2] = {{5, 36}, {58.7, 71.2}, {88.9, 101.8}, {114.5, 125}, {133.2, 140.3}, {164.3, 211},
+                             {226.3, 232.0}, {238.7, 259}, {269.6, 282.2}};
+    const double armDp[9] = {-20, 45, 95, 145, 205, -55, -105, -155, -205};
+    std::vector<heel::Position> pos(9), posRel(9);
+    for (int i = 0; i < 9; i++)
+    {
+        pos[i].t0 = posRel[i].t0 = sp[i][0];
+        pos[i].t1 = posRel[i].t1 = sp[i][1];
+        pos[i].arm = armDp[i];
+        posRel[i].arm = i ? armDp[i] - armDp[0] : heel::kNaN; // как раньше: от начального
+    }
+    const auto sum = heel::ComputePositions(s, loaded.files, ms[0], pos);
+    const auto sumRel = heel::ComputePositions(s, loaded.files, ms[0], posRel);
+    CHECK_NEAR(sum.h, sumRel.h, 1e-12, "плечи от ДП (у начального задано) = плечи от начального");
+    CHECK_NEAR(sum.ls.h, sumRel.ls.h, 1e-12, "МНК: от ДП = от начального");
+    CHECK(sum.n == 16); // 8 положений × 2 датчика
+    CHECK_RANGE(sum.h, 0.045, 0.052, "h от начального (среднее), м");
+    CHECK_RANGE(sum.ls.h, 0.046, 0.052, "h по МНК, м");
+    CHECK(sum.ls.r2 > 0.99);
+    // Знак: груз к ПрБ даёт крен «+» — датчики стоят прямо (обращать не нужно)
+    CHECK(pos[1].Level(0) > pos[0].Level(0) && pos[1].Level(1) > pos[0].Level(1));
+    CHECK_NEAR(pos[0].Level(0) - pos[0].Level(1), 0.97, 0.05, "датчики не обнулены: уровни разнятся на ~1°");
+    auto k = heel::RsFromPositions(s, loaded.files, ms[0], pos, {}, sum.h);
+    const auto kRel = heel::RsFromPositions(s, loaded.files, ms[0], posRel, {}, sumRel.h);
+    CHECK_NEAR(k.r.hk, kRel.r.hk, 1e-12, "табл. 6.5: плечи от ДП = от начального");
+    CHECK(!k.legacy && k.postIds.size() == 2 && k.r.m.size() == 8);
+    CHECK(k.r.n == 8 && k.r.ok661 && k.r.ok662 && k.r.ok664 && k.r.excludedCount == 0);
+    CHECK_NEAR(k.r.hk, 0.0531, 0.001, "h_k по табл. 6.5, м");
+    CHECK_NEAR(k.r.err, 0.0148, 0.001, "вероятная ошибка, м");
+    CHECK_NEAR(k.r.m[0].dM, 0.0025 * 0.065, 1e-12, "ΔM_1 = P·Δl, т·м");
+    for (const auto& q : k.r.m)
+        CHECK(q.h > 0.03 && q.h < 0.07);
+    CHECK(k.checks[5].state == 0); // крен ±11° — не 1°–4°
+    CHECK(k.checks[9].state == 0 && k.r.maxSpreadAt == 5); // на коротком положении 7 приборы расходятся (0,17°)
+    // Датчик, поставленный «задом наперёд»: обратный знак обоих — h отрицательная; обратный знак одного — приборы
+    // расходятся; обратный знак у ApplyInvert возвращает исходное
+    {
+        const auto inv = heel::ApplyInvert(loaded.files, {2, 3});
+        CHECK(inv[0].inverted && inv[0].log.rows[5].calcX == -loaded.files[0].log.rows[5].calcX);
+        auto pi = pos;
+        const auto si = heel::ComputePositions(s, inv, ms[0], pi);
+        CHECK(si.n == 0 && std::isnan(si.h)); // крен против переноса — точки не учитываются, с пояснением
+        CHECK(pi[1].res[0].note.find("знак датчика") != std::string::npos);
+        const auto ki = heel::RsFromPositions(s, inv, ms[0], pi, {}, si.h);
+        CHECK_NEAR(ki.r.hk, -k.r.hk, 1e-9, "оба обращены: h_k с обратным знаком");
+        const auto one = heel::ApplyInvert(loaded.files, {3});
+        auto po = pos;
+        heel::ComputePositions(s, one, ms[0], po);
+        const auto ko = heel::RsFromPositions(s, one, ms[0], po, {}, 0.0);
+        CHECK(ko.r.maxSpread > 1.0); // приращения разных знаков — сверка приборов ловит
+        const auto back = heel::ApplyInvert(heel::ApplyInvert(loaded.files, {3}), {3});
+        CHECK(back[1].log.rows[7].calcY == loaded.files[1].log.rows[7].calcY);
+    }
 }
 
 // Книги Excel как источник: своя (Xlsx.hpp, со сжатием и без), как пишет Excel (общие строки, даты числами —
@@ -1882,6 +1960,7 @@ int main(int argc, char** argv)
     TestContinuous();
     TestRules();
     TestVodnik();
+    TestM021();
     TestXlsxRead();
     TestRealRecord();
     TestFilters();

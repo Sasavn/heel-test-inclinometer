@@ -580,7 +580,8 @@ void App::TickProcess()
             proc_.rsMoves.clear();
         }
         proc_.outDir = r.folder;
-        proc_.files = std::make_shared<const std::vector<heel::File>>(std::move(r.files));
+        proc_.filesRaw = std::make_shared<const std::vector<heel::File>>(std::move(r.files));
+        ProcApplyInvert();
         ProcRegroup();
         ProcRecompute();
         // Итог чтения: файлы, замеры, форматы, посты
@@ -1852,12 +1853,39 @@ void App::ProcPositions(float w, float h)
                     bool reference = false;
                     for (int k = 0; k < np; k++)
                         reference |= ps.res[posts[k]].reference;
-                    if (reference)
+                    if (reference && !settings_.rsGroupMode)
+                    {
+                        // Начальное положение: плечо необязательно; задано — плечи всех положений от ДП
+                        const bool own = std::isfinite(ps.arm);
+                        double arm = own ? ps.arm : 0.0;
+                        ImGui::SetNextItemWidth(-FLT_MIN);
+                        ImGui::PushStyleColor(ImGuiCol_Text, own ? pal.accent : ImVec4(0, 0, 0, 0));
+                        if (ImGui::InputDouble("##arm0", &arm, 0.0, 0.0, NumFmt(arm, std::max(3, settings_.digArm)).c_str()))
+                        {
+                            ps.arm = std::clamp(arm, -1e7, 1e7);
+                            proc_.posEdited = true;
+                            proc_.dirty = true;
+                        }
+                        ImGui::PopStyleColor();
+                        if (!own && !ImGui::IsItemActive())
+                        {
+                            const ImVec2 r0 = ImGui::GetItemRectMin();
+                            ImGui::GetWindowDrawList()->AddText(
+                                ImVec2(r0.x + ImGui::GetStyle().FramePadding.x, r0.y + ImGui::GetStyle().FramePadding.y),
+                                U32(pal.muted), "нач.");
+                        }
+                        if (ImGui::IsItemHovered())
+                            ImGui::SetTooltip("Начальное положение: от него считаются Δθ и перенос груза остальных.\n"
+                                              "Плечо здесь необязательно. Если задать (плечо груза от ДП, + к правому\n"
+                                              "борту), плечи всех положений вводятся от ДП, а перенос считается как\n"
+                                              "разность с начальным (удобно, когда меряют расстояние от борта).");
+                    }
+                    else if (reference)
                     {
                         ImGui::AlignTextToFramePadding();
                         Muted("нач.");
                         if (ImGui::IsItemHovered())
-                            ImGui::SetTooltip("Начальное положение: от него считаются Δθ и плечи переноса остальных");
+                            ImGui::SetTooltip("Начальное положение: от него считаются Δθ и перенос груза остальных");
                     }
                     else if (settings_.rsGroupMode)
                     {
@@ -2096,8 +2124,11 @@ void App::ProcSeriesPlot(int post, float w, float h, bool forExport)
     }
     const double pad = std::max((hi - lo) * 0.06, 0.05);
     const double tBeg = rows.front().t, tEnd = rows.back().t;
-    char id[64];
-    std::snprintf(id, sizeof(id), "##series%d_%d_%d_%d", post, proc_.rec, axis, forExport ? 1 : 0);
+    // В имени графика — и сама запись (строк, длительность): у другой записи пределы осей — заново по ней (иначе
+    // остаются от прошлой: ImPlotCond_Once запоминает их по имени графика)
+    char id[96];
+    std::snprintf(id, sizeof(id), "##series%d_%d_%d_%d_%zu_%lld", post, proc_.rec, axis, forExport ? 1 : 0, rows.size(),
+                  static_cast<long long>(std::llround(tEnd * 1000.0)));
     ImPlotFlags flags = ImPlotFlags_NoMenus | ImPlotFlags_NoBoxSelect | ImPlotFlags_NoLegend;
     if (forExport)
         flags |= ImPlotFlags_NoMouseText;
@@ -2241,7 +2272,17 @@ void App::ProcExportSeries(int post, float w, float h)
 void App::ProcFilterButton()
 {
     const auto m = static_cast<filt::Method>(std::clamp(settings_.fltMethod, 0, static_cast<int>(filt::Method::Count) - 1));
-    const std::string label = std::string("Обработка: ") + filt::MethodName(m) + " ▼";
+    // Подпись по месту в строке заголовка (до переключателя режима): полная, короче или только метод
+    std::string label = std::string("Обработка: ") + filt::MethodName(m) + " ▼";
+    {
+        const float room = ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x - ModeSwitchWidth() - S(24) -
+                           ImGui::GetCursorScreenPos().x;
+        auto width = [](const std::string& t) { return ImGui::CalcTextSize(t.c_str()).x + 2 * ImGui::GetStyle().FramePadding.x; };
+        if (width(label) > room)
+            label = std::string(filt::MethodName(m)) + " ▼";
+        if (width(label) > room)
+            label = "Обработка ▼";
+    }
     if (Button(label.c_str(), BtnKind::Normal))
         ImGui::OpenPopup("##filter");
     if (ImGui::IsItemHovered())
@@ -2609,6 +2650,73 @@ std::vector<int> App::PostsInUse() const
     return out;
 }
 
+void App::ProcLoadInvert()
+{
+    if (proc_.invertLoaded)
+        return;
+    proc_.invertLoaded = true;
+    proc_.invert.clear();
+    const std::string& s = settings_.sensorInvert;
+    std::size_t at = 0;
+    while (at < s.size())
+    {
+        std::size_t end = s.find(',', at);
+        if (end == std::string::npos)
+            end = s.size();
+        if (end > at)
+            proc_.invert.insert(std::atoi(s.substr(at, end - at).c_str()));
+        at = end + 1;
+    }
+}
+
+void App::ProcApplyInvert()
+{
+    ProcLoadInvert();
+    if (!proc_.filesRaw)
+    {
+        proc_.files.reset();
+        return;
+    }
+    bool any = false;
+    for (const auto& f : *proc_.filesRaw)
+        any |= proc_.invert.count(f.sensor) > 0;
+    proc_.files = any ? std::make_shared<const std::vector<heel::File>>(heel::ApplyInvert(*proc_.filesRaw, proc_.invert))
+                      : proc_.filesRaw;
+}
+
+void App::ProcessSetSensorInvert(int key, bool inverted)
+{
+    ProcLoadInvert();
+    if (inverted)
+        proc_.invert.insert(key);
+    else
+        proc_.invert.erase(key);
+    std::string s;
+    for (const int k : proc_.invert)
+        s += (s.empty() ? "" : ",") + std::to_string(k);
+    settings_.sensorInvert = s;
+    SaveSettingsSoon();
+    ProcApplyInvert();
+    if (proc_.files)
+        ProcLog(heel::SensorName(key) + (inverted ? ": знак обратный (ось +X — к левому борту)" : ": знак прямой"));
+    proc_.dirty = true;
+}
+
+void App::ProcessSetPositionSpans(const std::vector<std::pair<double, double>>& spans)
+{
+    proc_.pos.clear();
+    for (const auto& [a, b] : spans)
+    {
+        heel::Position p;
+        p.t0 = a;
+        p.t1 = b;
+        proc_.pos.push_back(p);
+    }
+    proc_.sel = -1;
+    proc_.posEdited = true;
+    proc_.dirty = true;
+}
+
 void App::SaveSensorNames()
 {
     settings_.sensorNames = JoinNames(proc_.names);
@@ -2742,6 +2850,13 @@ void App::ProcSensorNames(float right, const std::function<void(float)>& flow)
                     proc_.dirty = true;
                 }
             ImGui::Separator();
+            bool inv = proc_.invert.count(k) > 0;
+            if (ui::Checkbox("Обратный знак (ось +X — к левому борту)", &inv))
+                ProcessSetSensorInvert(k, inv);
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Датчик поставлен «задом наперёд»: крен на правый борт он показывает с минусом.\n"
+                                  "Углы его файлов (X и Y) берутся с обратным знаком — файлы не меняются.\n"
+                                  "Проверка: груз к правому борту должен давать крен «+» (правый борт).");
             bool use = !off;
             if (ui::Checkbox("Учитывать в расчёте", &use))
             {

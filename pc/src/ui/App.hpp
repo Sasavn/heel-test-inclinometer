@@ -28,7 +28,7 @@
 namespace ui
 {
 
-inline constexpr const char* kAppVersion = "1.5";
+inline constexpr const char* kAppVersion = "1.5.1";
 
 enum class Page
 {
@@ -179,6 +179,10 @@ public:
     void ProcessSetRsGroupMode(bool on) { settings_.rsGroupMode = on; proc_.dirty = true; }
     void ProcessSetRsGroups(const std::vector<heel::RsGroup>& g);
     void ProcessSetRsMove(int step, int group, double arm);
+    // Знак датчика: true — обратный (ось +X — к левому борту); положения вручную (стенд): участки t0…t1, с
+    void ProcessSetSensorInvert(int key, bool inverted);
+    bool ProcessSensorInverted(int key) const { return proc_.invert.count(key) > 0; }
+    void ProcessSetPositionSpans(const std::vector<std::pair<double, double>>& spans);
     void ProcessSetRsManual(int number, int state);
     const heel::RsCase& ProcessRs() const { return proc_.rs; }
 
@@ -256,6 +260,8 @@ private:
     std::string ProcSummaryText() const;            // «Замеров: …, файлов: … (Д2 — Нос, …; формат)»
     std::string ProcRecordText() const;             // «Одна запись — весь опыт: файл (пост), …»
     void ProcRefreshLogNames();                     // строки журнала с постами — по текущим названиям
+    void ProcApplyInvert();                         // files = filesRaw с обратным знаком у обращённых датчиков
+    void ProcLoadInvert();
     // Свои методы (формулы, core/UserMethod.hpp)
     void ProcLoadMethods();
     void ProcSaveMethod(const um::Method& m);
@@ -429,7 +435,10 @@ private:
         char dir[1024] = {};                                  // папка с файлами замеров
         std::vector<std::string> picked;                      // выбранные файлы (пусто — все *.CSV папки)
         std::string outDir;                                   // папка прочитанных файлов — туда отчёт
-        std::shared_ptr<const std::vector<heel::File>> files; // прочитанные файлы
+        std::shared_ptr<const std::vector<heel::File>> files; // прочитанные файлы (обращённые датчики — с обратным знаком)
+        std::shared_ptr<const std::vector<heel::File>> filesRaw; // как прочитаны
+        std::set<int> invert;                                 // датчики с обратным знаком (ось +X — к ЛБ)
+        bool invertLoaded = false;
         std::vector<heel::Measurement> meas;
         heel::Summary sum;
         std::map<int, int> postOf;                            // датчик (heel::SensorKey) -> пост 0…3, -1 — не учитывать

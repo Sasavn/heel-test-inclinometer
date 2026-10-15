@@ -261,7 +261,7 @@ inline std::vector<xlsx::Sheet> BuildPositionsReport(const Settings& s, const st
                 Num(static_cast<double>(i + 1), 0), Text(p.use ? "да" : "нет"), Num(t0, 1), Num(t1, 1), Num(t1 - t0, 1),
                 Text(s.PostName(post)), Num(p.st[post].mean, 3), Num(p.st[post].sd, 3), Num(p.st[post].n, 0),
                 Num(p.Level(post), 3), Num(r.dTheta, 3),
-                r.reference ? xlsx::Empty() : Num(std::isfinite(p.arm) ? p.arm : s.L, mm ? 1 : 3),
+                r.reference ? (std::isfinite(p.arm) ? Num(p.arm, mm ? 1 : 3) : xlsx::Empty()) : Num(std::isfinite(p.arm) ? p.arm : s.L, mm ? 1 : 3),
                 std::isfinite(e.winT0) ? Text(detail::Num(e.winT0, 1) + "…" + detail::Num(e.winT1, 1)) : xlsx::Empty(),
                 r.counted ? Num(r.h, 3) : xlsx::Empty()};
             if (mm)

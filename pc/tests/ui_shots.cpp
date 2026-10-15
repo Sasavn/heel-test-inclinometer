@@ -870,6 +870,59 @@ int main(int argc, char** argv)
         app.ProcessSetSensorName(2, "Нос");
         app.ProcessSetSensorName(3, "Корма");
         st.Run(300);
+
+        // Опыт на модели отсека (M021): малое судно, два датчика, 9 положений (2 коротких — вручную), плечи от ДП;
+        // KRENOMER_M021_DIR — папка с исходными файлами (иначе — урезанная копия tests/data/m021)
+        {
+            const fs::path md = ShotsWorkDir() / L"Модель отсека";
+            fs::remove_all(md, ec);
+            fs::create_directories(md, ec);
+            fs::path mSrc = testutil::TestDataDir() / "m021";
+            if (const char* e = std::getenv("KRENOMER_M021_DIR"); e && *e)
+                mSrc = text::PathFromUtf8(e);
+            for (const auto& e : fs::directory_iterator(mSrc, ec))
+                if (e.path().extension() == ".CSV")
+                    fs::copy_file(e.path(), md / e.path().filename(), fs::copy_options::overwrite_existing, ec);
+            app.ProcessSetSmallShip(true);
+            app.ProcessOpen(text::PathToUtf8(md));
+            wait();
+            app.ProcessSetShip(53.5, 2.5);
+            CHECK(app.ProcessContinuous());
+            const std::vector<std::pair<double, double>> spans = {{5, 36},          {58.7, 71.2},  {88.9, 101.8},
+                                                                  {114.5, 125},     {133.2, 140.3}, {164.3, 211},
+                                                                  {226.3, 232.0},   {238.7, 259},   {269.6, 282.2}};
+            app.ProcessSetPositionSpans(spans);
+            const double armDp[9] = {-20, 45, 95, 145, 205, -55, -105, -155, -205};
+            for (int i = 0; i < 9; i++)
+                app.ProcessSetPositionArm(i, armDp[i]);
+            app.ProcessSelectPosition(4);
+            st.Run(7000);
+            const auto& rc = app.ProcessRs();
+            CHECK(rc.r.m.size() == 8 && rc.r.n == 8);
+            CHECK_NEAR(rc.r.hk, 0.0531, 0.001, "M021: h_k по табл. 6.5");
+            CHECK_RANGE(app.ProcessPositionsSummary().h, 0.045, 0.052, "M021: h от начального");
+            st.Shot("29_m021_positions", true);
+            app.ProcessSelectPosition(-1);
+            app.ProcessSetView(2);
+            st.Run(300);
+            st.Shot("29_m021_rules", true);
+            app.ProcessSetView(1);
+            st.Run(300);
+            st.Shot("29_m021_control", true);
+            app.ProcessSetView(0);
+            app.ProcessSaveReport();
+            st.Run(100);
+            wait();
+            for (const wchar_t* f : {L"Отчет_Кренование.xlsx", L"График_Д2.png", L"График_Д3.png", L"Положения_Д2.png",
+                                     L"График_контроля.png"})
+                if (fs::exists(md / f, ec))
+                    fs::copy_file(md / f, fs::path(g_out) / (L"29_m021_" + std::wstring(f)),
+                                  fs::copy_options::overwrite_existing, ec);
+            CHECK_MSG(fs::file_size(md / L"Отчет_Кренование.xlsx", ec) > 10000, "нет отчёта M021");
+            app.ProcessSetSmallShip(false);
+            app.ProcessSetShip(1500.0, 15.0);
+            st.Run(300);
+        }
     }
 
     SECTION("о программе");

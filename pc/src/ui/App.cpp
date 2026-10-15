@@ -16,7 +16,8 @@
 #ifdef KRENOMER_PROJECT_VERSION
 namespace
 {
-// kAppVersion («1.5») — начало версии из CMakeLists.txt (project VERSION 1.5.0): сведения о файле и окно — одно.
+// kAppVersion («1.5.1») — начало версии из CMakeLists.txt (project VERSION 1.5.1): сведения о файле и окно — одно.
+// 1.5.1: обратный знак датчика (ось +X — к левому борту), плечо начального положения от ДП; опыт на модели M021.
 constexpr bool VersionMatches(const char* project, const char* app)
 {
     while (*app)
