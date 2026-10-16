@@ -509,6 +509,7 @@ void App::SettingsAddrCard()
                           : !set_.addrOnlyOne ? "Подтвердите, что на шине только этот датчик"
                           : busy              ? "Идёт смена адреса…"
                                               : nullptr;
+        ImGui::SameLine(0, S(18)); // кнопка — в строку с подтверждением (страница помещается в 1280×800)
         if (Button("Сменить адрес…", BtnKind::Primary, ImVec2(0, 0), why != nullptr, why))
             ImGui::OpenPopup("Сменить адрес датчика?");
         if (ImGui::BeginPopupModal("Сменить адрес датчика?", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings))
@@ -528,7 +529,6 @@ void App::SettingsAddrCard()
         }
         if (set_.addrPhase == 1 || set_.addrPhase == 2)
         {
-            ImGui::SameLine(0, S(12));
             ImGui::AlignTextToFramePadding();
             static const char* spin[] = {"◐", "◓", "◑", "◒"};
             TextColored(pal.info, "%s смена адреса %d → %d…", spin[(link_->NowMs() / 150) % 4], set_.addrFrom, set_.addrTo);
@@ -559,6 +559,16 @@ void App::SettingsPcCard()
             settings_.darkTheme = theme == 1;
             themeChanged_ = true;
         }
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted("Интерфейс");
+        Hint("Компактный — для экранов HD ready (1280×720, 1366×768): меньше отступы, левая панель значками (☰ — "
+             "раскрыть), на «Обработке» графики — вкладками в одной карточке. «Авто» — компактный, если окно ниже "
+             "800 точек.");
+        ImGui::SameLine(S(150));
+        static const char* dl[] = {"Авто", "Обычный", "Компактный"};
+        static const int dv[] = {0, 1, 2};
+        if (Segmented("density", &settings_.uiDensity, dl, dv, 3))
+            SaveSettingsSoon();
         ImGui::AlignTextToFramePadding();
         ImGui::TextUnformatted("Углы каждые");
         Hint("Как часто прибор присылает углы для графиков (команда stream). Чаще — плавнее графики.");

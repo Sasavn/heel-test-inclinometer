@@ -77,6 +77,12 @@ void KpiIcon(ImVec2 p, float sz, const ImVec4& soft, const ImVec4& fg, const cha
 // до которой можно ставить подсказки в строке заголовка.
 float App::ProcCardTitle(const char* title, int card)
 {
+    if (cardFlat > 0) // внутри карточки с вкладками: название — на вкладке, «развернуть» — у карточки
+    {
+        ImGui::AlignTextToFramePadding();
+        ImGui::Dummy(ImVec2(0, ImGui::GetFrameHeight()));
+        return ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x - S(4);
+    }
     const ImVec2 start = ImGui::GetCursorScreenPos();
     const float right = ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x;
     const float bs = ImGui::GetFrameHeight();
@@ -199,7 +205,7 @@ void App::ProcKpis(float w)
     const bool dh = rc.dh != 0.0;
     const double hMain = byTable ? rc.r.hFinal : s.h - rc.dh;
     const double hOther = byTable ? s.h - rc.dh : rc.r.hFinal;
-    const float gap = S(12), h = S(52); // компактно: значок, число и подпись — в одну строку
+    const float gap = compactUi ? S(8) : S(12), h = compactUi ? S(46) : S(52); // значок, число и подпись — в строку
     const float cw = std::floor((w - 3 * gap) / 4);
     int bad = 0, known = 0;
     std::string badList;
@@ -349,6 +355,37 @@ void App::ProcTabsCard(float w, float h)
     EndCard();
 }
 
+// Компактный режим: «Запись с положениями» (или «Графики крена») и «Контроль M – tg θ» — вкладками в одной карточке,
+// чтобы графику доставалась вся высота.
+void App::ProcGraphsCard(float w, float h)
+{
+    if (BeginCard("##proc_graphs", ImVec2(w, h)))
+    {
+        const bool cont = ProcCont();
+        const char* labels[] = {cont ? "Запись с положениями" : "Графики крена", "Контроль M – tg θ"};
+        static const int values[] = {0, 1};
+        const float right = ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x;
+        const ImVec2 start = ImGui::GetCursorScreenPos();
+        const float bs = ImGui::GetFrameHeight();
+        ImGui::SetCursorScreenPos(ImVec2(right - bs, start.y + S(2)));
+        if (ExpandButton("##expandg", false))
+            proc_.expanded = proc_.gtab == 0 ? 1 : 2;
+        ImGui::SetCursorScreenPos(start);
+        Tabs("gtabs", &proc_.gtab, labels, values, 2, right - start.x - bs - S(10));
+        ImGui::Dummy(ImVec2(0, S(1)));
+        const ImVec2 avail = ImGui::GetContentRegionAvail();
+        cardFlat++;
+        if (proc_.gtab == 1)
+            ProcControlCard(avail.x, avail.y);
+        else if (cont)
+            ProcSeriesCard(avail.x, avail.y);
+        else
+            ProcPlots(avail.x, avail.y);
+        cardFlat--;
+    }
+    EndCard();
+}
+
 // Страница «Обработка».
 void App::PageProcess()
 {
@@ -372,7 +409,7 @@ void App::PageProcess()
     }
 
     const float W = ImGui::GetContentRegionAvail().x;
-    const float gap = S(12);
+    const float gap = compactUi ? S(8) : S(12);
     const float sp = ImGui::GetStyle().ItemSpacing.y;
     ProcHeader(W);
     ImGui::Dummy(ImVec2(0, gap - sp));
@@ -418,12 +455,17 @@ void App::PageProcess()
     const float topH = std::clamp(std::floor(rows * static_cast<float>(settings_.procSplit)), minH, std::max(minH, rows - minH));
     const float botH = std::max(minH, rows - topH);
     const float lw = std::floor((W - gap) * 0.6f);
-    if (cont)
-        ProcSeriesCard(lw, topH);
+    if (compactUi) // HD ready: графики — вкладками в одной карточке на всю ширину
+        ProcGraphsCard(W, topH);
     else
-        ProcPlots(lw, topH);
-    ImGui::SameLine(0, gap);
-    ProcControlCard(W - lw - gap, topH);
+    {
+        if (cont)
+            ProcSeriesCard(lw, topH);
+        else
+            ProcPlots(lw, topH);
+        ImGui::SameLine(0, gap);
+        ProcControlCard(W - lw - gap, topH);
+    }
     {
         // Делитель: полоса высотой в промежуток между карточками
         const ImVec2 p(ImGui::GetCursorScreenPos().x, ImGui::GetItemRectMax().y);

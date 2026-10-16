@@ -77,6 +77,8 @@ const unsigned char* g_tex = nullptr;
 int g_texW = 0, g_texH = 0;
 std::string g_out = "shots";
 std::string g_mockOut; // --mock-out: куда класть макеты (по умолчанию — туда же, куда снимки)
+std::string g_sizesOut; // --sizes-out: основные страницы при 1280×720, 1366×768, 1920×1080 (сюда же — sizes.txt)
+bool g_sizesStrict = false; // --sizes-strict: замечания раскладки этих размеров — ошибки
 int g_shots = 0;
 long long g_badIdx = 0;
 
@@ -220,6 +222,31 @@ struct Stand
                 CHECK_MSG(w->ScrollMax.y <= 0.5f, "%s: страница не помещается по высоте (%.0f px)", name, w->ScrollMax.y);
         }
         const std::string path = (fs::path(g_out) / (std::string(name) + ".png")).string();
+        Save(path, name);
+    }
+
+    // Замечания раскладки (без проверок): горизонтальная прокрутка, страница не помещается, — строкой.
+    std::string Survey()
+    {
+        app->Tick();
+        for (int i = 0; i < 6; i++)
+            Frame();
+        std::string out;
+        for (ImGuiWindow* w : GImGui->Windows)
+        {
+            if (!w->Active || w->Hidden)
+                continue;
+            const std::string wn = w->Name;
+            if (w->ScrollMax.x > 0.5f && wn.find("##termlog") == std::string::npos && wn.find("##fwlog") == std::string::npos)
+                out += "  гориз. прокрутка " + std::to_string(static_cast<int>(w->ScrollMax.x)) + " px: " + wn + "\n";
+            if (wn.find("/##page") != std::string::npos && wn.rfind('/') == wn.find("/##page") && w->ScrollMax.y > 0.5f)
+                out += "  страница длиннее окна на " + std::to_string(static_cast<int>(w->ScrollMax.y)) + " px\n";
+        }
+        return out;
+    }
+
+    void Save(const std::string& path, const char* name)
+    {
         const auto t0 = std::chrono::steady_clock::now();
         CHECK_MSG(Rasterize(path, ui::pal.bg), "не записан %s", path.c_str());
         const double s = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
@@ -342,6 +369,11 @@ int main(int argc, char** argv)
             g_out = argv[i + 1];
         else if (std::strcmp(argv[i], "--mock-out") == 0)
             g_mockOut = argv[i + 1];
+        else if (std::strcmp(argv[i], "--sizes-out") == 0)
+            g_sizesOut = argv[i + 1];
+    for (int i = 1; i < argc; i++)
+        if (std::strcmp(argv[i], "--sizes-strict") == 0)
+            g_sizesStrict = true;
     std::error_code ec;
     fs::create_directories(g_out, ec);
 
@@ -937,6 +969,65 @@ int main(int argc, char** argv)
             app.ProcessSetShip(1500.0, 15.0);
             st.Run(300);
         }
+    }
+
+    // Основные страницы при разных размерах окна (HD ready и Full HD): снимки и замечания раскладки
+    if (!g_sizesOut.empty())
+    {
+        SECTION("размеры окна: 1280×720, 1366×768, 1920×1080 — основные страницы");
+        fs::create_directories(g_sizesOut, ec);
+        // «Обработка» — на опыте M021 (модель, два датчика, 9 положений)
+        const fs::path md = ShotsWorkDir() / L"Модель отсека";
+        fs::remove_all(md, ec);
+        fs::create_directories(md, ec);
+        for (const auto& e : fs::directory_iterator(testutil::TestDataDir() / "m021", ec))
+            fs::copy_file(e.path(), md / e.path().filename(), fs::copy_options::overwrite_existing, ec);
+        app.ProcessSetSmallShip(true);
+        app.ProcessOpen(text::PathToUtf8(md));
+        for (int i = 0; i < 3000 && app.ProcessBusy(); i++)
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            st.Run(50);
+        }
+        app.ProcessSetShip(53.5, 2.5);
+        app.ProcessSetPositionSpans({{5, 36}, {58.7, 71.2}, {88.9, 101.8}, {114.5, 125}, {133.2, 140.3}, {164.3, 211},
+                                     {226.3, 232.0}, {238.7, 259}, {269.6, 282.2}});
+        const double armDp[9] = {-20, 45, 95, 145, 205, -55, -105, -155, -205};
+        for (int i = 0; i < 9; i++)
+            app.ProcessSetPositionArm(i, armDp[i]);
+        app.ProcessSelectPosition(4);
+        st.Run(7000);
+        std::string report;
+        struct Pg
+        {
+            ui::Page page;
+            const char* name;
+        };
+        const Pg pages[] = {{ui::Page::Measure, "measure"}, {ui::Page::Process, "process"}, {ui::Page::Settings, "settings"},
+                            {ui::Page::Diag, "diag"},       {ui::Page::Files, "files"},     {ui::Page::Firmware, "firmware"},
+                            {ui::Page::Terminal, "terminal"}};
+        const ImVec2 sizes[] = {{1280, 720}, {1366, 768}, {1920, 1080}};
+        const ImVec2 keep = st.size;
+        for (const ImVec2& sz : sizes)
+            for (const Pg& pg : pages)
+            {
+                st.size = sz;
+                app.SetPage(pg.page);
+                st.Run(300);
+                const std::string name =
+                    std::to_string(static_cast<int>(sz.x)) + "x" + std::to_string(static_cast<int>(sz.y)) + "_" + pg.name;
+                const std::string issues = st.Survey();
+                report += name + (issues.empty() ? ": ок\n" : ":\n" + issues);
+                if (g_sizesStrict)
+                    CHECK_MSG(issues.empty(), "%s:\n%s", name.c_str(), issues.c_str());
+                st.Save((fs::path(g_sizesOut) / (name + ".png")).string(), name.c_str());
+            }
+        st.size = keep;
+        std::ofstream(fs::path(g_sizesOut) / "sizes.txt", std::ios::binary) << report;
+        std::printf("%s", report.c_str());
+        app.ProcessSetSmallShip(false);
+        app.ProcessSetShip(1500.0, 15.0);
+        st.Run(300);
     }
 
     SECTION("о программе");

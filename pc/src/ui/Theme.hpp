@@ -120,6 +120,9 @@ inline Palette MakeDark()
 
 inline Palette pal = MakeLight();
 inline bool darkTheme = false;
+// Компактный режим (экраны HD ready, окно ниже ~800 точек): меньше отступы, левая панель — значками, на «Обработке»
+// графики — вкладками в одной карточке (App::Render решает по настройке «Интерфейс» и высоте окна).
+inline bool compactUi = false;
 inline float uiScale = 1.f;
 
 inline float S(float px)
@@ -145,16 +148,16 @@ inline void ApplyTheme(bool dark, float scale)
     style.GrabRounding = 5.f;
     style.TabRounding = 5.f;
     style.ScrollbarRounding = 8.f;
-    style.WindowPadding = {14, 12};
-    style.FramePadding = {12, 6};
-    style.ItemSpacing = {10, 8};
-    style.ItemInnerSpacing = {7, 6};
-    style.CellPadding = {8, 4};
+    style.WindowPadding = compactUi ? ImVec2(10, 8) : ImVec2(14, 12);
+    style.FramePadding = compactUi ? ImVec2(9, 4) : ImVec2(12, 6);
+    style.ItemSpacing = compactUi ? ImVec2(8, 5) : ImVec2(10, 8);
+    style.ItemInnerSpacing = compactUi ? ImVec2(6, 4) : ImVec2(7, 6);
+    style.CellPadding = compactUi ? ImVec2(6, 2) : ImVec2(8, 4);
     style.ChildBorderSize = 1.f;
     style.WindowBorderSize = 0.f;
     style.FrameBorderSize = 1.f;
     style.PopupBorderSize = 1.f;
-    style.ScrollbarSize = 16.f;
+    style.ScrollbarSize = compactUi ? 13.f : 16.f;
     style.GrabMinSize = 12.f;
     style.ScaleAllSizes(scale);
     uiScale = scale;

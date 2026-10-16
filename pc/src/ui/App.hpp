@@ -28,7 +28,7 @@
 namespace ui
 {
 
-inline constexpr const char* kAppVersion = "1.6";
+inline constexpr const char* kAppVersion = "1.6.1";
 
 enum class Page
 {
@@ -112,6 +112,9 @@ public:
             diag_.diagReq = link_->Send("diag", Origin::App, 4000);
     }
     void ShowDemoPanel(bool on) { demoPanel_ = on; }
+    // Интерфейс: 0 — авто, 1 — обычный, 2 — компактный (стенд и «Настройки»)
+    void SetUiDensity(int d) { settings_.uiDensity = d; }
+    void SetNavPinned(bool on) { navPinned_ = on; }
     // Запись на ПК (AppRecord.cpp)
     bool StartPcRecording();
     void StopPcRecording();
@@ -196,6 +199,7 @@ private:
     // Каркас
     void RenderTopBar(float h);
     void RenderSidebar(float w, float h);
+    void RenderNavRail(float w, float h); // компактный режим: левая панель значками
     void RenderPage();
     void RenderToasts();
     void RenderAbout();
@@ -291,6 +295,7 @@ private:
     void ProcKpis(float w);                                     // ряд карточек-показателей
     void ProcControlCard(float w, float h);                     // «Контроль M – tg θ»
     void ProcTabsCard(float w, float h);                        // положения / Правила РС / перемещения / журнал
+    void ProcGraphsCard(float w, float h);                      // компактный режим: запись и контроль — вкладками
     float ModeSwitchWidthPublic() const;
     void ProcMovesView(float w, float h);                       // группы крен-балласта и перемещения, табл. 6.5 полностью
     const std::vector<heel::RsGroup>& ProcGroups() const;       // группы (из настроек при первом обращении)
@@ -311,6 +316,7 @@ private:
     LinkSnapshot snap_;
     Page page_ = Page::Measure;
     bool navOpen_[3] = {true, true, true}; // группы левой панели: опыт, устройство, имитатор
+    bool navPinned_ = false;               // компактный режим: левая панель раскрыта (иначе — значками)
     std::vector<Toast> toasts_;
     bool themeChanged_ = false;
     bool aboutOpen_ = false;
@@ -494,6 +500,7 @@ private:
         bool rsLegacyLogged = false;      // в журнале уже сказано про плечи без знака
         // Дашборд
         int expanded = 0;                 // развёрнута карточка: 0 — нет, 1 — запись / графики, 2 — контроль, 3 — вкладки
+        int gtab = 0;                     // компактный режим: вкладка карточки графиков (0 — запись, 1 — контроль)
         int tab = 0;                      // вкладка нижней карточки: 0 — положения / замеры, 1 — Правила РС, 2 — перемещения, 3 — журнал
         bool paramsOpen = true;           // полная карточка параметров раскрыта
         bool paramsAuto = false;          // после первого чтения параметры свёрнуты в строку

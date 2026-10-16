@@ -189,7 +189,7 @@ void App::MeasureBanner(float w, float h)
         FontScope f(fontHuge);
         TextColored(fg, "%s", big.c_str());
     }
-    ImGui::PushTextWrapPos(0.f);
+    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - S(2)); // с запасом: без прокрутки вбок
     ImGui::PushStyleColor(ImGuiCol_Text, pal.textDim);
     ImGui::TextUnformatted(sub.c_str());
     ImGui::PopStyleColor();

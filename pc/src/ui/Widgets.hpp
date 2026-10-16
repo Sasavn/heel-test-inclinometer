@@ -127,7 +127,7 @@ inline bool BeginCard(const char* id, ImVec2 size = {0, 0}, const ImVec4* bg = n
     ImGui::PushStyleColor(ImGuiCol_ChildBg, flat ? ImVec4(0, 0, 0, 0) : bg ? *bg : pal.card);
     ImGui::PushStyleColor(ImGuiCol_Border, darkTheme ? pal.border : Mix(pal.border, pal.card, 0.25f));
     ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, S(10.f));
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, flat ? ImVec2(0, 0) : ImVec2(S(14), S(12)));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, flat ? ImVec2(0, 0) : compactUi ? ImVec2(S(10), S(8)) : ImVec2(S(14), S(12)));
     ImGuiChildFlags flags = (flat ? 0 : ImGuiChildFlags_Borders) | ImGuiChildFlags_AlwaysUseWindowPadding;
     if (size.y == 0)
         flags |= ImGuiChildFlags_AutoResizeY;
