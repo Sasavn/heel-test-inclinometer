@@ -902,6 +902,20 @@ int main(int argc, char** argv)
             CHECK_NEAR(rc.r.hk, 0.0531, 0.001, "M021: h_k по табл. 6.5");
             CHECK_RANGE(app.ProcessPositionsSummary().h, 0.045, 0.052, "M021: h от начального");
             st.Shot("29_m021_positions", true);
+            // Дашборд: тёмная тема, развёрнутая карточка записи (на всю область) и назад
+            ui::ApplyTheme(true, 1.f);
+            ImPlot::StyleColorsDark();
+            st.Shot("29_m021_dark", true);
+            ui::ApplyTheme(false, 1.f);
+            ImPlot::StyleColorsLight();
+            app.ProcessSetExpanded(1);
+            st.Run(300);
+            st.Shot("29_m021_expanded", true);
+            app.ProcessSetExpanded(0);
+            app.ProcessSetTab(1);
+            st.Run(300);
+            st.Shot("29_m021_tab_rules", true);
+            app.ProcessSetTab(0);
             app.ProcessSelectPosition(-1);
             app.ProcessSetView(2);
             st.Run(300);

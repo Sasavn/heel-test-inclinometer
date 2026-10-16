@@ -208,24 +208,37 @@ void App::MeasureTiles(float w, float h)
     const auto* smp = snap_.haveSample && Connected() ? &snap_.sample : nullptr;
     const bool compact = tw < S(285);
 
+    // Карточка-показатель: подпись, значение, справа — значок в квадрате с мягкой заливкой (как на дашборде)
     auto tile = [&](const char* id, const char* label, const std::string& value, const ImVec4& color,
-                    const std::string& tip) {
+                    const std::string& tip, const char* glyph, const ImVec4& soft, const ImVec4& fg) {
         ImGui::PushStyleColor(ImGuiCol_ChildBg, pal.card);
-        ImGui::PushStyleColor(ImGuiCol_Border, pal.border);
-        ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, S(8));
+        ImGui::PushStyleColor(ImGuiCol_Border, darkTheme ? pal.border : Mix(pal.border, pal.card, 0.25f));
+        ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, S(10));
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(S(12), S(6)));
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(S(6), S(1)));
         ImGui::BeginChild(id, ImVec2(tw, th), ImGuiChildFlags_Borders | ImGuiChildFlags_AlwaysUseWindowPadding,
                           ImGuiWindowFlags_NoScrollbar);
+        const float right = ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x;
+        const float isz = std::min(S(34), th - S(14));
+        {
+            ImDrawList* dl = ImGui::GetWindowDrawList();
+            const ImVec2 p(right - isz, ImGui::GetWindowPos().y + (th - isz) * 0.5f);
+            dl->AddRectFilled(p, ImVec2(p.x + isz, p.y + isz), U32(soft), S(7));
+            FontScope f(fontBold);
+            const ImVec2 ts = ImGui::CalcTextSize(glyph);
+            dl->AddText(ImVec2(p.x + (isz - ts.x) * 0.5f, p.y + (isz - ts.y) * 0.5f), U32(fg), glyph);
+        }
+        const float room = right - isz - S(8) - ImGui::GetCursorScreenPos().x;
         {
             FontScope f(fontSmall);
-            Muted("%s", label);
+            Muted("%s", FitText(label, room).c_str());
         }
         {
             FontScope f(fontBold);
-            TextColored(color, "%s", value.c_str());
+            TextColored(color, "%s", FitText(value, room).c_str());
         }
         ImGui::EndChild();
+        CardShadow(ImGui::GetWindowDrawList(), ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), S(10));
         if (!tip.empty() && ImGui::IsItemHovered())
             ImGui::SetTooltip("%s", tip.c_str());
         ImGui::PopStyleVar(3);
@@ -264,7 +277,8 @@ void App::MeasureTiles(float w, float h)
                 tip = "Запись включается тумблером на приборе.";
             }
         }
-        tile("##t_rec", "Запись замера", v, c, tip);
+        const bool rec = have && s.Recording();
+        tile("##t_rec", "Запись замера", v, c, tip, "●", rec ? pal.redSoft : pal.blueSoft, rec ? pal.err : pal.accent);
     }
     ImGui::SameLine(0, gap);
     // Карта
@@ -287,7 +301,7 @@ void App::MeasureTiles(float w, float h)
             }
         }
         tile("##t_sd", "Карта SD", v, c,
-             have && s.sdTotalMb ? "Ёмкость " + text::MegaBytes(s.sdTotalMb) : std::string());
+             have && s.sdTotalMb ? "Ёмкость " + text::MegaBytes(s.sdTotalMb) : std::string(), "▤", pal.greenSoft, pal.green);
     }
     ImGui::Dummy(ImVec2(0, gap - ImGui::GetStyle().ItemSpacing.y));
     // Питание
@@ -318,7 +332,8 @@ void App::MeasureTiles(float w, float h)
             v = Fmt("АКБ %.2f В", smp->batV);
             c = pal.text;
         }
-        tile("##t_bat", "Питание", v, c, tip);
+        tile("##t_bat", "Питание", v, c, tip, "⚡", have && s.batLow ? pal.redSoft : pal.orangeSoft,
+             have && s.batLow ? pal.err : pal.orange);
     }
     ImGui::SameLine(0, gap);
     // Опрос
@@ -335,7 +350,7 @@ void App::MeasureTiles(float w, float h)
             if (s.maxRate > 0)
                 tip += Fmt("\nПредел по шине: %.1f Гц", s.maxRate);
         }
-        tile("##t_rate", "Опрос датчиков", v, c, tip);
+        tile("##t_rate", "Опрос датчиков", v, c, tip, "↻", pal.blueSoft, pal.accent);
     }
     ImGui::EndGroup();
 }

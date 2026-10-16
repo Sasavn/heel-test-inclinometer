@@ -70,8 +70,10 @@ float ModeSwitchWidth()
            ImGui::CalcTextSize("Весь опыт одной записью").x + 4 * ImGui::GetStyle().FramePadding.x + S(2);
 }
 
+} // namespace
+
 // Подсказка в строке заголовка карточки (после последнего элемента), если помещается до x = limit; иначе — короткая,
-// иначе — никакой.
+// иначе — никакой. (Общая для карточек «Обработки», в том числе AppProcDash.cpp.)
 void HeaderHint(float limit, const std::string& full, const std::string& brief)
 {
     FontScope f(fontSmall);
@@ -87,6 +89,9 @@ void HeaderHint(float limit, const std::string& full, const std::string& brief)
         }
     }
 }
+
+namespace
+{
 
 } // namespace
 
@@ -746,86 +751,6 @@ void App::TickProcess()
 // Страница
 // ---------------------------------------------------------------------------------------------------------------
 
-void App::PageProcess()
-{
-    ProcMethodWindow(); // окно своих методов — поверх страницы
-    if (!proc_.opened)
-    {
-        proc_.opened = true;
-        if (!proc_.dir[0])
-            std::snprintf(proc_.dir, sizeof(proc_.dir), "%s",
-                          settings_.procDir.empty() ? files_.dir : settings_.procDir.c_str());
-        if (!proc_.files && !proc_.load.valid())
-            ProcLoad();
-    }
-    if (proc_.dirty && !proc_.load.valid())
-        ProcRecompute();
-
-    const float W = ImGui::GetContentRegionAvail().x;
-    const float gap = S(12);
-    const float sp = ImGui::GetStyle().ItemSpacing.y;
-    ProcParams(W);
-    ImGui::Dummy(ImVec2(0, gap - sp));
-
-    const float rowH = ImGui::GetFontSize() + S(4) + 2 * S(3);
-    // Правила РС (график контроля, проверка) — карточка раскрывается на всю высоту: таблица и итог — в ней же
-    if (proc_.view != 0)
-    {
-        ProcResultStrip(W); // h обоими расчётами, итог проверки, отчёт
-        ImGui::Dummy(ImVec2(0, gap - sp));
-        const float h = std::max(S(320), ImGui::GetContentRegionAvail().y);
-        if (ProcCont())
-            ProcSeriesCard(W, h);
-        else
-            ProcPlots(W, h);
-        return;
-    }
-    if (ProcCont())
-    {
-        // Одна запись — весь опыт: положения и итог, ниже — вся запись с положениями
-        const float tableH = S(34) + S(28) + rowH * static_cast<float>(std::max<std::size_t>(proc_.pos.size(), 4));
-        const bool narrow = W < S(960);
-        if (narrow)
-        {
-            ProcPositions(W, std::max(S(200), tableH));
-            ImGui::Dummy(ImVec2(0, gap - sp));
-            ProcResult(W, S(250));
-        }
-        else
-        {
-            const float avail = ImGui::GetContentRegionAvail().y;
-            const float h = std::clamp(tableH, S(200), std::max(S(200), avail - S(250) - gap - sp));
-            const float tw = std::floor(W * 0.68f);
-            ProcPositions(tw, h);
-            ImGui::SameLine(0, gap);
-            ProcResult(W - tw - gap, h);
-        }
-        ImGui::Dummy(ImVec2(0, gap - sp));
-        ProcSeriesCard(W, std::max(S(250), ImGui::GetContentRegionAvail().y));
-        return;
-    }
-
-    // Таблица и итог: высота — по числу замеров (лишние прокручиваются), графикам — не меньше 270
-    const float tableH = S(22) + S(28) + rowH * static_cast<float>(std::max<std::size_t>(proc_.meas.size(), 4));
-    const bool narrow = W < S(960);
-    if (narrow)
-    {
-        ProcTable(W, std::max(S(180), tableH));
-        ImGui::Dummy(ImVec2(0, gap - sp));
-        ProcResult(W, S(250));
-    }
-    else
-    {
-        const float avail = ImGui::GetContentRegionAvail().y;
-        const float h = std::clamp(tableH, S(170), std::max(S(170), avail - S(255) - gap - sp));
-        const float tw = std::floor(W * 0.64f);
-        ProcTable(tw, h);
-        ImGui::SameLine(0, gap);
-        ProcResult(W - tw - gap, h);
-    }
-    ImGui::Dummy(ImVec2(0, gap - sp));
-    ProcPlots(W, std::max(S(255), ImGui::GetContentRegionAvail().y));
-}
 
 void App::ProcParams(float w)
 {
@@ -1262,195 +1187,6 @@ void App::ProcTable(float w, float h)
     EndCard();
 }
 
-void App::ProcResult(float w, float h)
-{
-    if (BeginCard("##proc_res", ImVec2(w, h)))
-    {
-        const bool cont = ProcCont();
-        const auto& s = cont ? proc_.posSum : proc_.sum;
-        {
-            FontScope f(fontSmall);
-            Muted("Метацентрическая высота h");
-        }
-        if (cont)
-            Hint("Одна запись — весь опыт. Положение 1 (первое учтённое) — начальное: его крен — ноль. Для каждого "
-                 "следующего положения Δθ = крен положения − крен начального, l — плечо переноса груза от начального "
-                 "положения; h = P·l / (D·tg|Δθ|); |Δθ| не больше порога — не учитывается; итог — среднее.\n\n"
-                 "По МНК — наклон k прямой tg Δθ = k·(P·l/D) + b по тем же точкам, h = 1/k.\n\n"
-                 "По табл. 6.5 Правил РС — h_i = ΔM / (D·Δθ) по приращениям момента и крена между соседними "
-                 "положениями, h_k — среднее, оценка качества — п. 6.6 (вид «Правила РС»). Какой расчёт основной (крупно) "
-                 "— выбирается там же.");
-        else
-            Hint("h = P·l / (D·tg|θ|) по каждому замеру и посту (θ — средний крен за окно, l — плечо замера); "
-                 "|θ| не больше порога — не учитывается; итог — среднее по всем учтённым значениям.\n\n"
-                 "По МНК — наклон k прямой tg θ = k·(P·l/D) + b по тем же точкам, h = 1/k (свободный член b "
-                 "учитывает начальный крен).\n\nФормулы — как в исходной программе обработки (BWM427_Analyzer).\n\n"
-                 "По табл. 6.5 Правил РС — h_i = ΔM / (D·Δθ) по приращениям момента и крена между соседними замерами "
-                 "(по номеру), h_k — среднее, оценка качества — п. 6.6 (вид «Правила РС»). Какой расчёт основной "
-                 "(крупно) — выбирается там же.");
-        const heel::RsCase& rc = proc_.rs;
-        const bool byTable = ProcSettings().RsMain() == 1; // основной расчёт — по табл. 6.5
-        const double hMain = byTable ? rc.r.hFinal : s.h - rc.dh; // с поправкой на свободные поверхности
-        {
-            FontScope f(fontHuge);
-            if (std::isfinite(hMain))
-                TextColored(pal.text, "%.3f м", hMain);
-            else
-                Muted("—");
-        }
-        if (std::isfinite(hMain) && rc.dh != 0.0)
-        {
-            ImGui::SameLine(0, S(10));
-            TextColored(pal.warn, "испр. (−Δh %.3f)", rc.dh);
-            if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("Исправленная h: с поправкой на свободные поверхности Δh (вид «Правила РС»)");
-        }
-        if (std::isfinite(hMain) && settings_.heelSmall)
-        {
-            ImGui::SameLine(0, S(10));
-            FontScope fb(fontBold);
-            Muted("= %.1f мм", hMain * 1000.0);
-        }
-        {
-            FontScope f(fontSmall);
-            if (byTable)
-            {
-                const std::string line =
-                    rc.r.n ? Fmt("по табл. 6.5: h_k по %d %s%s", rc.r.n,
-                                 text::Plural(static_cast<std::uint64_t>(rc.r.n), "замеру", "замерам", "замерам"),
-                                 rc.r.reduced ? " минус вероятная ошибка (6.6.5)" : "")
-                           : std::string("по табл. 6.5: ") + (rc.r.note.empty() ? "нет замеров" : rc.r.note);
-                ImGui::PushStyleColor(ImGuiCol_Text, rc.r.reduced ? pal.warn : pal.muted);
-                ImGui::PushTextWrapPos(0.f);
-                ImGui::TextUnformatted(line.c_str());
-                ImGui::PopTextWrapPos();
-                ImGui::PopStyleColor();
-            }
-            else if (s.n)
-            {
-                // Перенос по ширине: карточка итога в режиме записи уже
-                const std::string line =
-                    Fmt("среднее по %d %s (%d %s)%s", s.n,
-                        text::Plural(static_cast<std::uint64_t>(s.n), "значению", "значениям", "значениям"), s.measurements,
-                        cont ? text::Plural(static_cast<std::uint64_t>(s.measurements), "положение", "положения", "положений")
-                             : text::Plural(static_cast<std::uint64_t>(s.measurements), "замер", "замера", "замеров"),
-                        std::isfinite(s.sd) ? Fmt(" · СКО %.3f м", s.sd).c_str() : "");
-                ImGui::PushStyleColor(ImGuiCol_Text, pal.muted);
-                ImGui::PushTextWrapPos(0.f);
-                ImGui::TextUnformatted(line.c_str());
-                ImGui::PopTextWrapPos();
-                ImGui::PopStyleColor();
-            }
-            else if (cont)
-                Muted("%s", proc_.pos.size() < 2 ? "нужно два положения и больше" : "нет учтённых значений (Δθ меньше порога?)");
-            else
-                Muted("%s", proc_.meas.empty() ? "нет замеров" : "нет учтённых значений (крен меньше порога?)");
-        }
-        ImGui::Spacing();
-        {
-            FontScope f(fontBold);
-            if (std::isfinite(s.ls.h))
-                ImGui::Text(settings_.heelSmall ? "По МНК: %.3f м (%.1f мм)" : "По МНК: %.3f м", s.ls.h, s.ls.h * 1000.0);
-            else
-                Muted("По МНК: —");
-        }
-        {
-            FontScope f(fontSmall);
-            if (std::isfinite(s.ls.k))
-            {
-                if (s.ls.throughOrigin)
-                    Muted("%d %s, прямая через ноль (одно плечо)", s.ls.n,
-                          text::Plural(static_cast<std::uint64_t>(s.ls.n), "точка", "точки", "точек"));
-                else
-                    Muted("%d %s · R² %.4f · нач. крен %s", s.ls.n,
-                          text::Plural(static_cast<std::uint64_t>(s.ls.n), "точка", "точки", "точек"), s.ls.r2,
-                          Deg(std::atan(s.ls.b) * 180.0 / heel::kPi).c_str());
-            }
-            else
-                Muted(" ");
-        }
-        // Второй расчёт h — рядом (руководитель: показывать оба), и итог проверки по Правилам РС
-        {
-            FontScope f(fontBold);
-            if (byTable)
-            {
-                if (std::isfinite(s.h))
-                    ImGui::Text("От начального: %.3f м", s.h);
-                else
-                    Muted("От начального: —");
-            }
-            else if (std::isfinite(rc.r.hk))
-            {
-                if (rc.r.reduced && std::isfinite(rc.r.hFinal))
-                    ImGui::Text("По табл. 6.5: %.3f м → %.3f", rc.r.hk, rc.r.hFinal);
-                else
-                    ImGui::Text("По табл. 6.5: %.3f м", rc.r.hk);
-            }
-            else
-                Muted("По табл. 6.5: —");
-            if (ImGui::IsItemHovered())
-                ImGui::SetTooltip(byTable ? "Среднее h по точкам: крен от начального положения (как в старой программе)"
-                                          : "h_k по приращениям момента и крена между соседними положениями (табл. 6.5 "
-                                            "прил. 3 Правил РС);\nстрелка — итог по 6.6.5 (h_k минус вероятная ошибка), "
-                                            "если условия 6.6 не выполнены");
-        }
-        {
-            FontScope f(fontSmall);
-            int st = -1;
-            const std::string line = ProcRsStatus(&st);
-            ImGui::PushStyleColor(ImGuiCol_Text, st > 0 ? pal.ok : st == 0 ? pal.err : pal.muted);
-            ImGui::PushTextWrapPos(0.f);
-            ImGui::TextUnformatted(line.c_str());
-            ImGui::PopTextWrapPos();
-            ImGui::PopStyleColor();
-            if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("Подробно — вид «Правила РС» в карточке графиков");
-            if (ImGui::IsItemClicked())
-                proc_.view = 2;
-        }
-        ImGui::Spacing();
-        ProcSaveButtons(std::floor((ImGui::GetContentRegionAvail().x - S(8)) * 0.55f), -FLT_MIN);
-
-        // Журнал (коротко)
-        ImGui::Spacing();
-        const float lh = std::max(S(40), ImGui::GetContentRegionAvail().y);
-        ImGui::PushStyleColor(ImGuiCol_ChildBg, pal.cardAlt);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(S(8), S(4)));
-        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(S(6), S(1)));
-        ImGui::BeginChild("##proclog", ImVec2(0, lh), ImGuiChildFlags_AlwaysUseWindowPadding);
-        ProcLogLines();
-        ImGui::EndChild();
-        ImGui::PopStyleVar(2);
-        ImGui::PopStyleColor();
-    }
-    EndCard();
-}
-
-// «Сохранить отчёт» и «Открыть папку» (карточка h и полоса итога видов Правил РС); openW < 0 — до края.
-void App::ProcSaveButtons(float saveW, float openW)
-{
-    const bool cont = ProcCont();
-    const bool saving = proc_.save.valid() || proc_.saveRequested;
-    const bool canSave = proc_.files && !proc_.meas.empty() && !proc_.load.valid() && (!cont || !proc_.pos.empty());
-    {
-        const float bw = saveW;
-        if (Button(saving ? "Сохранение…" : "Сохранить отчёт", BtnKind::Primary, ImVec2(bw, 0), saving || !canSave,
-                   saving ? "Отчёт сохраняется" : cont ? "Нет положений" : "Нет замеров"))
-            ProcessSaveReport();
-        if (ImGui::IsItemHovered() && !saving && canSave)
-            ImGui::SetTooltip(cont ? "В папку с файлами: %s (листы «Положения», «Проверки» (Правила РС), «Сырые_данные»,\n"
-                                     "при нескольких постах — «Сравнение постов»), картинки по постам: График_<пост>.png,\n"
-                                     "Положения_<пост>.png и график контроля %s"
-                                   : "В папку с файлами: %s (листы «Результаты», «Проверки» (Правила РС), «Сырые_данные»,\n"
-                                     "при нескольких постах — «Сравнение постов»), картинки по постам: График_<пост>.png\n"
-                                     "и график контроля %s",
-                              heel::kReportName, heel::kControlPlotName);
-        ImGui::SameLine(0, S(8));
-        if (Button("Открыть папку", BtnKind::Normal, ImVec2(openW, 0), proc_.outDir.empty() && !proc_.dir[0]))
-            dialogs::OpenFolder(proc_.outDir.empty() ? std::string(proc_.dir) : proc_.outDir);
-    }
-}
-
 // Строки журнала (внутри дочернего окна).
 void App::ProcLogLines()
 {
@@ -1485,49 +1221,36 @@ void App::ProcPlots(float w, float h)
 {
     if (BeginCard("##proc_plots", ImVec2(w, h)))
     {
-        ImGui::AlignTextToFramePadding();
-        ProcViewSwitch();
-        if (proc_.view == 0)
+        const float right = ProcCardTitle("Графики крена", 1);
+        const std::vector<int> used = PostsInUse();
+        if (!used.empty())
         {
             ImGui::SameLine(0, S(14));
-            const std::vector<int> used = PostsInUse();
             std::vector<std::string> labels;
             std::vector<const char*> lp;
             for (const int p : used)
                 labels.push_back(PostTitle(p));
             for (const auto& l : labels)
                 lp.push_back(l.c_str());
-            if (!used.empty())
-            {
-                if (std::find(used.begin(), used.end(), proc_.show) == used.end())
-                    proc_.show = used.front();
-                Segmented("post", &proc_.show, lp.data(), used.data(), static_cast<int>(used.size()));
-            }
+            if (std::find(used.begin(), used.end(), proc_.show) == used.end())
+                proc_.show = used.front();
+            Segmented("post", &proc_.show, lp.data(), used.data(), static_cast<int>(used.size()));
         }
-        const float right = ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x;
-        if (proc_.view == 0)
-            HeaderHint(right - ModeSwitchWidth() - S(16),
-                       Fmt("ось %s · пунктир — среднее за последние %.0f с · легенда — средний крен замера",
-                           settings_.heelAxis == 0 ? "X" : "Y", settings_.heelWinS),
-                       Fmt("ось %s · пунктир — среднее за %.0f с", settings_.heelAxis == 0 ? "X" : "Y", settings_.heelWinS));
-        else if (proc_.view == 1)
-            HeaderHint(right - ModeSwitchWidth() - S(16),
-                       "п. 5.5 прил. 3 · точки — замеры, красная — исключённый, прямая — МНК", "п. 5.5 прил. 3");
-        ProcModeSwitch(right);
+        HeaderHint(right, Fmt("ось %s · пунктир — среднее за последние %.0f с · легенда — средний крен замера",
+                              settings_.heelAxis == 0 ? "X" : "Y", settings_.heelWinS),
+                   Fmt("ось %s · пунктир — среднее за %.0f с", settings_.heelAxis == 0 ? "X" : "Y", settings_.heelWinS));
         const ImVec2 avail = ImGui::GetContentRegionAvail();
-        if (proc_.view == 1)
-            ProcControlPlot(avail.x, avail.y, false);
-        else if (proc_.view == 3)
-            ProcMovesView(avail.x, avail.y);
-        else if (proc_.view == 2)
-            ProcRsView(avail.x, avail.y);
-        else
-            ProcPanes(proc_.show, avail.x, avail.y, false, false);
+        ProcPanes(proc_.show, avail.x, avail.y, false, false);
     }
     EndCard();
 }
 
 // Переключатель режима справа в строке заголовка карточки графиков: right — правый край (ширина — ModeSwitchWidth).
+float App::ModeSwitchWidthPublic() const
+{
+    return ModeSwitchWidth();
+}
+
 void App::ProcModeSwitch(float right)
 {
     static const char* modes[] = {"Файл = замер", "Весь опыт одной записью"};
@@ -2039,54 +1762,33 @@ void App::ProcSeriesCard(float w, float h)
 {
     if (BeginCard("##proc_series", ImVec2(w, h)))
     {
-        ImGui::AlignTextToFramePadding();
-        ProcViewSwitch();
+        const float right = ProcCardTitle("Запись с положениями", 1);
         const int post = ProcShownPost();
-        if (proc_.view == 0)
-        {
-            const std::vector<int> used = PostsInUse();
-            if (used.size() > 1)
-            {
-                ImGui::SameLine(0, S(14));
-                std::vector<std::string> labels;
-                std::vector<const char*> lp;
-                for (const int p : used)
-                    labels.push_back(PostTitle(p));
-                for (const auto& l : labels)
-                    lp.push_back(l.c_str());
-                int show = post;
-                if (Segmented("spost", &show, lp.data(), used.data(), static_cast<int>(used.size())))
-                    proc_.show = show;
-            }
-        }
-        if (proc_.view == 0)
+        const std::vector<int> used = PostsInUse();
+        if (used.size() > 1)
         {
             ImGui::SameLine(0, S(14));
-            ProcFilterButton();
+            std::vector<std::string> labels;
+            std::vector<const char*> lp;
+            for (const int p : used)
+                labels.push_back(SensorTitleOfPost(p));
+            for (const auto& l : labels)
+                lp.push_back(l.c_str());
+            int show = post;
+            if (Segmented("spost", &show, lp.data(), used.data(), static_cast<int>(used.size())))
+                proc_.show = show;
         }
-        const float right = ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x;
-        if (proc_.view == 0)
-            HeaderHint(right - ModeSwitchWidth() - S(16),
-                       Fmt("ось %s · щелчок по положению — выбрать (крупно справа), границы перетаскиваются",
-                           settings_.heelAxis == 0 ? "X" : "Y"),
-                       Fmt("ось %s", settings_.heelAxis == 0 ? "X" : "Y"));
-        else if (proc_.view == 1)
-            HeaderHint(right - ModeSwitchWidth() - S(16),
-                       "п. 5.5 прил. 3 · точки — положения груза, красная — конец исключённого замера, прямая — МНК",
-                       "п. 5.5 прил. 3");
-        ProcModeSwitch(right);
+        ImGui::SameLine(0, S(10));
+        ProcFilterButton();
+        HeaderHint(right, Fmt("ось %s · щелчок по положению — выбрать (крупно справа), границы перетаскиваются",
+                              settings_.heelAxis == 0 ? "X" : "Y"),
+                   Fmt("ось %s", settings_.heelAxis == 0 ? "X" : "Y"));
         const ImVec2 avail = ImGui::GetContentRegionAvail();
-        if (proc_.view == 1)
-            ProcControlPlot(avail.x, avail.y, false);
-        else if (proc_.view == 3)
-            ProcMovesView(avail.x, avail.y);
-        else if (proc_.view == 2)
-            ProcRsView(avail.x, avail.y);
-        else if (proc_.sel >= 0 && proc_.sel < static_cast<int>(proc_.pos.size()))
+        if (proc_.sel >= 0 && proc_.sel < static_cast<int>(proc_.pos.size()))
         {
             // Выбрано положение: слева вся запись, справа — положение крупно (исходный, обработанный, среднее)
             const float gap = S(12);
-            const float lw = std::floor((avail.x - gap) * 0.42f);
+            const float lw = std::floor((avail.x - gap) * (proc_.expanded == 1 ? 0.6f : 0.5f));
             ProcSeriesPlot(post, lw, avail.y, false);
             ImGui::SameLine(0, gap);
             ProcPositionPlot(post, proc_.sel, avail.x - lw - gap, avail.y, false);
@@ -2277,7 +1979,7 @@ void App::ProcFilterButton()
     // Подпись по месту в строке заголовка (до переключателя режима): полная, короче или только метод
     std::string label = std::string("Обработка: ") + filt::MethodName(m) + " ▼";
     {
-        const float room = ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x - ModeSwitchWidth() - S(24) -
+        const float room = ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x - ImGui::GetFrameHeight() - S(24) -
                            ImGui::GetCursorScreenPos().x;
         auto width = [](const std::string& t) { return ImGui::CalcTextSize(t.c_str()).x + 2 * ImGui::GetStyle().FramePadding.x; };
         if (width(label) > room)

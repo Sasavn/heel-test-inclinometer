@@ -16,7 +16,9 @@
 #ifdef KRENOMER_PROJECT_VERSION
 namespace
 {
-// kAppVersion («1.5.2») — начало версии из CMakeLists.txt (project VERSION 1.5.2): сведения о файле и окно — одно.
+// kAppVersion («1.6») — начало версии из CMakeLists.txt (project VERSION 1.6.0): сведения о файле и окно — одно.
+// 1.6: новый вид — дашборд (тёмно-синие панель и шапка, карточки, вкладки; «Обработка»: показатели, графики,
+// вкладки, «развернуть», делитель).
 // 1.5.2: отчёт в печатной форме (лист «Протокол», картинки в книге, единая сетка, печать A4; сырые данные — не в печать).
 // 1.5.1: обратный знак датчика (ось +X — к левому борту), плечо начального положения от ДП; опыт на модели M021.
 constexpr bool VersionMatches(const char* project, const char* app)
@@ -235,39 +237,53 @@ void App::Render()
 
 void App::RenderTopBar(float h)
 {
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, pal.panel);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(S(16), 0));
+    // Шапка — тёмно-синяя, как левая панель (одна «рамка» вокруг светлой рабочей области)
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, pal.nav);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(S(18), 0));
     ImGui::BeginChild("##top", ImVec2(0, h), ImGuiChildFlags_AlwaysUseWindowPadding,
                       ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
-    ImDrawList* dl = ImGui::GetWindowDrawList();
-    const ImVec2 wp = ImGui::GetWindowPos();
     const float W = ImGui::GetWindowWidth();
-    dl->AddLine(ImVec2(wp.x, wp.y + h - 1), ImVec2(wp.x + W, wp.y + h - 1), U32(pal.border));
+    {
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        const ImVec2 wp = ImGui::GetWindowPos();
+        dl->AddLine(ImVec2(wp.x, wp.y + h - 1), ImVec2(wp.x + W, wp.y + h - 1), U32(pal.navLine));
+    }
 
-    // Название
+    // Название: значок и две строки
     const float fh = ImGui::GetFrameHeight();
+    {
+        const ImVec2 p = ImGui::GetCursorScreenPos();
+        const float sz = S(30);
+        const float y0 = ImGui::GetWindowPos().y + (h - sz) * 0.5f;
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        dl->AddRectFilled(ImVec2(p.x, y0), ImVec2(p.x + sz, y0 + sz), U32(pal.orange), S(7));
+        // уровень и «крен» — наклонная черта на горизонте
+        dl->AddLine(ImVec2(p.x + S(7), y0 + S(19)), ImVec2(p.x + sz - S(7), y0 + S(19)), U32(ImVec4(1, 1, 1, 0.55f)), S(2));
+        dl->AddLine(ImVec2(p.x + S(8), y0 + S(22)), ImVec2(p.x + sz - S(8), y0 + S(10)), U32(ImVec4(1, 1, 1, 1)), S(2.4f));
+        ImGui::SetCursorScreenPos(ImVec2(p.x + sz + S(12), p.y));
+    }
     ImGui::SetCursorPosY((h - fontH2->FontSize - fontSmall->FontSize - S(2)) * 0.5f);
     ImGui::BeginGroup();
     {
         FontScope f(fontH2);
-        ImGui::TextUnformatted("Регистратор крена");
+        TextColored(pal.navText, "Регистратор крена");
     }
     {
         FontScope f(fontSmall);
-        Muted("программа для ПК %s", kAppVersion);
+        TextColored(pal.navMuted, "программа для ПК %s", kAppVersion);
     }
     ImGui::EndGroup();
 
     // Справа: порт, подключение, демо (на узком окне уже)
     const bool narrow = W < S(1180);
     const float demoW = narrow ? S(136) : S(150), connW = narrow ? S(116) : S(128), portW = narrow ? S(180) : S(230);
-    const float rightX = W - S(16) - demoW - connW - portW - 2 * S(8);
+    const float rightX = W - S(18) - demoW - connW - portW - 2 * S(8);
 
     // Состояние связи: полный текст, а если не влезает до кнопок — короткий
     ImGui::SameLine(0, S(28));
     ImGui::SetCursorPosY((h - fh) * 0.5f);
     std::string chip, chipShort;
-    ImVec4 fg = pal.muted, bg = pal.button;
+    ImVec4 fg = pal.navText, bg = pal.navFrame;
     if (updater_.Busy())
     {
         chip = "Обновление прошивки…";
@@ -320,6 +336,14 @@ void App::RenderTopBar(float h)
 
     ImGui::SetCursorPos(ImVec2(rightX, (h - fh) * 0.5f));
     ImGui::SetNextItemWidth(portW);
+    // Поле порта на синем: полупрозрачная светлая заливка, светлый текст
+    ImGui::PushStyleColor(ImGuiCol_FrameBg, pal.navFrame);
+    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, Alpha(pal.navText, 0.16f));
+    ImGui::PushStyleColor(ImGuiCol_Button, pal.navFrame);
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, Alpha(pal.navText, 0.16f));
+    ImGui::PushStyleColor(ImGuiCol_Border, pal.navLine);
+    ImGui::PushStyleColor(ImGuiCol_Text, pal.navText);
+    ImGui::PushStyleColor(ImGuiCol_TextDisabled, pal.navMuted);
     if (snap_.demo)
     {
         ImGui::BeginDisabled();
@@ -327,12 +351,15 @@ void App::RenderTopBar(float h)
         int z = 0;
         ImGui::Combo("##port", &z, items, 1);
         ImGui::EndDisabled();
+        ImGui::PopStyleColor(7);
     }
     else
     {
         std::string preview = settings_.port.empty() ? (narrow ? "Порт: авто" : "Порт: автоматически")
                                                      : "Порт: " + settings_.port;
-        if (ImGui::BeginCombo("##port", preview.c_str()))
+        const bool open = ImGui::BeginCombo("##port", preview.c_str());
+        ImGui::PopStyleColor(7);
+        if (open)
         {
             if (ImGui::Selectable("Автоматически (VID:PID 0483:5740)", settings_.port.empty()))
             {
@@ -364,7 +391,7 @@ void App::RenderTopBar(float h)
     if (Button(off ? "Подключить" : "Отключить", BtnKind::Normal, ImVec2(connW, 0), busy, busyWhy))
         link_->SetEnabled(off);
     ImGui::SameLine(0, S(8));
-    if (Button(snap_.demo ? "Выйти из демо" : "Демо-режим", snap_.demo ? BtnKind::Primary : BtnKind::Normal,
+    if (Button(snap_.demo ? "Выйти из демо" : "Демо-режим", snap_.demo ? BtnKind::Warn : BtnKind::Normal,
                ImVec2(demoW, 0), busy, busyWhy))
         StartDemo(!snap_.demo);
     if (ImGui::IsItemHovered() && !snap_.demo)
@@ -375,121 +402,176 @@ void App::RenderTopBar(float h)
     ImGui::PopStyleColor();
 }
 
+// Левая панель: тёмно-синяя, пункты — группами с заголовками капсом (раскрываются / сворачиваются): «Опыт
+// кренования» (Измерение, Обработка) — первой, «Устройство» (Настройки, Диагностика, Файлы, Прошивка, Терминал);
+// в демо-режиме — блок «Имитатор» (пульт); внизу — связь, часы, версия и «О программе».
 void App::RenderSidebar(float w, float h)
 {
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, pal.panel);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(S(10), S(12)));
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, pal.nav);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(S(10), S(10)));
     ImGui::BeginChild("##nav", ImVec2(w, h), ImGuiChildFlags_AlwaysUseWindowPadding, ImGuiWindowFlags_NoScrollbar);
-    {
-        ImDrawList* dl = ImGui::GetWindowDrawList();
-        const ImVec2 wp = ImGui::GetWindowPos();
-        dl->AddLine(ImVec2(wp.x + w - 1, wp.y), ImVec2(wp.x + w - 1, wp.y + h), U32(pal.border));
-    }
     struct Item
     {
         Page page;
         const char* icon;
         const char* label;
     };
-    static const Item items[] = {
-        {Page::Measure, "◉", "Измерение"},     {Page::Diag, "⚡", "Диагностика"},
-        {Page::Settings, "⚙", "Настройки"},    {Page::Files, "▤", "Файлы на карте"},
-        {Page::Process, "∑", "Обработка"},
-        {Page::Firmware, "⇪", "Прошивка"},     {Page::Terminal, "⌨", "Терминал"},
-    };
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, S(4)));
-    for (const auto& it : items)
+    struct Group
     {
-        const bool sel = page_ == it.page;
+        const char* title;
+        std::vector<Item> items;
+    };
+    static const Group groups[] = {
+        {"ОПЫТ КРЕНОВАНИЯ", {{Page::Measure, "◉", "Измерение"}, {Page::Process, "∑", "Обработка"}}},
+        {"УСТРОЙСТВО",
+         {{Page::Settings, "⚙", "Настройки"},
+          {Page::Diag, "⚡", "Диагностика"},
+          {Page::Files, "▤", "Файлы на карте"},
+          {Page::Firmware, "⇪", "Прошивка"},
+          {Page::Terminal, "⌨", "Терминал"}}},
+    };
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const float iw = ImGui::GetContentRegionAvail().x;
+    // Заголовок группы: капсом, мелко, ▾ / ▸ справа; щелчок — свернуть / раскрыть
+    auto header = [&](const char* title, bool& open, int id) {
         const ImVec2 p = ImGui::GetCursorScreenPos();
-        const float iw = ImGui::GetContentRegionAvail().x, ih = S(40);
-        ImGui::PushID(static_cast<int>(it.page));
-        if (ImGui::InvisibleButton("##nav", ImVec2(iw, ih)))
-            page_ = it.page;
+        const float hh = S(28);
+        ImGui::PushID(id);
+        if (ImGui::InvisibleButton("##grp", ImVec2(iw, hh)))
+            open = !open;
         const bool hov = ImGui::IsItemHovered();
         ImGui::PopID();
-        ImDrawList* dl = ImGui::GetWindowDrawList();
-        if (sel || hov)
-            dl->AddRectFilled(p, ImVec2(p.x + iw, p.y + ih), U32(sel ? pal.navSel : pal.navHover), S(6));
-        const ImU32 tc = U32(sel ? pal.accentText : pal.text);
-        const float ty = p.y + (ih - fontBold->FontSize) * 0.5f;
-        dl->AddText(fontBold, fontBold->FontSize, ImVec2(p.x + S(12), ty), tc, it.icon);
-        dl->AddText(sel ? fontBold : fontBody, fontBody->FontSize, ImVec2(p.x + S(40), ty), tc, it.label);
-        // Отметки на пунктах: идёт запись / скачивание / перепрошивка
-        const char* badge = nullptr;
-        ImVec4 bc = pal.warn;
-        if (it.page == Page::Files && dl_.running)
-            badge = "⇩";
-        if (it.page == Page::Firmware && updater_.Busy())
-            badge = "●";
-        if (it.page == Page::Measure && (Recording() || PcRecording()))
-        {
-            badge = "●";
-            bc = pal.err;
-        }
-        if (badge)
-            dl->AddText(fontBold, fontBold->FontSize, ImVec2(p.x + iw - S(18), ty), U32(sel ? pal.accentText : bc), badge);
-    }
-    ImGui::PopStyleVar();
-
-    // Часы прибора и ПК
-    ImGui::Dummy(ImVec2(0, S(10)));
-    ImGui::Separator();
-    ImGui::Dummy(ImVec2(0, S(6)));
-    {
         FontScope f(fontSmall);
-        const std::string pc = text::LocalTimeString(std::time(nullptr));
-        const std::string dev = HaveStatus() ? snap_.status.time : std::string("—");
-        if (BeginKV("##clk", S(64)))
+        const float ty = p.y + (hh - fontSmall->FontSize) * 0.5f;
+        dl->AddText(fontSmall, fontSmall->FontSize, ImVec2(p.x + S(10), ty), U32(hov ? pal.navText : pal.navMuted), title);
+        dl->AddText(fontSmall, fontSmall->FontSize, ImVec2(p.x + iw - S(16), ty), U32(pal.navMuted), open ? "▼" : "▶");
+    };
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, S(2)));
+    int gi = 0;
+    for (const Group& g : groups)
+    {
+        bool& open = navOpen_[gi];
+        if (gi > 0)
+            ImGui::Dummy(ImVec2(0, S(6)));
+        header(g.title, open, gi++);
+        if (!open)
+            continue;
+        for (const auto& it : g.items)
         {
-            KV("Прибор", dev.size() > 11 ? dev.substr(11) : dev);
-            KV("ПК", pc.substr(11));
-            EndKV();
+            const bool sel = page_ == it.page;
+            const ImVec2 p = ImGui::GetCursorScreenPos();
+            const float ih = S(36);
+            ImGui::PushID(static_cast<int>(it.page));
+            if (ImGui::InvisibleButton("##nav", ImVec2(iw, ih)))
+                page_ = it.page;
+            const bool hov = ImGui::IsItemHovered();
+            ImGui::PopID();
+            if (sel || hov)
+                dl->AddRectFilled(p, ImVec2(p.x + iw, p.y + ih), U32(sel ? pal.navSel : pal.navHover), S(7));
+            if (sel)
+                dl->AddRectFilled(ImVec2(p.x, p.y + S(8)), ImVec2(p.x + S(3), p.y + ih - S(8)), U32(pal.orange), S(1.5f));
+            const ImU32 tc = U32(sel ? ImVec4(1, 1, 1, 1) : pal.navText);
+            const float ty = p.y + (ih - fontBody->FontSize) * 0.5f;
+            dl->AddText(fontBold, fontBold->FontSize, ImVec2(p.x + S(14), p.y + (ih - fontBold->FontSize) * 0.5f),
+                        U32(sel ? ImVec4(1, 1, 1, 1) : pal.navMuted), it.icon);
+            dl->AddText(sel ? fontBold : fontBody, fontBody->FontSize, ImVec2(p.x + S(42), ty), tc, it.label);
+            // Отметки на пунктах: идёт запись / скачивание / перепрошивка
+            const char* badge = nullptr;
+            ImVec4 bc = pal.orange;
+            if (it.page == Page::Files && dl_.running)
+                badge = "⇩";
+            if (it.page == Page::Firmware && updater_.Busy())
+                badge = "●";
+            if (it.page == Page::Measure && (Recording() || PcRecording()))
+            {
+                badge = "●";
+                bc = ImVec4(1.f, 0.42f, 0.40f, 1.f);
+            }
+            if (badge)
+                dl->AddText(fontBold, fontBold->FontSize, ImVec2(p.x + iw - S(20), p.y + (ih - fontBold->FontSize) * 0.5f),
+                            U32(bc), badge);
         }
-        if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("Часы прибора: %s\nЧасы ПК: %s", dev.c_str(), pc.c_str());
     }
-
-    // Пульт демо-режима
+    // Пульт имитатора — своим блоком
     if (snap_.demo && sim_)
     {
         ImGui::Dummy(ImVec2(0, S(6)));
-        ImGui::Separator();
-        ImGui::Dummy(ImVec2(0, S(4)));
-        RenderDemoPanel();
+        header("ИМИТАТОР ПРИБОРА", navOpen_[2], 2);
+        if (navOpen_[2])
+            RenderDemoPanel();
     }
+    ImGui::PopStyleVar();
 
-    // О программе — внизу
+    // Внизу: связь, часы прибора и ПК, «О программе»
     const float bh = ImGui::GetFrameHeight();
-    if (ImGui::GetCursorPosY() < h - bh - S(14))
-        ImGui::SetCursorPosY(h - bh - S(12));
-    if (Button("О программе", BtnKind::Normal, ImVec2(-1, 0)))
+    const float lineH = fontSmall->FontSize + S(3);
+    const float bottomH = bh + 3 * lineH + S(22);
+    if (ImGui::GetCursorPosY() < h - bottomH)
+        ImGui::SetCursorPosY(h - bottomH);
+    {
+        const ImVec2 p = ImGui::GetCursorScreenPos();
+        dl->AddLine(ImVec2(p.x, p.y), ImVec2(p.x + iw, p.y), U32(pal.navLine));
+        ImGui::Dummy(ImVec2(0, S(8)));
+        FontScope f(fontSmall);
+        const bool on = snap_.state == LinkState::Connected;
+        const ImVec4 dot = on ? (snap_.demo ? pal.info : ImVec4(0.40f, 0.85f, 0.45f, 1)) : ImVec4(1.f, 0.45f, 0.42f, 1);
+        const ImVec2 q = ImGui::GetCursorScreenPos();
+        dl->AddCircleFilled(ImVec2(q.x + S(14), q.y + lineH * 0.5f), S(4), U32(dot));
+        ImGui::SetCursorScreenPos(ImVec2(q.x + S(24), q.y));
+        TextColored(pal.navText, "%s", on ? (snap_.demo ? "Имитатор на связи" : "Прибор на связи") : "Прибор не подключён");
+        const std::string pc = text::LocalTimeString(std::time(nullptr));
+        const std::string dev = HaveStatus() ? snap_.status.time : std::string("—");
+        ImGui::SetCursorScreenPos(ImVec2(q.x + S(24), ImGui::GetCursorScreenPos().y));
+        TextColored(pal.navMuted, "Прибор  %s", (dev.size() > 11 ? dev.substr(11) : dev).c_str());
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Часы прибора: %s\nЧасы ПК: %s", dev.c_str(), pc.c_str());
+        ImGui::SetCursorScreenPos(ImVec2(q.x + S(24), ImGui::GetCursorScreenPos().y));
+        TextColored(pal.navMuted, "ПК        %s", pc.substr(11).c_str());
+    }
+    ImGui::Dummy(ImVec2(0, S(4)));
+    ImGui::PushStyleColor(ImGuiCol_Button, pal.navFrame);
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, Alpha(pal.navText, 0.16f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, Alpha(pal.navText, 0.24f));
+    ImGui::PushStyleColor(ImGuiCol_Text, pal.navText);
+    ImGui::PushStyleColor(ImGuiCol_Border, pal.navLine);
+    if (ImGui::Button("О программе", ImVec2(-1, 0)))
         aboutOpen_ = true;
+    ImGui::PopStyleColor(5);
     ImGui::EndChild();
     ImGui::PopStyleVar();
     ImGui::PopStyleColor();
 }
 
+// Пульт имитатора (демо-режим) в левой панели: светлый текст и полупрозрачные поля на синем.
 void App::RenderDemoPanel()
 {
     FontScope f(fontSmall);
-    ImGui::PushStyleColor(ImGuiCol_Text, pal.info);
-    // Раскрыт, если по высоте помещается (на экранах 1024×768 — свёрнут)
-    ImGui::SetNextItemOpen(ImGui::GetMainViewport()->WorkSize.y >= S(760), ImGuiCond_Once);
-    const bool open = ImGui::TreeNodeEx("Пульт имитатора", ImGuiTreeNodeFlags_NoTreePushOnOpen | ImGuiTreeNodeFlags_SpanAvailWidth);
-    ImGui::PopStyleColor();
-    if (!open)
-        return;
+    ImGui::PushStyleColor(ImGuiCol_Text, pal.navText);
+    ImGui::PushStyleColor(ImGuiCol_FrameBg, pal.navFrame);
+    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, Alpha(pal.navText, 0.16f));
+    ImGui::PushStyleColor(ImGuiCol_Button, pal.navFrame);
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, Alpha(pal.navText, 0.16f));
+    ImGui::PushStyleColor(ImGuiCol_Border, pal.navLine);
+    ImGui::Indent(S(8));
     auto c = sim_->GetControls();
     bool changed = false;
+    const ImVec4 keepFrame = pal.frame, keepHover = pal.frameHover, keepBorder = pal.border;
+    pal.frame = pal.navFrame; // чекбоксы — светлые рамки на синем
+    pal.frameHover = Alpha(pal.navText, 0.16f);
+    pal.border = pal.navMuted;
     changed |= ui::Checkbox("Тумблер записи", &c.recSwitch);
     changed |= ui::Checkbox("Датчик Д2 на шине", &c.sensorOn[0]);
     changed |= ui::Checkbox("Датчик Д3 на шине", &c.sensorOn[1]);
     changed |= ui::Checkbox("Карта вставлена", &c.card);
     changed |= ui::Checkbox("АКБ разряжена", &c.batteryLow);
+    pal.frame = keepFrame;
+    pal.frameHover = keepHover;
+    pal.border = keepBorder;
     const char* motions[] = {"Качка: штиль", "Качка: слабая", "Качка: сильная"};
-    ImGui::SetNextItemWidth(-1);
+    ImGui::SetNextItemWidth(-S(2));
     changed |= ImGui::Combo("##motion", &c.motion, motions, 3);
+    ImGui::Unindent(S(8));
+    ImGui::PopStyleColor(6);
     if (changed)
         sim_->SetControls(c);
 }

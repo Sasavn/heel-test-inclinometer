@@ -28,7 +28,7 @@
 namespace ui
 {
 
-inline constexpr const char* kAppVersion = "1.5.2";
+inline constexpr const char* kAppVersion = "1.6";
 
 enum class Page
 {
@@ -147,7 +147,13 @@ public:
     void ProcessSetArmDefault(double L) { settings_.heelL = L; proc_.dirty = true; }
     // Правила РС: вид карточки графиков (0 — крен, 1 — график контроля, 2 — проверка), данные 6.6.3, основной
     // расчёт, ручное «исключить / учитывать» замера табл. 6.5 (номер положения или замера, -1 — авто)
-    void ProcessSetView(int view) { proc_.view = view; }
+    void ProcessSetView(int view) // стенд: 0 — обзор, 1 — контроль развёрнут, 2 / 3 — вкладки «Правила РС» / «Перемещения» развёрнуты
+    {
+        proc_.expanded = view == 1 ? 2 : view >= 2 ? 3 : 0;
+        proc_.tab = view == 2 ? 1 : view == 3 ? 2 : 0;
+    }
+    void ProcessSetExpanded(int card) { proc_.expanded = card; }
+    void ProcessSetTab(int tab) { proc_.tab = tab; }
     void ProcessSetRsInfo(double h, double lMax, double D0)
     {
         settings_.rsH = h;
@@ -233,7 +239,6 @@ private:
     void ProcLog(const std::string& s, const std::string& tip = {});
     void ProcParams(float w);
     void ProcTable(float w, float h);
-    void ProcResult(float w, float h);
     void ProcPlots(float w, float h);
     void ProcPanes(int post, float w, float h, bool stacked, bool forExport);
     void ProcExportPage(int post, float w, float h);
@@ -276,16 +281,20 @@ private:
     void ProcExportSeries(int post, float w, float h);
     int ProcShownPost() const;
     // Правила РС (AppRules.cpp)
-    void ProcViewSwitch();                                      // «Крен | Контроль | Правила РС» в заголовке карточки
     void ProcControlPlot(float w, float h, bool forExport);     // график контроля «кренящий момент – tg θ» (п. 5.5)
     void ProcExportControl(float w, float h);                   // он же — картинкой для отчёта
     void ProcRsView(float w, float h);                          // требования, оценка 6.6, табл. 6.5
-    std::string ProcRsStatus(int* state) const;                 // строка итога проверки для карточки h
-    void ProcResultStrip(float w);                              // свёрнутая карточка h (виды Правил РС)
+    // Дашборд «Обработки» (AppProcDash.cpp)
+    float ProcCardTitle(const char* title, int card);           // заголовок карточки + «развернуть»; правая граница
+    void ProcHeader(float w);                                   // шапка страницы: название, папка, отчёт
+    void ProcParamsStrip(float w);                              // параметры опыта одной строкой, режим
+    void ProcKpis(float w);                                     // ряд карточек-показателей
+    void ProcControlCard(float w, float h);                     // «Контроль M – tg θ»
+    void ProcTabsCard(float w, float h);                        // положения / Правила РС / перемещения / журнал
+    float ModeSwitchWidthPublic() const;
     void ProcMovesView(float w, float h);                       // группы крен-балласта и перемещения, табл. 6.5 полностью
     const std::vector<heel::RsGroup>& ProcGroups() const;       // группы (из настроек при первом обращении)
     void ProcSaveGroups();
-    void ProcSaveButtons(float saveW, float openW);             // «Сохранить отчёт», «Открыть папку»
     void ProcLogLines();                                        // строки журнала
     void SaveSettingsSoon(); // настройки — в файл через ~1 с (не только при выходе)
     void SaveSettingsNow();
@@ -301,6 +310,7 @@ private:
     fw::Updater updater_;
     LinkSnapshot snap_;
     Page page_ = Page::Measure;
+    bool navOpen_[3] = {true, true, true}; // группы левой панели: опыт, устройство, имитатор
     std::vector<Toast> toasts_;
     bool themeChanged_ = false;
     bool aboutOpen_ = false;
@@ -475,7 +485,6 @@ private:
         std::int64_t editsSaveAt = 0;     // правки — в файл (через ~1 с после последней)
         std::vector<double> procT[heel::kMaxPosts], procY[heel::kMaxPosts]; // обработанный сигнал записи по постам
         // Правила РС
-        int view = 0;                     // карточка графиков: 0 — крен, 1 — график контроля, 2 — Правила РС
         heel::RsCase rs;                  // табл. 6.5, оценка 6.6, требования (ProcRecompute)
         std::map<int, int> rsManual;      // замер табл. 6.5 (номер конечного положения / замера): 0 — исключить, 1 — учитывать
         std::vector<heel::RsGroup> rsGroups;  // группы крен-балласта (сохраняются в настройках)
@@ -483,6 +492,11 @@ private:
         std::vector<std::vector<double>> rsMoves; // перемещения: [шаг][группа] — плечо со знаком (единицы плеча)
         std::vector<double> groupArm;     // режим групп: эквивалентное плечо положения (накопленный момент / P)
         bool rsLegacyLogged = false;      // в журнале уже сказано про плечи без знака
+        // Дашборд
+        int expanded = 0;                 // развёрнута карточка: 0 — нет, 1 — запись / графики, 2 — контроль, 3 — вкладки
+        int tab = 0;                      // вкладка нижней карточки: 0 — положения / замеры, 1 — Правила РС, 2 — перемещения, 3 — журнал
+        bool paramsOpen = true;           // полная карточка параметров раскрыта
+        bool paramsAuto = false;          // после первого чтения параметры свёрнуты в строку
     } proc_;
     std::int64_t settingsSaveAt_ = 0;     // SaveSettingsSoon: когда записать (0 — не нужно)
 };

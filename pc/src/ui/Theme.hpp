@@ -1,5 +1,7 @@
 #pragma once
-// Палитра и стиль интерфейса: светлая (по умолчанию — лучше видна на старых мониторах и проекторах) и тёмная.
+// Палитра и стиль интерфейса (с 1.6 — «дашборд»: тёмно-синяя левая панель и шапка, светлая рабочая область,
+// белые карточки со скруглением и мягкой тенью, акценты синий / зелёный / оранжевый): светлая (по умолчанию — лучше
+// видна на старых мониторах и проекторах) и тёмная в том же духе.
 #include <imgui.h>
 
 namespace ui
@@ -14,21 +16,25 @@ struct Palette
     ImVec4 button, buttonHover, buttonActive, buttonBorder, buttonDisabled, frame, frameHover;
     ImVec4 sensor[2]; // цвета Д2 и Д3 на графиках
     ImVec4 navSel, navHover;
+    // Левая панель и шапка (тёмно-синие в обеих темах), акценты, тень карточек
+    ImVec4 nav, navText, navMuted, navLine, navFrame;
+    ImVec4 orange, green, blueSoft, greenSoft, orangeSoft, redSoft;
+    ImVec4 shadow;
 };
 
 inline Palette MakeLight()
 {
     Palette p;
-    p.bg = {0.945f, 0.953f, 0.965f, 1.f};
-    p.panel = {0.894f, 0.910f, 0.933f, 1.f};
+    p.bg = {0.949f, 0.957f, 0.973f, 1.f};
+    p.panel = {0.925f, 0.937f, 0.957f, 1.f};
     p.card = {1.f, 1.f, 1.f, 1.f};
-    p.cardAlt = {0.973f, 0.976f, 0.984f, 1.f};
-    p.border = {0.80f, 0.82f, 0.86f, 1.f};
+    p.cardAlt = {0.965f, 0.973f, 0.984f, 1.f};
+    p.border = {0.86f, 0.88f, 0.915f, 1.f};
     p.text = {0.11f, 0.13f, 0.17f, 1.f};
     p.textDim = {0.30f, 0.33f, 0.39f, 1.f};
     p.muted = {0.43f, 0.47f, 0.53f, 1.f};
-    p.accent = {0.13f, 0.40f, 0.80f, 1.f};
-    p.accentHover = {0.20f, 0.48f, 0.88f, 1.f};
+    p.accent = {0.122f, 0.384f, 0.776f, 1.f};
+    p.accentHover = {0.18f, 0.45f, 0.85f, 1.f};
     p.accentText = {1.f, 1.f, 1.f, 1.f};
     p.ok = {0.09f, 0.55f, 0.24f, 1.f};
     p.warn = {0.78f, 0.47f, 0.02f, 1.f};
@@ -47,19 +53,31 @@ inline Palette MakeLight()
     p.frameHover = {0.93f, 0.945f, 0.97f, 1.f};
     p.sensor[0] = {0.12f, 0.42f, 0.80f, 1.f};
     p.sensor[1] = {0.88f, 0.42f, 0.05f, 1.f};
-    p.navSel = {0.13f, 0.40f, 0.80f, 1.f};
-    p.navHover = {0.82f, 0.86f, 0.92f, 1.f};
+    p.nav = {0.043f, 0.200f, 0.467f, 1.f};      // #0B3377
+    p.navText = {0.93f, 0.95f, 0.99f, 1.f};
+    p.navMuted = {0.62f, 0.71f, 0.86f, 1.f};
+    p.navLine = {1.f, 1.f, 1.f, 0.12f};
+    p.navFrame = {1.f, 1.f, 1.f, 0.10f};
+    p.navSel = {0.11f, 0.29f, 0.58f, 1.f};
+    p.navHover = {1.f, 1.f, 1.f, 0.07f};
+    p.orange = {0.96f, 0.45f, 0.13f, 1.f};
+    p.green = {0.33f, 0.66f, 0.18f, 1.f};
+    p.blueSoft = {0.92f, 0.95f, 1.f, 1.f};
+    p.greenSoft = {0.91f, 0.97f, 0.89f, 1.f};
+    p.orangeSoft = {1.f, 0.95f, 0.90f, 1.f};
+    p.redSoft = {1.f, 0.92f, 0.92f, 1.f};
+    p.shadow = {0.10f, 0.16f, 0.30f, 1.f};
     return p;
 }
 
 inline Palette MakeDark()
 {
     Palette p;
-    p.bg = {0.075f, 0.085f, 0.10f, 1.f};
-    p.panel = {0.095f, 0.11f, 0.13f, 1.f};
-    p.card = {0.13f, 0.15f, 0.18f, 1.f};
-    p.cardAlt = {0.115f, 0.13f, 0.16f, 1.f};
-    p.border = {0.22f, 0.25f, 0.30f, 1.f};
+    p.bg = {0.067f, 0.082f, 0.110f, 1.f};
+    p.panel = {0.085f, 0.105f, 0.14f, 1.f};
+    p.card = {0.115f, 0.140f, 0.185f, 1.f};
+    p.cardAlt = {0.100f, 0.122f, 0.162f, 1.f};
+    p.border = {0.19f, 0.23f, 0.30f, 1.f};
     p.text = {0.92f, 0.94f, 0.96f, 1.f};
     p.textDim = {0.75f, 0.78f, 0.83f, 1.f};
     p.muted = {0.55f, 0.60f, 0.67f, 1.f};
@@ -83,8 +101,20 @@ inline Palette MakeDark()
     p.frameHover = {0.21f, 0.25f, 0.30f, 1.f};
     p.sensor[0] = {0.36f, 0.62f, 1.f, 1.f};
     p.sensor[1] = {1.f, 0.62f, 0.25f, 1.f};
-    p.navSel = {0.25f, 0.55f, 0.98f, 1.f};
-    p.navHover = {0.19f, 0.23f, 0.28f, 1.f};
+    p.nav = {0.035f, 0.075f, 0.165f, 1.f};
+    p.navText = {0.90f, 0.93f, 0.98f, 1.f};
+    p.navMuted = {0.55f, 0.63f, 0.78f, 1.f};
+    p.navLine = {1.f, 1.f, 1.f, 0.10f};
+    p.navFrame = {1.f, 1.f, 1.f, 0.08f};
+    p.navSel = {0.13f, 0.27f, 0.52f, 1.f};
+    p.navHover = {1.f, 1.f, 1.f, 0.06f};
+    p.orange = {0.98f, 0.55f, 0.22f, 1.f};
+    p.green = {0.45f, 0.80f, 0.32f, 1.f};
+    p.blueSoft = {0.14f, 0.20f, 0.32f, 1.f};
+    p.greenSoft = {0.14f, 0.25f, 0.17f, 1.f};
+    p.orangeSoft = {0.30f, 0.20f, 0.11f, 1.f};
+    p.redSoft = {0.32f, 0.14f, 0.15f, 1.f};
+    p.shadow = {0.f, 0.f, 0.f, 1.f};
     return p;
 }
 
@@ -109,7 +139,7 @@ inline void ApplyTheme(bool dark, float scale)
         ImGui::StyleColorsLight(&style);
 
     style.WindowRounding = 0.f;
-    style.ChildRounding = 8.f;
+    style.ChildRounding = 10.f;
     style.FrameRounding = 6.f;
     style.PopupRounding = 6.f;
     style.GrabRounding = 5.f;

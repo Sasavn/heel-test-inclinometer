@@ -48,6 +48,7 @@ struct PcSettings
     double rsSpread = 0.1;   // сверка приборов: расхождение приращений Δθ на замере, ° (rs_spread_step)
     int rsMain = 0;
     int rsMainGroups = -1;   // основной расчёт в режиме групп: -1 — не выбран (табл. 6.5)
+    double procSplit = 0.56;  // «Обработка»: доля высоты графиков над карточкой с вкладками (делитель)
     int rsInstrument = -1;   // табл. 6.5: Δθ — среднее приборов (-1) или пост 0…3
     double rsDh = 0.0;       // поправка на свободные поверхности (плечевые единицы)
     double rsDworst = 0.0;   // Δ наихудшего варианта загрузки (единицы массы); 0 — D
@@ -161,6 +162,7 @@ struct PcSettings
         rsSpread = real("rs_spread_step", rsSpread, 0.001, 10.0); // до 1.4 — по уровням (rs_spread), не берётся
         rsMain = num("rs_main", rsMain, 0, 1);
         rsMainGroups = num("rs_main_groups", rsMainGroups, -1, 1);
+        procSplit = real("proc_split", procSplit, 0.25, 0.85);
         rsInstrument = num("rs_instrument", rsInstrument, -1, 3);
         rsDh = real("rs_dh", rsDh, -1e6, 1e6);
         rsDworst = real("rs_dworst", rsDworst, 0.0, 1e9);
@@ -202,7 +204,7 @@ struct PcSettings
             out << "flt_method=" << fltMethod << "\nflt_median=" << fltMedianN << "\nflt_fc=" << fltFc << "\nflt_tc=" << fltTc
                 << "\nflt_sg_win=" << fltSgWin << "\nflt_whole=" << (fltWhole ? 1 : 0) << "\n";
             out << "rs_h=" << rsH << "\nrs_lmax=" << rsLmax << "\nrs_d0=" << rsD0 << "\nrs_spread_step=" << rsSpread
-                << "\nrs_main=" << rsMain << "\nrs_main_groups=" << rsMainGroups << "\nrs_instrument=" << rsInstrument << "\nrs_dh=" << rsDh
+                << "\nrs_main=" << rsMain << "\nrs_main_groups=" << rsMainGroups << "\nproc_split=" << procSplit << "\nrs_instrument=" << rsInstrument << "\nrs_dh=" << rsDh
                 << "\nrs_dworst=" << rsDworst << "\nrs_group_mode=" << (rsGroupMode ? 1 : 0) << "\nrs_groups=" << rsGroups
                 << "\n";
             if (!out)

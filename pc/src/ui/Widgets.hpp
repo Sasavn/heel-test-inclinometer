@@ -98,14 +98,37 @@ struct FontScope
     bool on;
 };
 
-// Карточка: белый (тёмный) прямоугольник с рамкой и полями. height = 0 — по содержимому.
+// Внутри карточки-контейнера (вкладки, развёрнутая карточка) вложенные карточки рисуются «плоско»: без рамки,
+// тени, своей заливки и полей — содержимое встаёт прямо в контейнер.
+inline int cardFlat = 0;
+
+// Мягкая тень под прямоугольником (несколько полупрозрачных слоёв со сдвигом вниз) — в список рисования окна
+// под ним: дочерние окна рисуются поверх родителя, так что тень остаётся под карточкой.
+inline void CardShadow(ImDrawList* dl, ImVec2 a, ImVec2 b, float rounding)
+{
+    // Только кольца снаружи карточки (внутрь не заходят: порядок рисования дочерних окон относительно родителя
+    // не всегда «родитель — снизу», заливка затемняла бы саму карточку)
+    const float k = darkTheme ? 0.30f : 0.075f;
+    for (int i = 1; i <= 4; i++)
+    {
+        const float g = S(1.0f) * static_cast<float>(i);
+        const float dy = S(1.5f);
+        dl->AddRect(ImVec2(a.x - g + S(0.5f), a.y - g + dy), ImVec2(b.x + g - S(0.5f), b.y + g + dy),
+                    ImGui::ColorConvertFloat4ToU32(Alpha(pal.shadow, k * (1.f - 0.22f * static_cast<float>(i)))),
+                    rounding + g, 0, S(1.2f));
+    }
+}
+
+// Карточка: белый (тёмный) прямоугольник со скруглением, тонкой рамкой, мягкой тенью и полями. height = 0 — по
+// содержимому.
 inline bool BeginCard(const char* id, ImVec2 size = {0, 0}, const ImVec4* bg = nullptr)
 {
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, bg ? *bg : pal.card);
-    ImGui::PushStyleColor(ImGuiCol_Border, pal.border);
-    ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, S(8.f));
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(S(14), S(11)));
-    ImGuiChildFlags flags = ImGuiChildFlags_Borders | ImGuiChildFlags_AlwaysUseWindowPadding;
+    const bool flat = cardFlat > 0;
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, flat ? ImVec4(0, 0, 0, 0) : bg ? *bg : pal.card);
+    ImGui::PushStyleColor(ImGuiCol_Border, darkTheme ? pal.border : Mix(pal.border, pal.card, 0.25f));
+    ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, S(10.f));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, flat ? ImVec2(0, 0) : ImVec2(S(14), S(12)));
+    ImGuiChildFlags flags = (flat ? 0 : ImGuiChildFlags_Borders) | ImGuiChildFlags_AlwaysUseWindowPadding;
     if (size.y == 0)
         flags |= ImGuiChildFlags_AutoResizeY;
     return ImGui::BeginChild(id, size, flags, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
@@ -114,8 +137,102 @@ inline bool BeginCard(const char* id, ImVec2 size = {0, 0}, const ImVec4* bg = n
 inline void EndCard()
 {
     ImGui::EndChild();
+    if (cardFlat == 0)
+        CardShadow(ImGui::GetWindowDrawList(), ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), S(10.f));
     ImGui::PopStyleVar(2);
     ImGui::PopStyleColor(2);
+}
+
+// Текст, обрезанный по ширине (в пикселях) с «…» на конце (по границе символа UTF-8).
+inline std::string FitText(const std::string& s, float width)
+{
+    if (ImGui::CalcTextSize(s.c_str()).x <= width)
+        return s;
+    std::string t = s;
+    while (!t.empty())
+    {
+        std::size_t cut = t.size() - 1;
+        while (cut > 0 && (static_cast<unsigned char>(t[cut]) & 0xC0) == 0x80)
+            cut--;
+        t.resize(cut);
+        if (ImGui::CalcTextSize((t + "…").c_str()).x <= width)
+            return t + "…";
+    }
+    return t;
+}
+
+// Вкладки с подчёркиванием: подписи в ряд, выбранная — акцентом и полосой снизу; под рядом — тонкая линия на всю
+// ширину (lineW = 0 — до края окна). Возвращает true, если выбор изменился.
+inline bool Tabs(const char* id, int* value, const char* const* labels, const int* values, int n, float lineW = 0.f)
+{
+    bool changed = false;
+    ImGui::PushID(id);
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const ImVec2 start = ImGui::GetCursorScreenPos();
+    const float h = ImGui::GetFrameHeight() + S(4);
+    const float padX = S(14);
+    float x = start.x;
+    for (int i = 0; i < n; i++)
+    {
+        const ImVec2 ts = ImGui::CalcTextSize(labels[i]);
+        const float w = ts.x + 2 * padX;
+        ImGui::SetCursorScreenPos(ImVec2(x, start.y));
+        ImGui::PushID(i);
+        const bool pressed = ImGui::InvisibleButton("##tab", ImVec2(w, h));
+        const bool hov = ImGui::IsItemHovered();
+        ImGui::PopID();
+        const bool sel = *value == values[i];
+        if (pressed && !sel)
+        {
+            *value = values[i];
+            changed = true;
+        }
+        const ImU32 col = ImGui::ColorConvertFloat4ToU32(sel ? pal.accent : hov ? pal.text : pal.textDim);
+        if (sel)
+        {
+            FontScope f(fontBold);
+            dl->AddText(ImVec2(x + padX, start.y + (h - ts.y) * 0.5f - S(1)), col, labels[i]);
+        }
+        else
+            dl->AddText(ImVec2(x + padX, start.y + (h - ts.y) * 0.5f - S(1)), col, labels[i]);
+        if (sel)
+            dl->AddRectFilled(ImVec2(x + S(4), start.y + h - S(3)), ImVec2(x + w - S(4), start.y + h), col, S(1.5f));
+        x += w;
+    }
+    const float right = lineW > 0 ? start.x + lineW : ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x;
+    dl->AddLine(ImVec2(start.x, start.y + h - S(0.5f)), ImVec2(std::max(x, right), start.y + h - S(0.5f)),
+                ImGui::ColorConvertFloat4ToU32(pal.border), S(1));
+    ImGui::SetCursorScreenPos(ImVec2(start.x, start.y));
+    ImGui::Dummy(ImVec2(x - start.x, h));
+    ImGui::PopID();
+    return changed;
+}
+
+// Ширина ряда вкладок Tabs.
+inline float TabsWidth(const char* const* labels, int n)
+{
+    float w = 0;
+    for (int i = 0; i < n; i++)
+        w += ImGui::CalcTextSize(labels[i]).x + 2 * S(14);
+    return w;
+}
+
+// Маленькая квадратная кнопка-значок в углу карточки (развернуть ⤢ / свернуть). true — нажата.
+inline bool IconButton(const char* id, const char* glyph, const char* tip)
+{
+    const float s = ImGui::GetFrameHeight();
+    const ImVec2 p = ImGui::GetCursorScreenPos();
+    const bool pressed = ImGui::InvisibleButton(id, ImVec2(s, s));
+    const bool hov = ImGui::IsItemHovered();
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    dl->AddRectFilled(p, ImVec2(p.x + s, p.y + s), ImGui::ColorConvertFloat4ToU32(hov ? pal.buttonHover : pal.button), S(6));
+    dl->AddRect(p, ImVec2(p.x + s, p.y + s), ImGui::ColorConvertFloat4ToU32(hov ? Mix(pal.border, pal.accent, 0.6f) : pal.border),
+                S(6), 0, S(1));
+    const ImVec2 ts = ImGui::CalcTextSize(glyph);
+    dl->AddText(ImVec2(p.x + (s - ts.x) * 0.5f, p.y + (s - ts.y) * 0.5f), ImGui::ColorConvertFloat4ToU32(pal.textDim), glyph);
+    if (hov && tip)
+        ImGui::SetTooltip("%s", tip);
+    return pressed;
 }
 
 inline void CardTitle(const char* text, const char* sub = nullptr)
@@ -191,6 +308,7 @@ enum class BtnKind
     Primary,
     Danger,
     Warn,
+    Orange, // главное действие страницы (как «добавить» в образце): оранжевая заливка
 };
 
 // Кнопка. Обычная — светлая заливка с рамкой, при наведении рамка и фон с акцентным оттенком, при нажатии
@@ -212,8 +330,9 @@ inline bool Button(const char* label, BtnKind kind = BtnKind::Normal, ImVec2 siz
         break;
     case BtnKind::Danger:
     case BtnKind::Warn:
+    case BtnKind::Orange:
     {
-        const ImVec4 c = kind == BtnKind::Danger ? pal.err : pal.warn;
+        const ImVec4 c = kind == BtnKind::Danger ? pal.err : kind == BtnKind::Orange ? pal.orange : pal.warn;
         bg = c;
         bgHover = Mix(c, ImVec4(1, 1, 1, 1), 0.12f);
         bgActive = Mix(c, black, 0.15f);
