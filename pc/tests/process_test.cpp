@@ -28,6 +28,7 @@
 #include "core/HeelProtocol.hpp"
 #include "core/RsCheck.hpp"
 #include "core/PcSettings.hpp"
+#include "core/Project.hpp"
 #include "core/Plateaus.hpp"
 #include "core/Png.hpp"
 #include "core/TextUtil.hpp"
@@ -1972,6 +1973,163 @@ void TestSettings()
     arm.Load(ini);
     CHECK(arm.digArm == 3);
     CHECK(ReadBytes(ini).find("heel_axis_v=2") != std::string::npos);
+    // Проект: автосохранение и недавние (последний — первым, без повторов, не больше 8)
+    PcSettings pr;
+    CHECK(pr.projectAutosave && pr.recentProjects.empty());
+    pr.projectAutosave = false;
+    for (int i = 0; i < 10; i++)
+        pr.AddRecentProject("D:\\Опыты\\" + std::to_string(i) + ".krenomer");
+    pr.AddRecentProject("D:\\Опыты\\3.krenomer");
+    pr.Save(ini);
+    PcSettings prBack;
+    prBack.Load(ini);
+    CHECK(!prBack.projectAutosave && prBack.recentProjects.size() == PcSettings::kRecentMax);
+    CHECK(prBack.recentProjects.front() == "D:\\Опыты\\3.krenomer" && prBack.recentProjects[1] == "D:\\Опыты\\9.krenomer");
+}
+
+// Файл проекта *.krenomer (core/Project.hpp): все поля туда и обратно, NaN — null, пути относительно проекта (проект
+// и записи переложены вместе — находятся), понятные ошибки чтения, версия формата.
+void TestProject()
+{
+    SECTION("проект *.krenomer: поля, пути рядом с проектом, ошибки чтения, версия формата");
+    proj::Project p;
+    p.program = "Регистратор крена — программа для ПК 1.7";
+    p.saved = "2026-10-16 12:00:00";
+    p.folder = "D:\\Кренование\\Модель отсека";
+    p.model = true;
+    p.D = 53.5;
+    p.P = 2.5;
+    p.L = 200;
+    p.axis = 1;
+    p.windowS = 20;
+    p.thresholdDeg = 0.05;
+    p.plateauS = 4;
+    p.stepDeg = 0.3;
+    p.method = 5;
+    p.medianN = 5;
+    p.fcHz = 0.25;
+    p.tcS = 1.5;
+    p.sgWindowS = 3;
+    p.wholeSpan = true;
+    p.userMethod = "Мой \"метод\"";
+    p.userMethodText = "строка 1\nстрока 2\t\\";
+    p.sensors = {{2, "Нос, ЛБ", true, true}, {3, "", false, false}};
+    p.rsH = 1.2;
+    p.rsLmax = 0;
+    p.rsD0 = 40;
+    p.rsSpread = 0.2;
+    p.rsMain = 1;
+    p.rsMainGroups = 0;
+    p.rsInstrument = 1;
+    p.rsDh = 0.031;
+    p.rsDworst = 0;
+    p.rsGroupMode = true;
+    p.rsGroups = {{"Группа 1", 1.5}, {"Группа 2", 0.75}};
+    p.rsMoves = {{1.2, 0}, {0, -2.4}, {}};
+    p.mode = 1;
+    p.modeManual = true;
+    p.recordFile = "2026-10-15_M021_D2.CSV";
+    p.positionsEdited = true;
+    heel::Position a, b;
+    a.t0 = 5;
+    a.t1 = 36;
+    a.arm = -20;
+    b.t0 = 58.7;
+    b.t1 = 71.25;
+    b.use = false; // плечо не задано — NaN
+    p.positions = {a, b};
+    p.arms = {{1, 4.5}, {3, -2.25}};
+    p.excluded = {{2, true}};
+    p.rsManual = {{4, 0}, {5, 1}};
+    p.h = 0.0481234;
+    p.hMain = 0.0531;
+    const std::string text = proj::ToJson(p);
+    CHECK(text.find("\"arm\": null") != std::string::npos && text.find("\"l_max\": null") != std::string::npos);
+    proj::Project q;
+    std::string err;
+    CHECK_MSG(proj::FromJson(text, q, &err), "%s", err.c_str());
+    CHECK(q.model && q.D == 53.5 && q.P == 2.5 && q.L == 200 && q.axis == 1 && q.windowS == 20 && q.thresholdDeg == 0.05);
+    CHECK(q.plateauS == 4 && q.stepDeg == 0.3 && q.method == 5 && q.medianN == 5 && q.fcHz == 0.25 && q.tcS == 1.5);
+    CHECK(q.sgWindowS == 3 && q.wholeSpan && q.userMethod == p.userMethod && q.userMethodText == p.userMethodText);
+    CHECK(q.sensors.size() == 2 && q.sensors[0].key == 2 && q.sensors[0].name == "Нос, ЛБ" && q.sensors[0].inverted &&
+          q.sensors[0].use && q.sensors[1].key == 3 && q.sensors[1].name.empty() && !q.sensors[1].use);
+    CHECK(q.rsH == 1.2 && q.rsLmax == 0 && q.rsD0 == 40 && q.rsSpread == 0.2 && q.rsMain == 1 && q.rsMainGroups == 0);
+    CHECK(q.rsInstrument == 1 && q.rsDh == 0.031 && q.rsDworst == 0 && q.rsGroupMode);
+    CHECK(q.rsGroups.size() == 2 && q.rsGroups[1].name == "Группа 2" && q.rsGroups[1].mass == 0.75);
+    CHECK(q.rsMoves == p.rsMoves);
+    CHECK(q.mode == 1 && q.modeManual && q.recordFile == p.recordFile && q.positionsEdited && q.positions.size() == 2);
+    CHECK(q.positions[0].t0 == 5 && q.positions[0].t1 == 36 && q.positions[0].use && q.positions[0].arm == -20);
+    CHECK(q.positions[1].t1 == 71.25 && !q.positions[1].use && std::isnan(q.positions[1].arm));
+    CHECK(q.arms == p.arms && q.excluded == p.excluded && q.rsManual == p.rsManual);
+    CHECK(q.folder == p.folder && q.program == p.program && q.saved == p.saved && std::fabs(q.h - p.h) < 1e-12 && q.hMain == 0.0531);
+    CHECK(proj::ToJson(q, false) == proj::ToJson(p, false));
+
+    // Ошибки чтения — понятным текстом
+    auto bad = [](const std::string& t, const char* expect) {
+        proj::Project x;
+        std::string e;
+        const bool ok = proj::FromJson(t, x, &e);
+        CHECK_MSG(!ok && e.find(expect) != std::string::npos, "ожидалось «%s», получено «%s»", expect, e.c_str());
+    };
+    bad("", "файл пуст");
+    bad("{\"krenomer_project\": 1, ", "не JSON");
+    bad("{\"version\": 1}", "не файл проекта");
+    bad("{\"krenomer_project\": 2, \"records\": {\"folder_abs\": \"D:\\\\x\"}}", "обновите программу");
+    bad("{\"krenomer_project\": 1, \"records\": {\"folder_abs\": \"D:\\\\x\"}, \"ship\": {\"D\": \"много\"}}",
+        "ship.D");
+    bad("{\"krenomer_project\": 1, \"records\": {}}", "нет папки записей");
+    bad("{\"krenomer_project\": 1, \"records\": {\"folder_abs\": \"D:\\\\x\"}, \"experiment\": {\"mode\": \"всё\"}}",
+        "experiment.mode");
+    {
+        proj::Project bom;
+        CHECK(proj::FromJson("\xEF\xBB\xBF{\"krenomer_project\": 1, \"records\": {\"folder_abs\": \"D:\\\\x\"}}", bom, &err));
+        CHECK(bom.D == 1500.0 && bom.mode == 0 && bom.folder == "D:\\x"); // нет поля — по умолчанию
+    }
+
+    // Пути: записи рядом с проектом — относительно; переложили вместе — находятся; далеко — полный путь
+    const fs::path root = fs::temp_directory_path() / L"krenomer_process_test_проект";
+    std::error_code ec;
+    fs::remove_all(root, ec);
+    const fs::path rec = root / L"Опыт" / L"Записи";
+    fs::create_directories(rec, ec);
+    WriteText(rec / "M001_D2.CSV", "x");
+    CHECK(proj::RelativeTo(root / L"Опыт", text::PathToUtf8(rec)) == "Записи");
+    CHECK(proj::RelativeTo(rec, text::PathToUtf8(rec)) == ".");
+    CHECK(proj::RelativeTo(root / L"Опыт" / L"Проекты", text::PathToUtf8(rec)) == text::PathToUtf8(fs::path("..") / L"Записи"));
+    CHECK(proj::RelativeTo(root / L"a" / L"b" / L"c", text::PathToUtf8(rec)).empty()); // далеко — без относительного
+    proj::Project s;
+    s.folder = text::PathToUtf8(rec);
+    s.mode = 1;
+    const fs::path file = root / L"Опыт" / L"Опыт.krenomer";
+    CHECK_MSG(proj::Save(file, s, &err), "%s", err.c_str());
+    CHECK(!fs::exists(fs::path(file) += L".tmp", ec));
+    CHECK(ReadBytes(file).find("\"folder\": \"Записи\"") != std::string::npos);
+    proj::Project l;
+    CHECK_MSG(proj::Load(file, l, &err), "%s", err.c_str());
+    CHECK(fs::equivalent(text::PathFromUtf8(l.folder), rec, ec) && l.mode == 1);
+    // Переложили папку опыта целиком — записи находятся по относительному пути
+    const fs::path moved = root / L"Перенесено";
+    fs::rename(root / L"Опыт", moved, ec);
+    CHECK(!ec);
+    proj::Project m;
+    CHECK_MSG(proj::Load(moved / L"Опыт.krenomer", m, &err), "%s", err.c_str());
+    CHECK(fs::equivalent(text::PathFromUtf8(m.folder), moved / L"Записи", ec));
+    // Записей нет ни рядом, ни по полному пути — ошибка «папка записей не найдена»
+    fs::remove_all(moved / L"Записи", ec);
+    proj::Project none;
+    CHECK(!proj::Load(moved / L"Опыт.krenomer", none, &err) && err.find("папка записей не найдена") != std::string::npos);
+    // Выбранные файлы: относительно и полный путь
+    fs::create_directories(root / L"Ф", ec);
+    WriteText(root / L"Ф" / "M002_D3.CSV", "x");
+    proj::Project f;
+    f.files = {text::PathToUtf8(root / L"Ф" / "M002_D3.CSV")};
+    f.folder = text::PathToUtf8(root / L"Ф");
+    CHECK(proj::Save(root / L"Ф" / L"п.krenomer", f, &err));
+    proj::Project fb;
+    CHECK_MSG(proj::Load(root / L"Ф" / L"п.krenomer", fb, &err), "%s", err.c_str());
+    CHECK(fb.files.size() == 1 && fs::equivalent(text::PathFromUtf8(fb.files[0]), root / L"Ф" / "M002_D3.CSV", ec));
+    CHECK(!proj::Load(root / L"нет.krenomer", fb, &err) && err.find("не открывается") != std::string::npos);
+    fs::remove_all(root, ec);
 }
 
 void TestDeflate()
@@ -2043,6 +2201,7 @@ int main(int argc, char** argv)
     TestFilters();
     TestUserMethod();
     TestSettings();
+    TestProject();
     TestDeflate();
     return TestSummary();
 }

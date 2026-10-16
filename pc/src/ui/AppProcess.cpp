@@ -410,6 +410,8 @@ void App::ProcLoad()
     else
     {
         folder = proc_.dir;
+        if (!proc_.projPending && folder != proc_.outDir && ProcAutoOpenProject(folder))
+            return; // папка опыта с «Опыт.krenomer»: открыт проект (он сам читает записи)
         settings_.procDir = folder == files_.dir ? "" : folder; // запомнить, если не папка «Файлов на карте»
         std::string err;
         bool sub = false;
@@ -469,6 +471,7 @@ void App::ProcRegroup(bool quiet)
 void App::ProcRecompute()
 {
     proc_.dirty = false;
+    proc_.projCheck = true;
     if (!proc_.files)
     {
         proc_.sum = heel::Summary{};
@@ -577,13 +580,27 @@ void App::TickProcess()
     if (proc_.load.valid() && proc_.load.wait_for(0s) == std::future_status::ready)
     {
         heel::Loaded r = proc_.load.get();
-        if (r.folder != proc_.outDir) // другой опыт: плечи и снятые замеры — заново
+        const std::shared_ptr<proj::Project> pend = std::move(proc_.projPending);
+        proc_.projPending.reset();
+        if (r.folder != proc_.outDir || pend) // другой опыт: плечи и снятые замеры — заново (или из проекта)
         {
             proc_.arm.clear();
             proc_.off.clear();
             proc_.rsManual.clear();
             proc_.rsLegacyLogged = false;
             proc_.rsMoves.clear();
+            proc_.projSaveAt = 0;
+            proc_.projAutoFailed = false;
+            if (!pend)
+                proc_.projectPath.clear(); // новый опыт без проекта
+        }
+        if (pend)
+        {
+            proc_.arm = pend->arms;
+            proc_.off = pend->excluded;
+            proc_.rsMoves = pend->rsMoves;
+            proc_.mode = pend->mode;
+            proc_.modeUser = pend->modeManual;
         }
         proc_.outDir = r.folder;
         proc_.filesRaw = std::make_shared<const std::vector<heel::File>>(std::move(r.files));
@@ -616,7 +633,11 @@ void App::TickProcess()
         else if (!proc_.files->empty())
             ProcLog("Ни один файл не понят как файл замера (что не так — выше)");
         ProcChooseMode(true); // режим по содержимому: одна запись — весь опыт или файл = замер
+        if (pend)
+            ProcApplyProjectExperiment(*pend);
         ProcRecompute();
+        proc_.projSnap = ProcProjectSnapshot(); // открыли — не изменение: автосохранение только после правок
+        proc_.projCheck = false;
     }
 
     // Картинки графиков — здесь, между кадрами (свой контекст ImGui), книга и запись файлов — в фоне
@@ -736,6 +757,7 @@ void App::TickProcess()
     }
     if (proc_.dirty && !proc_.load.valid())
         ProcRecompute();
+    TickProject();
     // Ручные правки положений — в файл
     if (proc_.editsSaveAt && link_->NowMs() >= proc_.editsSaveAt)
     {
@@ -2307,13 +2329,18 @@ std::string App::PostTitle(int post) const
 }
 
 // Датчики -> посты по порядку (Д2 и старый датчик 1 — первыми), снятые с расчёта — -1; постов не больше kMaxPosts.
-void App::ProcAssignPosts()
+void App::ProcLoadNames()
 {
     if (!proc_.namesLoaded)
     {
         proc_.names = ParseNames(settings_.sensorNames);
         proc_.namesLoaded = true;
     }
+}
+
+void App::ProcAssignPosts()
+{
+    ProcLoadNames();
     std::vector<int> keys = proc_.keys;
     std::stable_sort(keys.begin(), keys.end(), [](int a, int b) {
         auto rank = [](int k) {

@@ -7,6 +7,7 @@
 #include <map>
 #include <string>
 #include <system_error>
+#include <vector>
 
 #include "TextUtil.hpp"
 
@@ -48,8 +49,12 @@ struct PcSettings
     double rsSpread = 0.1;   // сверка приборов: расхождение приращений Δθ на замере, ° (rs_spread_step)
     int rsMain = 0;
     int rsMainGroups = -1;   // основной расчёт в режиме групп: -1 — не выбран (табл. 6.5)
-    double procSplit = 0.56;
-    int uiDensity = 0;       // интерфейс: 0 — авто (компактный, если окно ниже 800 точек), 1 — обычный, 2 — компактный  // «Обработка»: доля высоты графиков над карточкой с вкладками (делитель)
+    double procSplit = 0.56; // «Обработка»: доля высоты графиков над карточкой с вкладками (делитель)
+    int uiDensity = 0;       // интерфейс: 0 — авто (компактный, если окно ниже 800 точек), 1 — обычный, 2 — компактный
+    // Проект опыта (*.krenomer): автосохранение рядом с записями и недавние проекты (последний — первым)
+    bool projectAutosave = true;
+    std::vector<std::string> recentProjects;
+    static constexpr std::size_t kRecentMax = 8;
     int rsInstrument = -1;   // табл. 6.5: Δθ — среднее приборов (-1) или пост 0…3
     double rsDh = 0.0;       // поправка на свободные поверхности (плечевые единицы)
     double rsDworst = 0.0;   // Δ наихудшего варианта загрузки (единицы массы); 0 — D
@@ -171,6 +176,38 @@ struct PcSettings
         rsGroupMode = flag("rs_group_mode", rsGroupMode);
         if (kv.count("rs_groups"))
             rsGroups = kv["rs_groups"];
+        projectAutosave = flag("project_autosave", projectAutosave);
+        if (kv.count("recent_projects"))
+        {
+            recentProjects.clear();
+            const std::string& r = kv["recent_projects"];
+            std::size_t a = 0;
+            while (a < r.size() && recentProjects.size() < kRecentMax)
+            {
+                std::size_t b = r.find('|', a);
+                if (b == std::string::npos)
+                    b = r.size();
+                if (b > a)
+                    recentProjects.push_back(r.substr(a, b - a));
+                a = b + 1;
+            }
+        }
+    }
+
+    // Проект — первым в списке недавних (без повторов, не больше kRecentMax).
+    void AddRecentProject(const std::string& path)
+    {
+        if (path.empty())
+            return;
+        for (std::size_t i = 0; i < recentProjects.size(); i++)
+            if (recentProjects[i] == path)
+            {
+                recentProjects.erase(recentProjects.begin() + static_cast<std::ptrdiff_t>(i));
+                break;
+            }
+        recentProjects.insert(recentProjects.begin(), path);
+        if (recentProjects.size() > kRecentMax)
+            recentProjects.resize(kRecentMax);
     }
 
     void Save(const std::filesystem::path& file = Dir() / L"krenomer.ini") const
@@ -209,6 +246,10 @@ struct PcSettings
                 << "\nrs_main=" << rsMain << "\nrs_main_groups=" << rsMainGroups << "\nproc_split=" << procSplit << "\nui_density=" << uiDensity << "\nrs_instrument=" << rsInstrument << "\nrs_dh=" << rsDh
                 << "\nrs_dworst=" << rsDworst << "\nrs_group_mode=" << (rsGroupMode ? 1 : 0) << "\nrs_groups=" << rsGroups
                 << "\n";
+            out << "project_autosave=" << (projectAutosave ? 1 : 0) << "\nrecent_projects=";
+            for (std::size_t i = 0; i < recentProjects.size(); i++)
+                out << (i ? "|" : "") << recentProjects[i];
+            out << "\n";
             if (!out)
                 return;
         }

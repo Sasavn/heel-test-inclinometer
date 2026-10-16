@@ -23,12 +23,13 @@
 #include "../core/UserMethod.hpp"
 #include "../core/PcRecorder.hpp"
 #include "../core/PcSettings.hpp"
+#include "../core/Project.hpp"
 #include "../fw/Firmware.hpp"
 
 namespace ui
 {
 
-inline constexpr const char* kAppVersion = "1.6.1";
+inline constexpr const char* kAppVersion = "1.7";
 
 enum class Page
 {
@@ -194,6 +195,13 @@ public:
     void ProcessSetPositionSpans(const std::vector<std::pair<double, double>>& spans);
     void ProcessSetRsManual(int number, int state);
     const heel::RsCase& ProcessRs() const { return proc_.rs; }
+    // Проект опыта (*.krenomer, AppProject.cpp). Сохранить: пусто — в текущий проект или «<папка записей>\Опыт.krenomer».
+    // Открыть: параметры — сразу, записи читаются в фоне, положения и правки — после чтения.
+    bool ProcessSaveProject(const std::string& path = {});
+    bool ProcessOpenProject(const std::string& path);
+    const std::string& ProcessProjectPath() const { return proc_.projectPath; }
+    void SetProjectAutosaveAllowed(bool on) { projectAutosaveAllowed_ = on; } // стенд снимков: без автосохранения
+    void ProcessShowProjectMenu(int menu) { proc_.projMenu = menu; } // стенд: 1 — «Открыть проект», 2 — «Сохранить ▾», -1 — закрыть
 
 private:
     // Каркас
@@ -229,6 +237,7 @@ private:
     void SettingsZeroCard();
     void SettingsAddrCard();
     void SettingsPcCard();
+    void SettingsProjectCard();
     void TickSettings();
     void TickFiles();
     void TickDiag();
@@ -301,6 +310,18 @@ private:
     const std::vector<heel::RsGroup>& ProcGroups() const;       // группы (из настроек при первом обращении)
     void ProcSaveGroups();
     void ProcLogLines();                                        // строки журнала
+    // Проект (AppProject.cpp)
+    proj::Project ProcProjectNow() const;                       // состояние «Обработки» -> проект
+    std::string ProcProjectSnapshot() const;                    // оно же текстом без времени (автосохранение)
+    bool ProcSaveProjectTo(const std::string& path, bool autosave);
+    void ProcApplyProjectSettings(const proj::Project& p);      // параметры, датчики, метод — до чтения записей
+    void ProcApplyProjectExperiment(const proj::Project& p);    // запись, положения, правки — после чтения
+    std::string ProcProjectTarget() const;                      // куда «Сохранить проект»
+    bool ProcAutoOpenProject(const std::string& folder);       // папка с «Опыт.krenomer» — открыть вместе с проектом
+    void ProcProjectMenus(bool open, bool save);                // содержимое меню проекта
+    float ProcProjectButtons(float x, bool narrow, bool measure); // кнопки проекта в шапке; ширина
+    void TickProject();
+    void ProcLoadNames();
     void SaveSettingsSoon(); // настройки — в файл через ~1 с (не только при выходе)
     void SaveSettingsNow();
     // Поле пути: как InputText, а при подмене путей (стенд) — показ подменённого пути без правки.
@@ -504,7 +525,17 @@ private:
         int tab = 0;                      // вкладка нижней карточки: 0 — положения / замеры, 1 — Правила РС, 2 — перемещения, 3 — журнал
         bool paramsOpen = true;           // полная карточка параметров раскрыта
         bool paramsAuto = false;          // после первого чтения параметры свёрнуты в строку
+        // Проект опыта
+        std::string projectPath;          // открытый или сохранённый проект (пусто — нет)
+        std::shared_ptr<proj::Project> projPending; // открывается: применить после чтения записей
+        std::string projSnap;             // состояние при открытии / последнем сохранении (без времени)
+        std::string projSeen;             // состояние при прошлой проверке
+        bool projCheck = false;           // после пересчёта — сравнить состояние (автосохранение)
+        std::int64_t projSaveAt = 0;      // автосохранение: когда (0 — не нужно)
+        bool projAutoFailed = false;      // автосохранение не удалось — больше не пробовать до смены проекта
+        int projMenu = 0;                 // стенд: открыть меню проекта (1 — открыть, 2 — сохранить)
     } proc_;
+    bool projectAutosaveAllowed_ = true;
     std::int64_t settingsSaveAt_ = 0;     // SaveSettingsSoon: когда записать (0 — не нужно)
 };
 

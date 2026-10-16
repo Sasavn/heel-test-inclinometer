@@ -239,6 +239,8 @@ void App::PageSettings()
         NotConnectedPanel("Здесь — настройки прибора, часы, ноль и смена Modbus-адреса датчика.");
         ImGui::Dummy(ImVec2(0, S(10)));
         SettingsPcCard();
+        ImGui::Dummy(ImVec2(0, S(12) - ImGui::GetStyle().ItemSpacing.y));
+        SettingsProjectCard();
         return;
     }
     const float W = ImGui::GetContentRegionAvail().x;
@@ -253,6 +255,8 @@ void App::PageSettings()
         SettingsAddrCard();
         ImGui::Dummy(ImVec2(0, gap - ImGui::GetStyle().ItemSpacing.y));
         SettingsPcCard();
+        ImGui::Dummy(ImVec2(0, gap - ImGui::GetStyle().ItemSpacing.y));
+        SettingsProjectCard();
         return;
     }
     const float leftW = std::floor(W * 0.54f);
@@ -260,6 +264,8 @@ void App::PageSettings()
     ImGui::PushID("left");
     ImGui::BeginChild("##colL", ImVec2(leftW, 0), ImGuiChildFlags_AutoResizeY);
     SettingsDeviceCard();
+    ImGui::Dummy(ImVec2(0, gap - ImGui::GetStyle().ItemSpacing.y));
+    SettingsProjectCard();
     ImGui::EndChild();
     ImGui::PopID();
     ImGui::EndGroup();
@@ -537,6 +543,25 @@ void App::SettingsAddrCard()
             Banner(pal.ok, pal.okBg, "✓", set_.addrMsg.c_str());
         else if (set_.addrPhase == 4)
             Banner(pal.err, pal.errBg, "✗", set_.addrMsg.c_str());
+    }
+    EndCard();
+}
+
+// «Обработка»: проект опыта рядом с записями (AppProject.cpp)
+void App::SettingsProjectCard()
+{
+    if (BeginCard("##s_proj"))
+    {
+        {
+            FontScope f(fontH2); // название и галочка — одной строкой (страница помещается в 1280×800)
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextUnformatted("Обработка опыта");
+        }
+        ImGui::SameLine(0, S(18));
+        if (ui::Checkbox("автосохранение проекта рядом с записями", &settings_.projectAutosave))
+            SaveSettingsSoon();
+        Hint("Через 3 с после правки (плечи, положения, параметры) проект сохраняется рядом с записями, а папка с ним "
+             "открывается вместе с проектом. Без галочки — только кнопкой «Сохранить проект» на «Обработке».");
     }
     EndCard();
 }

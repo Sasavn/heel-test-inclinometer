@@ -329,6 +329,12 @@ void MakeHeelSet(const fs::path& dir)
     }
 }
 
+std::string ReadText(const fs::path& p)
+{
+    std::ifstream in(p, std::ios::binary);
+    return std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+}
+
 // Опыт кренования с двумя весками (tests/VodnikData.hpp) как «файл = замер»: 11 замеров × посты Д2 и Д3, крен
 // постоянный 30 с (подмешивание ±0,00045° — среднее записанных с 0,001° равно истинному).
 void MakeVodnikSet(const fs::path& dir)
@@ -416,6 +422,7 @@ int main(int argc, char** argv)
     const std::time_t simStart = std::time(nullptr);
     ui::App app(ui::AppOptions{false, true, false, simStart, 7});
     app.SetShownPaths(ShownPaths(ShotsWorkDir()));
+    app.SetProjectAutosaveAllowed(false); // «Опыт.krenomer» — только там, где проверяется автосохранение
     Stand st{&app};
     SECTION("измерение");
     st.Run(95000);
@@ -877,6 +884,32 @@ int main(int argc, char** argv)
             CHECK_NEAR(rc.r.hk, 1.154, 0.001, "h_k опыта с весками (протокол 1,154)");
             CHECK_NEAR(rc.r.hFinal, 1.123, 0.001, "исправленная h (протокол 1,123)");
         }
+        // Проект опыта: сохранить в соседнюю папку, открыть другой опыт с другими параметрами, открыть проект — всё
+        // как было и тот же h
+        {
+            const double hMain = app.ProcessRs().hMain, hk = app.ProcessRs().r.hk;
+            const fs::path vproj = ShotsWorkDir() / L"Проекты" / L"Опыт с весками.krenomer";
+            fs::remove_all(vproj.parent_path(), ec);
+            CHECK(app.ProcessSaveProject(text::PathToUtf8(vproj)));
+            CHECK(fs::exists(vproj, ec) && app.ProcessProjectPath() == text::PathToUtf8(vproj));
+            CHECK(ReadText(vproj).find("\"folder\": \"..\\\\Опыт с весками\"") != std::string::npos);
+            app.ProcessSetRsGroupMode(false);
+            app.ProcessSetRsCorrections(0.0, 0.0);
+            app.ProcessSetShip(1500.0, 15.0);
+            app.ProcessOpen(text::PathToUtf8(ShotsWorkDir() / L"Опыт кренования"));
+            wait();
+            st.Run(300);
+            CHECK(!app.ProcessRs().groupMode && app.ProcessProjectPath().empty());
+            CHECK(app.ProcessOpenProject(text::PathToUtf8(vproj)));
+            wait();
+            st.Run(300);
+            const auto& rc = app.ProcessRs();
+            CHECK(!app.ProcessContinuous() && app.ProcessMeasurements() == 11);
+            CHECK(rc.groupMode && rc.postIds.size() == 2 && rc.r.m.size() == 10 && rc.r.m[1].autoExcluded);
+            CHECK_NEAR(rc.hMain, hMain, 1e-9, "опыт с весками: проект открыт — тот же h");
+            CHECK_NEAR(rc.r.hk, hk, 1e-9, "опыт с весками: проект открыт — тот же h_k");
+            CHECK_NEAR(rc.r.hFinal, 1.123, 0.001, "опыт с весками из проекта: исправленная h (протокол 1,123)");
+        }
         app.ProcessSetView(3);
         st.Run(300);
         st.Shot("28_vodnik_moves", true);
@@ -933,6 +966,79 @@ int main(int argc, char** argv)
             CHECK(rc.r.m.size() == 8 && rc.r.n == 8);
             CHECK_NEAR(rc.r.hk, 0.0531, 0.001, "M021: h_k по табл. 6.5");
             CHECK_RANGE(app.ProcessPositionsSummary().h, 0.045, 0.052, "M021: h от начального");
+            {
+                const double h = app.ProcessPositionsSummary().h, hk = rc.r.hk;
+                // Автосохранение: правка -> через 3 с «Опыт.krenomer» рядом с записями
+                const fs::path autoFile = md / L"Опыт.krenomer";
+                CHECK(!fs::exists(autoFile, ec)); // открытие папки само файл не пишет
+                app.SetProjectAutosaveAllowed(true);
+                app.ProcessSetPositionArm(0, armDp[0]);
+                st.Run(1000);
+                CHECK(!fs::exists(autoFile, ec)); // не сразу
+                st.Run(3000);
+                CHECK_MSG(fs::exists(autoFile, ec), "нет автосохранения Опыт.krenomer");
+                CHECK(app.ProcessProjectPath() == text::PathToUtf8(autoFile));
+                app.SetProjectAutosaveAllowed(false);
+                const fs::path mproj = ShotsWorkDir() / L"Проекты" / L"Модель отсека M021.krenomer";
+                CHECK(app.ProcessSaveProject(text::PathToUtf8(mproj)));
+                // Другой опыт, затем папка M021 снова — открывается вместе с «Опыт.krenomer»: плечи и границы как были
+                app.ProcessOpen(text::PathToUtf8(vd));
+                wait();
+                st.Run(300);
+                CHECK(app.ProcessProjectPath().empty());
+                app.ProcessOpen(text::PathToUtf8(md));
+                wait();
+                st.Run(300);
+                CHECK(app.ProcessContinuous() && app.ProcessPositions().size() == 9);
+                CHECK(app.ProcessProjectPath() == text::PathToUtf8(autoFile));
+                CHECK(!app.ProcessPositions().empty() && app.ProcessPositions()[0].arm == armDp[0] &&
+                      app.ProcessPositions()[8].arm == armDp[8] && app.ProcessPositions()[4].t0 == 133.2);
+                CHECK_NEAR(app.ProcessPositionsSummary().h, h, 1e-9, "M021: папка с проектом — тот же h");
+                CHECK_NEAR(app.ProcessRs().r.hk, hk, 1e-9, "M021: папка с проектом — тот же h_k");
+                // Новый опыт без проекта начинается с чистого листа: плечи прошлой обработки не переносятся
+                fs::remove(autoFile, ec);
+                app.ProcessOpen(text::PathToUtf8(vd));
+                wait();
+                app.ProcessOpen(text::PathToUtf8(md));
+                wait();
+                st.Run(300);
+                CHECK(app.ProcessProjectPath().empty() && app.ProcessContinuous());
+                bool clean = !app.ProcessPositions().empty();
+                for (const auto& q : app.ProcessPositions())
+                    clean = clean && std::isnan(q.arm);
+                CHECK_MSG(clean, "M021 без проекта: плечи перенеслись из прошлой обработки");
+                // Проект из списка недавних (сохранён в другую папку) — тот же h
+                CHECK(app.ProcessOpenProject(text::PathToUtf8(mproj)));
+                wait();
+                st.Run(300);
+                CHECK(app.ProcessPositions().size() == 9 && app.ProcessPositions()[3].arm == armDp[3]);
+                CHECK_NEAR(app.ProcessPositionsSummary().h, h, 1e-9, "M021: проект открыт — тот же h");
+                CHECK_NEAR(app.ProcessRs().r.hk, hk, 1e-9, "M021: проект открыт — тот же h_k");
+                // Испорченный проект — понятная ошибка в журнале, опыт не трогается
+                const fs::path broken = ShotsWorkDir() / L"Проекты" / L"Испорчен.krenomer";
+                std::ofstream(broken, std::ios::binary) << "{\"krenomer_project\": 9}";
+                CHECK(!app.ProcessOpenProject(text::PathToUtf8(broken)));
+                CHECK_NEAR(app.ProcessPositionsSummary().h, h, 1e-9, "M021: испорченный проект не тронул опыт");
+                app.ProcessSelectPosition(4);
+                st.Run(7500); // всплывающие сообщения — погасли
+                // Кнопки и меню проекта
+                st.Shot("33_project_buttons", true);
+                app.ProcessShowProjectMenu(1);
+                st.Run(100);
+                st.Shot("33_project_open_menu");
+                app.ProcessShowProjectMenu(2);
+                st.Run(100);
+                st.Shot("33_project_save_menu");
+                app.ProcessShowProjectMenu(-1);
+                st.size = ImVec2(1024, 700);
+                app.ProcessShowProjectMenu(1);
+                st.Run(100);
+                st.Shot("33_project_menu_1024x700");
+                app.ProcessShowProjectMenu(-1);
+                st.Run(100);
+                st.size = ImVec2(1280, 800);
+                st.Run(100);
+            }
             st.Shot("29_m021_positions", true);
             // Дашборд: тёмная тема, развёрнутая карточка записи (на всю область) и назад
             ui::ApplyTheme(true, 1.f);

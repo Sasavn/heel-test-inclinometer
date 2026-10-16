@@ -106,6 +106,8 @@ void App::ProcHeader(float w)
     const float x0 = ImGui::GetCursorScreenPos().x;
     const float saveW = std::max(S(160), ImGui::CalcTextSize("Сохранение…").x + S(28));
     const float openW = ImGui::CalcTextSize("Открыть папку").x + S(28);
+    const bool narrow = w < S(960); // узко — проект одной кнопкой «Проект ▾»
+    const float projW = ProcProjectButtons(0, narrow, true) + S(8);
     {
         FontScope f(fontH2);
         ImGui::AlignTextToFramePadding();
@@ -119,7 +121,7 @@ void App::ProcHeader(float w)
             c = ' ';
     {
         FontScope f(fontSmall);
-        const float room = x0 + w - saveW - openW - S(30) - (ImGui::GetItemRectMax().x + S(14));
+        const float room = x0 + w - saveW - openW - projW - S(30) - (ImGui::GetItemRectMax().x + S(14));
         std::string t = src;
         while (!t.empty() && ImGui::CalcTextSize(t.c_str()).x > room)
         {
@@ -143,8 +145,10 @@ void App::ProcHeader(float w)
                 ImGui::SetTooltip("%s", src.c_str());
         }
     }
-    ImGui::SameLine(x0 + w - saveW - openW - S(8) - ImGui::GetWindowPos().x);
-    // «Открыть папку», «Сохранить отчёт» — в порядке «справа главное»
+    ImGui::SameLine(x0 + w - saveW - openW - S(8) - projW - ImGui::GetWindowPos().x);
+    // Проект, «Открыть папку», «Сохранить отчёт» — в порядке «справа главное»
+    ProcProjectButtons(ImGui::GetCursorPosX(), narrow, false);
+    ImGui::SameLine(0, S(8));
     const bool cont = ProcCont();
     const bool saving = proc_.save.valid() || proc_.saveRequested;
     const bool canSave = proc_.files && !proc_.meas.empty() && !proc_.load.valid() && (!cont || !proc_.pos.empty());
