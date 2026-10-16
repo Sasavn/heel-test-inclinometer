@@ -26,10 +26,12 @@
 #include "../core/Project.hpp"
 #include "../fw/Firmware.hpp"
 
+struct ImVec4;
+
 namespace ui
 {
 
-inline constexpr const char* kAppVersion = "1.7";
+inline constexpr const char* kAppVersion = "1.7.1";
 
 enum class Page
 {
@@ -59,6 +61,7 @@ struct Toast
     std::string text;
     int kind = 0; // 0 — информация, 1 — успех, 2 — ошибка
     std::int64_t until = 0;
+    std::string folder; // не пусто — кнопка «Открыть папку»
 };
 
 class App
@@ -106,6 +109,7 @@ public:
     void ApplySettings();
     void SyncTime();
     void ShowAbout(bool on) { aboutOpen_ = on; }
+    const std::vector<Toast>& Toasts() const { return toasts_; }
     void CloseDiagText() { diag_.closeText = true; }
     void RequestDiag()
     {
@@ -145,6 +149,17 @@ public:
     const std::vector<heel::Position>& ProcessPositions() const { return proc_.pos; }
     const heel::Summary& ProcessPositionsSummary() const { return proc_.posSum; }
     void ProcessSetPositionArm(int index, double arm);
+    // Плечи «от борта»: способ (0 — ДП, 1 — ЛБ, 2 — ПрБ), ширина B; ввод расстояния от борта, как в таблице
+    void ProcessSetArmFrom(int from, double B)
+    {
+        settings_.armFrom = from;
+        settings_.heelB = B;
+        proc_.dirty = true;
+    }
+    void ProcessSetPositionArmInput(int index, double x)
+    {
+        ProcessSetPositionArm(index, settings_.heelB > 0 ? heel::ArmFromSide(x, settings_.armFrom, settings_.heelB) : x);
+    }
     void ProcessSelectPosition(int index) { proc_.sel = index; }
     int ProcessAxis() const { return settings_.heelAxis; }
     void ProcessSetSmallShip(bool model) { ProcSetSmallShip(model); }
@@ -157,6 +172,10 @@ public:
         proc_.tab = view == 2 ? 1 : view == 3 ? 2 : 0;
     }
     void ProcessSetExpanded(int card) { proc_.expanded = card; }
+    // Подпункт «Обработки»: -1 — сам (широкое окно — «Обзор», узкое / низкое — «Положения и расчёт»), 0 — обзор,
+    // 1 — положения и расчёт, 2 — графики
+    void ProcessSetSubView(int v) { proc_.view = v; }
+    int ProcessSubView() const { return ProcView(); }
     void ProcessSetTab(int tab) { proc_.tab = tab; }
     void ProcessSetRsInfo(double h, double lMax, double D0)
     {
@@ -199,6 +218,8 @@ public:
     // Открыть: параметры — сразу, записи читаются в фоне, положения и правки — после чтения.
     bool ProcessSaveProject(const std::string& path = {});
     bool ProcessOpenProject(const std::string& path);
+    bool ProcessProjectPickFiles(const std::vector<std::string>& files); // записи не нашлись — указать вручную
+    bool ProcessProjectMissing() const { return proc_.projMissing != nullptr; }
     const std::string& ProcessProjectPath() const { return proc_.projectPath; }
     void SetProjectAutosaveAllowed(bool on) { projectAutosaveAllowed_ = on; } // стенд снимков: без автосохранения
     void ProcessShowProjectMenu(int menu) { proc_.projMenu = menu; } // стенд: 1 — «Открыть проект», 2 — «Сохранить ▾», -1 — закрыть
@@ -213,7 +234,7 @@ private:
     void RenderAbout();
     void RenderDemoPanel();
     void NotConnectedPanel(const char* what);
-    void Notify(const std::string& text, int kind = 0, int ms = 4000);
+    void Notify(const std::string& text, int kind = 0, int ms = 4000, const std::string& folder = {});
     void MakeLink(bool demo);
     bool Connected() const { return snap_.state == LinkState::Connected; }
     bool HaveStatus() const { return Connected() && snap_.haveStatus; }
@@ -267,6 +288,11 @@ private:
     void ProcPositionPlot(int post, int index, float w, float h, bool forExport); // положение крупно: 3 линии
     void ProcExportPositions(int post, float w, float h);                          // все положения — сеткой (PNG)
     void ProcSetSmallShip(bool model);
+    // Плечи «от борта» (ЛБ / ПрБ) по ширине B
+    bool ProcArmSide() const;
+    std::string ProcArmHeader() const;
+    bool ProcArmField(const char* id, double& arm, const ImVec4& color, bool hideValue = false);
+    void ProcArmFromSwitch();
     // Посты = датчики со своими названиями
     void ProcAssignPosts();                         // датчики -> посты 0…3 (по порядку, без снятых)
     std::string SensorTitle(int key) const;         // название датчика (своё или по умолчанию)
@@ -304,6 +330,9 @@ private:
     void ProcKpis(float w);                                     // ряд карточек-показателей
     void ProcControlCard(float w, float h);                     // «Контроль M – tg θ»
     void ProcTabsCard(float w, float h);                        // положения / Правила РС / перемещения / журнал
+    void ProcTabsCardAuto(float w);                             // она же во всю высоту содержимого (прокрутка — страницей)
+    int ProcView() const;                                       // подпункт: 0 — обзор, 1 — положения и расчёт, 2 — графики
+    bool ProcWideScreen() const;                                // окно не меньше 1280 × 800 — есть «Обзор»
     void ProcGraphsCard(float w, float h);                      // компактный режим: запись и контроль — вкладками
     float ModeSwitchWidthPublic() const;
     void ProcMovesView(float w, float h);                       // группы крен-балласта и перемещения, табл. 6.5 полностью
@@ -321,6 +350,8 @@ private:
     void ProcProjectMenus(bool open, bool save);                // содержимое меню проекта
     float ProcProjectButtons(float x, bool narrow, bool measure); // кнопки проекта в шапке; ширина
     void TickProject();
+    bool ProcOpenProjectLoaded(const std::string& path, const proj::Project& p);
+    void ProcProjectMissingCard(float w);                        // записи проекта не найдены — «Указать файлы…»
     void ProcLoadNames();
     void SaveSettingsSoon(); // настройки — в файл через ~1 с (не только при выходе)
     void SaveSettingsNow();
@@ -522,6 +553,7 @@ private:
         // Дашборд
         int expanded = 0;                 // развёрнута карточка: 0 — нет, 1 — запись / графики, 2 — контроль, 3 — вкладки
         int gtab = 0;                     // компактный режим: вкладка карточки графиков (0 — запись, 1 — контроль)
+        int view = -1;                    // подпункт: -1 — сам, 0 — обзор, 1 — положения и расчёт, 2 — графики
         int tab = 0;                      // вкладка нижней карточки: 0 — положения / замеры, 1 — Правила РС, 2 — перемещения, 3 — журнал
         bool paramsOpen = true;           // полная карточка параметров раскрыта
         bool paramsAuto = false;          // после первого чтения параметры свёрнуты в строку
@@ -534,8 +566,13 @@ private:
         std::int64_t projSaveAt = 0;      // автосохранение: когда (0 — не нужно)
         bool projAutoFailed = false;      // автосохранение не удалось — больше не пробовать до смены проекта
         int projMenu = 0;                 // стенд: открыть меню проекта (1 — открыть, 2 — сохранить)
+        std::shared_ptr<proj::Project> projMissing; // проект, записи которого не нашлись (ждёт «Указать файлы…»)
+        std::string projMissingPath;
     } proc_;
     bool projectAutosaveAllowed_ = true;
+    // «Обработка», карточка вкладок во всю высоту содержимого: таблицы без своей прокрутки, панели — по содержимому
+    bool procNatural_ = false;
+    int NaturalChild() const; // ImGuiChildFlags_AutoResizeY в этом режиме (AppProcDash.cpp)
     std::int64_t settingsSaveAt_ = 0;     // SaveSettingsSoon: когда записать (0 — не нужно)
 };
 

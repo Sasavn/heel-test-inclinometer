@@ -177,7 +177,7 @@ void App::ProcRsView(float w, float h)
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(S(8), S(6)));
 
     // --- Данные и сводка
-    ImGui::BeginChild("##rs_a", ImVec2(aw, h), ImGuiChildFlags_AlwaysUseWindowPadding);
+    ImGui::BeginChild("##rs_a", ImVec2(aw, procNatural_ ? 0.f : h), ImGuiChildFlags_AlwaysUseWindowPadding | NaturalChild());
     {
         {
             FontScope f(fontBold);
@@ -363,7 +363,7 @@ void App::ProcRsView(float w, float h)
     ImGui::SameLine(0, gap);
     if (narrow)
         ImGui::BeginGroup();
-    ImGui::BeginChild("##rs_b", ImVec2(bw, bh), ImGuiChildFlags_AlwaysUseWindowPadding);
+    ImGui::BeginChild("##rs_b", ImVec2(bw, procNatural_ ? 0.f : bh), ImGuiChildFlags_AlwaysUseWindowPadding | NaturalChild());
     {
         {
             FontScope f(fontBold);
@@ -375,8 +375,8 @@ void App::ProcRsView(float w, float h)
              "в ноль, табл. 6.5 и п. 6.6 — обработка и оценка качества.\n✓ — выполнено, ✗ — нет, — — нет данных.");
         if (ImGui::BeginTable("##rs_req", 3,
                               ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_SizingFixedFit |
-                                  ImGuiTableFlags_ScrollY,
-                              ImVec2(0, ImGui::GetContentRegionAvail().y)))
+                                  (procNatural_ ? 0 : ImGuiTableFlags_ScrollY),
+                              ImVec2(0, procNatural_ ? 0.f : ImGui::GetContentRegionAvail().y)))
         {
             ImGui::TableSetupScrollFreeze(0, 1);
             ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed, S(16));
@@ -418,7 +418,7 @@ void App::ProcRsView(float w, float h)
         ImGui::SetCursorScreenPos(ImVec2(ImGui::GetItemRectMin().x, ImGui::GetItemRectMax().y + gap));
     else
         ImGui::SameLine(0, gap);
-    ImGui::BeginChild("##rs_c", ImVec2(cw, ch), ImGuiChildFlags_AlwaysUseWindowPadding);
+    ImGui::BeginChild("##rs_c", ImVec2(cw, procNatural_ ? 0.f : ch), ImGuiChildFlags_AlwaysUseWindowPadding | NaturalChild());
     {
         {
             FontScope f(fontBold);
@@ -433,9 +433,9 @@ void App::ProcRsView(float w, float h)
              "если он вне 2σ.");
         const bool showDiff = ImGui::GetContentRegionAvail().x >= S(440); // узко — h_i − h_k в подсказке строки
         if (ImGui::BeginTable("##rs_t65", showDiff ? 6 : 5,
-                              ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_ScrollY |
+                              ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerH | (procNatural_ ? 0 : ImGuiTableFlags_ScrollY) |
                                   ImGuiTableFlags_SizingFixedFit,
-                              ImVec2(0, ImGui::GetContentRegionAvail().y)))
+                              ImVec2(0, procNatural_ ? 0.f : ImGui::GetContentRegionAvail().y)))
         {
             ImGui::TableSetupScrollFreeze(0, 1);
             ImGui::TableSetupColumn("№", ImGuiTableColumnFlags_WidthFixed, S(40));
@@ -587,7 +587,7 @@ void App::ProcMovesView(float w, float h)
     ImGui::PushStyleColor(ImGuiCol_ChildBg, pal.cardAlt);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(S(8), S(6)));
 
-    ImGui::BeginChild("##mv_a", ImVec2(aw, h), ImGuiChildFlags_AlwaysUseWindowPadding);
+    ImGui::BeginChild("##mv_a", ImVec2(aw, procNatural_ ? 0.f : h), ImGuiChildFlags_AlwaysUseWindowPadding | NaturalChild());
     {
         {
             FontScope f(fontBold);
@@ -695,7 +695,7 @@ void App::ProcMovesView(float w, float h)
     ImGui::EndChild();
 
     ImGui::SameLine(0, gap);
-    ImGui::BeginChild("##mv_b", ImVec2(w - aw - gap, h), ImGuiChildFlags_AlwaysUseWindowPadding);
+    ImGui::BeginChild("##mv_b", ImVec2(w - aw - gap, procNatural_ ? 0.f : h), ImGuiChildFlags_AlwaysUseWindowPadding | NaturalChild());
     {
         {
             FontScope f(fontBold);
@@ -710,9 +710,9 @@ void App::ProcMovesView(float w, float h)
         const int cols = 2 + static_cast<int>(ng) + 1 + (np > 1 ? static_cast<int>(np) : 0) + 1 +
                          (np > 1 ? static_cast<int>(np) : 0) + 1;
         if (ImGui::BeginTable("##mv_steps", cols,
-                              ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_ScrollY |
+                              ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerH | (procNatural_ ? 0 : ImGuiTableFlags_ScrollY) |
                                   ImGuiTableFlags_SizingStretchProp,
-                              ImVec2(0, ImGui::GetContentRegionAvail().y)))
+                              ImVec2(0, procNatural_ ? 0.f : ImGui::GetContentRegionAvail().y)))
         {
             ImGui::TableSetupScrollFreeze(0, 1);
             ImGui::TableSetupColumn("Шаг", ImGuiTableColumnFlags_WidthFixed, S(34));

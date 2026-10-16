@@ -52,6 +52,8 @@ struct Project
     // Судно и поиск положений
     bool model = false;   // малое судно (модель): кг и мм
     double D = 1500.0, P = 15.0, L = 4.5;
+    double B = 0.0;       // ширина судна (модели), плечевые единицы; 0 — не задана
+    int armFrom = 0;      // плечи вводились: 0 — от ДП, 1 — от ЛБ, 2 — от ПрБ
     int axis = 0;         // 0 — X, 1 — Y
     double windowS = 30.0, thresholdDeg = 0.1, plateauS = 10.0, stepDeg = 0.5;
 
@@ -85,6 +87,10 @@ struct Project
 
     // Итог при сохранении (для сведения и проверки; при открытии считается заново)
     double h = heel::kNaN, hMain = heel::kNaN;
+
+    // Load: записи, найденные по похожему имени (« (1)», « - копия», регистр), — для журнала; не найденные
+    std::vector<std::string> notes;
+    std::vector<std::string> missing;
 };
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -204,7 +210,8 @@ inline std::string ToJson(const Project& p, bool meta = true)
     o += "]\n  },\n";
     // Судно и поиск положений
     o += "  \"ship\": {\"model\": " + Bool(p.model) + ", \"D\": " + Num(p.D) + ", \"P\": " + Num(p.P) + ", \"L\": " +
-         Num(p.L) + ", \"axis\": " + Str(p.axis == 1 ? "Y" : "X") + "},\n";
+         Num(p.L) + ", \"axis\": " + Str(p.axis == 1 ? "Y" : "X") + ", \"B\": " + Num(p.B) + ", \"arms_from\": " +
+         Str(p.armFrom == 2 ? "ПрБ" : p.armFrom == 1 ? "ЛБ" : "ДП") + "},\n";
     o += "  \"detect\": {\"window_s\": " + Num(p.windowS) + ", \"threshold_deg\": " + Num(p.thresholdDeg) +
          ", \"plateau_s\": " + Num(p.plateauS) + ", \"step_deg\": " + Num(p.stepDeg) + "},\n";
     o += "  \"processing\": {\"method\": " + std::to_string(p.method) + ", \"median_n\": " + std::to_string(p.medianN) +
@@ -434,6 +441,16 @@ inline bool FromJson(std::string_view text, Project& p, std::string* err = nullp
         else
             r.Bad("ship.axis", "ожидается \"X\" или \"Y\"");
     }
+    r.Num(ship["B"], "ship.B", o.B);
+    if (!ship["arms_from"].IsNull())
+    {
+        std::string a;
+        r.Text(ship["arms_from"], "ship.arms_from", a);
+        if (a == "ДП" || a == "ЛБ" || a == "ПрБ")
+            o.armFrom = a == "ПрБ" ? 2 : a == "ЛБ" ? 1 : 0;
+        else
+            r.Bad("ship.arms_from", "ожидается \"ДП\", \"ЛБ\" или \"ПрБ\"");
+    }
     if (r.err.empty() && !(o.D > 0))
         r.Bad("ship.D", "водоизмещение должно быть больше нуля");
     const json::Value& det = v["detect"];
@@ -603,7 +620,49 @@ inline bool Save(const std::filesystem::path& file, Project p, std::string* err 
     return true;
 }
 
-// Прочитать и найти записи (folder / files — полные пути; не найдены — err «папка записей не найдена»).
+// Файл записи не нашёлся ни рядом с проектом, ни по полному пути: ищется в папке проекта, в папке записей (по
+// относительному и полному пути) файл с тем же именем без приписок копии и регистра (heel::RecordNameKey). Один
+// такой — он; ни одного или несколько — пусто.
+inline std::string FindSimilar(const std::filesystem::path& projectDir, const std::string& rel, const std::string& abs,
+                               std::string* ambiguous = nullptr)
+{
+    const std::string name = text::PathToUtf8(text::PathFromUtf8(!abs.empty() ? abs : rel).filename());
+    if (name.empty())
+        return {};
+    const std::string key = heel::RecordNameKey(name);
+    std::vector<std::filesystem::path> dirs = {projectDir};
+    if (!rel.empty())
+        dirs.push_back((projectDir / text::PathFromUtf8(rel)).parent_path().lexically_normal());
+    if (!abs.empty())
+        dirs.push_back(text::PathFromUtf8(abs).parent_path());
+    std::vector<std::filesystem::path> found;
+    std::error_code ec;
+    for (const auto& d : dirs)
+        for (std::filesystem::directory_iterator it(d, ec), end; !ec && it != end; it.increment(ec))
+        {
+            if (!it->is_regular_file(ec) || heel::RecordNameKey(text::PathToUtf8(it->path().filename())) != key)
+                continue;
+            bool dup = false;
+            for (const auto& f : found)
+                dup |= std::filesystem::equivalent(f, it->path(), ec);
+            if (!dup)
+                found.push_back(it->path());
+        }
+    if (found.size() == 1)
+        return text::PathToUtf8(found.front());
+    if (ambiguous && found.size() > 1)
+    {
+        *ambiguous = name + " — похожих несколько:";
+        for (const auto& f : found)
+            *ambiguous += " " + text::PathToUtf8(f.filename()) + ";";
+        ambiguous->pop_back();
+    }
+    return {};
+}
+
+// Прочитать и найти записи (folder / files — полные пути). Файлы, не найденные по пути, ищутся по похожему имени
+// (FindSimilar: « (1)», « - копия», регистр) — найденные так — в p.notes. Не нашлись — false, err и p.missing
+// (проект в p всё равно разобран: записи можно указать вручную).
 inline bool Load(const std::filesystem::path& file, Project& p, std::string* err = nullptr)
 {
     std::ifstream in(file, std::ios::binary);
@@ -627,17 +686,34 @@ inline bool Load(const std::filesystem::path& file, Project& p, std::string* err
     if (!o.files.empty())
     {
         std::vector<std::string> found;
+        std::string why;
         for (std::size_t i = 0; i < o.files.size(); i++)
         {
             const std::string rel = i < o.filesRel.size() ? o.filesRel[i] : std::string();
-            const std::string f = Resolve(dir, rel, o.files[i]);
+            std::string f = Resolve(dir, rel, o.files[i]);
             if (f.empty())
             {
-                if (err)
-                    *err = "файл записи не найден: " + (rel.empty() ? o.files[i] : rel + " (или " + o.files[i] + ")");
-                return false;
+                std::string amb;
+                f = FindSimilar(dir, rel, o.files[i], &amb);
+                const std::string want = text::PathToUtf8(text::PathFromUtf8(o.files[i].empty() ? rel : o.files[i]).filename());
+                if (!f.empty())
+                    o.notes.push_back(want + " не найден — взят " + text::PathToUtf8(text::PathFromUtf8(f).filename()) +
+                                      " (то же имя с припиской копии или в другом регистре)");
+                else
+                {
+                    o.missing.push_back(want);
+                    why += (why.empty() ? "" : "; ") + (amb.empty() ? want : amb);
+                }
             }
             found.push_back(f);
+        }
+        if (!o.missing.empty())
+        {
+            if (err)
+                *err = "файлы записей не найдены ни рядом с проектом, ни по полному пути, ни по похожему имени: " + why;
+            o.files = found;
+            p = std::move(o);
+            return false;
         }
         o.files = found;
         o.folder = text::PathToUtf8(text::PathFromUtf8(o.files.front()).parent_path());

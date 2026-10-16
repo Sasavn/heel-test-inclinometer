@@ -93,6 +93,10 @@ struct Settings
     bool rsGroupMode = false;
     std::vector<RsGroup> rsGroups;
     std::vector<std::vector<double>> rsMoves; // [шаг][группа]
+    // Как вводили плечи: 0 — от ДП (плечо), 1 — расстояние от ЛБ, 2 — от ПрБ до центра груза; B — ширина судна
+    // (модели) в плечевых единицах. В расчёте — всегда плечо от ДП (ArmFromSide), это — для отчёта.
+    int armFrom = 0;
+    double B = 0.0;
 
     plateau::Params Plateau() const
     {
@@ -118,6 +122,21 @@ struct File
 
     bool Measurement() const { return number >= 0 || !pcRun.empty() || !other.empty(); }
 };
+
+// Плечи «от борта»: студенты меряют расстояние x от борта до центра груза, программа считает плечо от ДП (знак «+» —
+// к правому борту): от ПрБ l = B/2 − x, от ЛБ l = x − B/2. from: 0 — ДП (как есть), 1 — ЛБ, 2 — ПрБ.
+inline double ArmFromSide(double x, int from, double B)
+{
+    return from == 2 ? B / 2 - x : from == 1 ? x - B / 2 : x;
+}
+inline double SideFromArm(double l, int from, double B)
+{
+    return from == 2 ? B / 2 - l : from == 1 ? l + B / 2 : l;
+}
+inline const char* ArmFromName(int from)
+{
+    return from == 2 ? "ПрБ" : from == 1 ? "ЛБ" : "ДП";
+}
 
 // Датчики, поставленные «задом наперёд» (ось +X — к левому борту, а не к правому): углы их файлов — с обратным
 // знаком (X и Y — как датчик, повёрнутый на 180°: Raw, Offset и Calc). keys — ключи датчиков (SensorKey).
@@ -272,11 +291,70 @@ inline std::vector<std::filesystem::path> ListCsv(const std::filesystem::path& d
     return kept;
 }
 
-// Номер замера и датчик — по имени файла (если имя по одному из образцов).
+// Имя без приписок копии, которые добавляют Telegram, Проводник и браузеры: «X (1)», «X(2)», «X - копия»,
+// «X - копия (2)», «X - Copy», «Копия X» -> «X».
+inline std::string CopyStem(std::string s)
+{
+    auto ends = [&](const std::string& suf) { return s.size() >= suf.size() && s.compare(s.size() - suf.size(), suf.size(), suf) == 0; };
+    for (bool again = true; again;)
+    {
+        again = false;
+        while (!s.empty() && (s.back() == ' ' || s.back() == '_'))
+            s.pop_back();
+        if (!s.empty() && s.back() == ')')
+        {
+            const std::size_t o = s.rfind('(');
+            bool digits = o != std::string::npos && o + 2 < s.size();
+            for (std::size_t i = o + 1; digits && i + 1 < s.size(); i++)
+                digits = s[i] >= '0' && s[i] <= '9';
+            if (digits)
+            {
+                s.erase(o);
+                again = true;
+                continue;
+            }
+        }
+        for (const char* suf : {" - копия", " - Копия", " - КОПИЯ", " - copy", " - Copy", " - COPY", "-копия", " копия"})
+            if (ends(suf))
+            {
+                s.erase(s.size() - std::string(suf).size());
+                again = true;
+                break;
+            }
+    }
+    for (const char* pre : {"Копия ", "Copy of "})
+        if (s.rfind(pre, 0) == 0)
+            s.erase(0, std::string(pre).size());
+    return s;
+}
+
+// Строка в нижнем регистре (латиница и кириллица UTF-8).
+inline std::string LowerUtf8(const std::string& s)
+{
+    std::wstring w = text::Widen(s);
+    for (auto& c : w)
+        if (c >= L'A' && c <= L'Z')
+            c = static_cast<wchar_t>(c - L'A' + L'a');
+        else if (c >= 0x410 && c <= 0x42F)
+            c = static_cast<wchar_t>(c + 0x20);
+        else if (c == 0x401)
+            c = 0x451;
+    return text::Narrow(w);
+}
+
+// Ключ имени файла записи: без приписок копии и без учёта регистра (имя и расширение) — «2026-10-16_M024_D2 (1).CSV»
+// и «2026-10-16_m024_d2.csv» — одна запись.
+inline std::string RecordNameKey(const std::string& fileName)
+{
+    const std::filesystem::path p = text::PathFromUtf8(fileName);
+    return LowerUtf8(CopyStem(text::PathToUtf8(p.stem())) + text::PathToUtf8(p.extension()));
+}
+
+// Номер замера и датчик — по имени файла (если имя по одному из образцов; приписки копии « (1)» — не мешают).
 inline void NameInfo(File& f)
 {
     proto::FileEntry e;
-    e.name = text::PathToUtf8(f.path.stem()) + ".CSV"; // и у .TXT / .XLSX — по тому же образцу имени
+    e.name = CopyStem(text::PathToUtf8(f.path.stem())) + ".CSV"; // и у .TXT / .XLSX — по тому же образцу имени
     proto::ParseMeasurementName(e);
     f.number = e.measurement;
     const bool oldName = f.name.size() > 2 && (f.name[0] == 'M' || f.name[0] == 'm') && f.name[1] == '_';

@@ -87,10 +87,12 @@ struct Params
 // Метод и его параметры одной строкой (отчёт, подсказки).
 inline std::string Describe(const Params& p)
 {
-    char b[256];
+    char b[640];
     const std::string tc = p.tcS > 0 ? "Tc = " + std::to_string(static_cast<int>(std::lround(p.tcS))) + " с"
                                      : std::string("Tc — по данным");
-    const std::string win = p.wholeSpan ? "среднее — по всему участку" : "среднее — по окну Ω = 3·Tc в конце участка, " + tc;
+    const std::string win = p.wholeSpan ? "среднее — по установившемуся крену (без переходных начала и конца участка)"
+                                        : "среднее — по окну Ω в конце установившегося крена: вторая его половина, не "
+                                          "короче 3·Tc, " + tc;
     switch (p.method)
     {
     case Method::MedianEma:
@@ -106,7 +108,7 @@ inline std::string Describe(const Params& p)
                       p.sgWindowS, win.c_str());
         return b;
     case Method::Mean: return std::string(MethodName(p.method)) + ": по всему участку, без выбросов";
-    case Method::Kalman: return std::string(MethodName(p.method)) + ": уровень в конце участка";
+    case Method::Kalman: return std::string(MethodName(p.method)) + ": уровень по окну Ω в конце установившегося крена";
     case Method::DampedSine: return std::string(MethodName(p.method)) + ": равновесный угол θ∞ по всему участку";
     case Method::User: return p.custom ? "Свой метод «" + p.custom->Name() + "»" : std::string("Свой метод — не выбран");
     default: return MethodName(p.method);
@@ -267,8 +269,10 @@ inline double DominantOmega(const std::vector<double>& t, const std::vector<doub
 // ---------------------------------------------------------------------------------------------------------------
 
 // Уровень θ0(t) фильтра Калмана по участку (t, x); omega — угловая частота качки, рад/с.
+// level0 — начальный уровень (NaN — медиана первых 20 отсчётов): по окну Ω фильтр стартует с медианы окна, без
+// переходного процесса в начале окна.
 inline std::vector<double> KalmanLevel(const std::vector<double>& t, const std::vector<double>& x, double omega,
-                                       double zeta = 0.05)
+                                       double zeta = 0.05, double level0 = kNaN)
 {
     const std::size_t n = std::min(t.size(), x.size());
     std::vector<double> lev(n, kNaN);
@@ -281,8 +285,10 @@ inline std::vector<double> KalmanLevel(const std::vector<double>& t, const std::
     const double sn = std::max(0.01, 1.4826 * MedianOf(d) / std::sqrt(2.0));
     const double R = sn * sn;
     double s[3] = {MedianOf(std::vector<double>(x.begin(), x.begin() + static_cast<std::ptrdiff_t>(std::min<std::size_t>(n, 20)))), 0, 0};
+    if (std::isfinite(level0))
+        s[0] = level0;
     s[1] = x[0] - s[0];
-    double P[3][3] = {{4, 0, 0}, {0, 4, 0}, {0, 0, 4}};
+    double P[3][3] = {{std::isfinite(level0) ? 0.01 : 4.0, 0, 0}, {0, 4, 0}, {0, 0, 4}};
     const double w2 = omega * omega, c = 2 * zeta * omega;
     for (std::size_t i = 0; i < n; i++)
     {
@@ -489,10 +495,96 @@ inline SineFit FitDampedSine(const std::vector<double>& t, const std::vector<dou
 // Оценка уровня на участке
 // ---------------------------------------------------------------------------------------------------------------
 
+// Установившийся крен на участке [s0, s1]: без «головы», где крен ещё не успокоился после переноса груза, и без
+// «хвоста», где он уже уходит (груз начали переносить, по палубе пошли). Скользящее среднее исходных за период качки
+// Tc сравнивается с уровнем второй половины участка (медиана этих средних); с каждого края отбрасывается всё, пока не
+// наберётся период подряд в пределах max(0,05°; 3·σ) (σ — по MAD средних второй половины). С каждого края — не
+// больше половины участка; участок короче 4·Tc — целиком.
+struct Settled
+{
+    double t0 = kNaN, t1 = kNaN;
+};
+
+inline Settled SettledSpan(const std::vector<double>& st, const std::vector<double>& sx, double tcS, double fop)
+{
+    Settled r;
+    const std::size_t n = std::min(st.size(), sx.size());
+    if (!n)
+        return r;
+    r.t0 = st.front();
+    r.t1 = st[n - 1];
+    if (n < 10 || !(tcS > 0) || !(fop > 0) || st[n - 1] - st.front() < 4.0 * tcS)
+        return r;
+    const std::size_t k = std::max<std::size_t>(3, static_cast<std::size_t>(std::lround(tcS * fop)));
+    if (n < 3 * k)
+        return r;
+    std::vector<double> pre(n + 1, 0.0);
+    for (std::size_t i = 0; i < n; i++)
+        pre[i + 1] = pre[i] + sx[i];
+    // m[j] — среднее отсчётов j…j+k−1
+    const std::size_t nm = n - k + 1;
+    std::vector<double> m(nm);
+    for (std::size_t j = 0; j < nm; j++)
+        m[j] = (pre[j + k] - pre[j]) / static_cast<double>(k);
+    const double mid = 0.5 * (st.front() + st[n - 1]);
+    std::vector<double> late;
+    for (std::size_t j = 0; j < nm; j++)
+        if (st[j + k / 2] >= mid)
+            late.push_back(m[j]);
+    if (late.size() < k)
+        return r;
+    const double ref = MedianOf(late);
+    std::vector<double> dev;
+    for (const double v : late)
+        dev.push_back(std::fabs(v - ref));
+    const double thr = std::max(0.05, 3.0 * 1.4826 * MedianOf(dev));
+    // Хвост: с конца — до периода подряд в пределах
+    std::size_t run = 0;
+    for (std::size_t j = nm; j-- > 0;)
+    {
+        if (st[j + k - 1] < mid)
+            break;
+        if (std::fabs(m[j] - ref) <= thr)
+        {
+            if (++run >= k)
+            {
+                r.t1 = st[std::min(n - 1, j + 2 * k - 2)]; // конец последнего окна, ещё в пределах
+                break;
+            }
+        }
+        else
+            run = 0;
+    }
+    // Голова: с начала — до периода подряд в пределах
+    run = 0;
+    for (std::size_t j = 0; j < nm; j++)
+    {
+        if (st[j] > mid)
+            break;
+        if (std::fabs(m[j] - ref) <= thr)
+        {
+            if (++run >= k)
+            {
+                r.t0 = st[j + 1 - k]; // начало первого окна в пределах
+                break;
+            }
+        }
+        else
+            run = 0;
+    }
+    if (r.t1 - r.t0 < 3.0 * tcS) // на всякий случай — не меньше трёх периодов
+    {
+        r.t0 = st.front();
+        r.t1 = st[n - 1];
+    }
+    return r;
+}
+
 struct Estimate
 {
     double level = kNaN;            // установившийся крен по методу, °
     double winT0 = kNaN, winT1 = kNaN; // окно среднего (Ω), с
+    double settledT0 = kNaN, settledT1 = kNaN; // установившийся крен (без переходных головы и хвоста), с
     double tcS = kNaN;              // период качки Tc, с (заданный или по данным)
     double alpha = kNaN;            // α EMA (MedianEma)
     double range = kNaN, sd = kNaN; // размах (14) и СКО (√(15)) обработанного сигнала на Ω
@@ -537,13 +629,29 @@ inline Estimate EstimateSpan(const std::vector<double>& t, const std::vector<dou
     // Tc и окно Ω = 3·Tc в конце участка (13)
     double w = DominantOmega(st, sx);
     e.tcS = p.tcS > 0 ? p.tcS : std::isfinite(w) ? std::clamp(2 * kPi / w, 2.0, 40.0) : 10.0;
-    e.winT1 = st.back();
-    e.winT0 = p.wholeSpan ? st.front() : std::max(st.front(), e.winT1 - 3.0 * e.tcS + 0.5 / fop);
+    // Окно Ω — в конце установившегося крена (без переходных головы и хвоста), длина — вторая половина
+    // установившегося крена, но не меньше 3·Tc статьи. Одни 3·Tc (у модели Tc ≈ 2 с — 6 с) не усредняют медленное
+    // «гуляние» крена (биения, дрейф с периодом 10–20 с), и среднее на графике уходит от сигнала на 0,1–0,2°.
+    const Settled set = SettledSpan(st, sx, e.tcS, fop);
+    e.settledT0 = set.t0;
+    e.settledT1 = set.t1;
+    e.winT1 = set.t1;
+    e.winT0 = p.wholeSpan ? set.t0
+                          : std::max(set.t0, e.winT1 - std::max(3.0 * e.tcS, 0.5 * (set.t1 - set.t0)) + 0.5 / fop);
+    std::size_t nSettled = st.size(); // отсчётов до конца установившегося крена
+    while (nSettled > 1 && st[nSettled - 1] > e.winT1)
+        nSettled--;
+    std::size_t nWin0 = 0;            // первый отсчёт окна
+    while (nWin0 + 1 < nSettled && st[nWin0] < e.winT0)
+        nWin0++;
+    std::size_t nHead = 0;            // первый отсчёт установившегося крена
+    while (nHead + 1 < nSettled && st[nHead] < e.settledT0)
+        nHead++;
     auto windowStats = [&](const std::vector<double>& y) {
         double s = 0, lo = 1e300, hi = -1e300;
         int k = 0;
         for (std::size_t i = 0; i < st.size(); i++)
-            if (st[i] >= e.winT0 && std::isfinite(y[i]))
+            if (st[i] >= e.winT0 && st[i] <= e.winT1 && std::isfinite(y[i]))
             {
                 s += y[i];
                 lo = std::min(lo, y[i]);
@@ -555,7 +663,7 @@ inline Estimate EstimateSpan(const std::vector<double>& t, const std::vector<dou
         const double m = s / k;
         double q = 0;
         for (std::size_t i = 0; i < st.size(); i++)
-            if (st[i] >= e.winT0 && std::isfinite(y[i]))
+            if (st[i] >= e.winT0 && st[i] <= e.winT1 && std::isfinite(y[i]))
                 q += (y[i] - m) * (y[i] - m);
         e.range = hi - lo;
         e.sd = std::sqrt(q / k);
@@ -599,10 +707,12 @@ inline Estimate EstimateSpan(const std::vector<double>& t, const std::vector<dou
     }
     case Method::Kalman:
     {
-        const std::vector<double> lev = KalmanLevel(st, sx, std::isfinite(w) ? w : 2 * kPi / e.tcS);
-        e.level = lev.back();
-        e.winT0 = e.winT1 = st.back();
-        e.t = st;
+        // Фильтр — по окну Ω (как у остальных методов): медленный уход начала участка уровень не тянет
+        const std::vector<double> wt(st.begin() + static_cast<std::ptrdiff_t>(nWin0), st.begin() + static_cast<std::ptrdiff_t>(nSettled));
+        const std::vector<double> wx(sx.begin() + static_cast<std::ptrdiff_t>(nWin0), sx.begin() + static_cast<std::ptrdiff_t>(nSettled));
+        const std::vector<double> lev = KalmanLevel(wt, wx, std::isfinite(w) ? w : 2 * kPi / e.tcS, 0.05, MedianOf(wx));
+        e.level = lev.back(); // уровень в конце установившегося крена
+        e.t = wt;
         e.y = lev;
         break;
     }
@@ -612,7 +722,10 @@ inline Estimate EstimateSpan(const std::vector<double>& t, const std::vector<dou
             break;
         if (!std::isfinite(sp.front()))
             sp = p.custom->Process(st, sx, p.tcS);
-        e.level = p.custom->Level(st, sp, sx, p.tcS, e.winT0, e.winT1, e.tcS);
+        // Уровень — по установившемуся крену (T0, T1 правила среднего — его начало и конец), Tc — тот же
+        const auto a = static_cast<std::ptrdiff_t>(nHead), b = static_cast<std::ptrdiff_t>(nSettled);
+        e.level = p.custom->Level(std::vector<double>(st.begin() + a, st.begin() + b), std::vector<double>(sp.begin() + a, sp.begin() + b),
+                                  std::vector<double>(sx.begin() + a, sx.begin() + b), e.tcS, e.winT0, e.winT1, e.tcS);
         e.t = st;
         e.y = sp;
         break;

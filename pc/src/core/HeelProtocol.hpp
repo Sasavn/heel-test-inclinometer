@@ -618,6 +618,12 @@ inline std::vector<xlsx::Sheet> BuildBook(const Settings& s, const std::vector<F
         g.KV("Датчики (посты)", xlsx::Text(sensors), S(false, 0, true, true, 1), 4, np > 2 ? 30 : 0);
         g.KV("Крен", xlsx::Text(std::string("ось ") + (s.axis == 0 ? "X (CalcX)" : "Y (CalcY)") +
                                "; «+» — на правый борт; плечи со знаком: «+» — к правому борту"));
+        if (s.armFrom != 0 && s.B > 0 && !s.rsGroupMode)
+            g.KV("Плечи", xlsx::Text(std::string("вводились от ") + ArmFromName(s.armFrom) +
+                                    ": x — расстояние от борта до центра груза; ширина B = " +
+                                    detail::Num(s.B, mm ? 1 : 3) + " " + s.units.Arm() + "; плечо от ДП l = " +
+                                    (s.armFrom == 2 ? "B/2 − x" : "x − B/2")),
+                 S(false, 0, true, true, 1), 4, 30);
         g.KV("Режим", xlsx::Text(cont ? "весь опыт одной записью: положения груза — участки установившегося крена (не короче " +
                                            detail::Num(s.minPlateauS, 0) + " с, перепад от " + detail::Num(s.minStepDeg, 2) + "°)"
                                      : "файл = замер: крен — среднее за последние " + detail::Num(s.windowS, 0) + " с файла"),
@@ -682,9 +688,12 @@ inline std::vector<xlsx::Sheet> BuildBook(const Settings& s, const std::vector<F
             }
         g.Gap();
         g.Title(cont ? "Положения груза" : "Замеры", 12);
+        const bool side = s.armFrom != 0 && s.B > 0 && !s.rsGroupMode; // плечи вводились от борта — оба столбца
         {
-            std::vector<Grid::Col> h = {H("№"), H(cont ? "Участок, с" : "Файл", 2),
-                                        H(std::string("Плечо l, ") + s.units.Arm())};
+            std::vector<Grid::Col> h = {H("№"), H(cont ? "Участок, с" : "Файл", 2)};
+            if (side)
+                h.push_back(H(std::string("От ") + ArmFromName(s.armFrom) + " x, " + s.units.Arm()));
+            h.push_back(H(std::string(side ? "Плечо l от ДП, " : "Плечо l, ") + s.units.Arm()));
             for (const int p : posts)
                 h.push_back(H("Крен " + s.PostName(p)));
             h.push_back(H(np > 1 ? "Крен, среднее" : "Крен"));
@@ -703,6 +712,9 @@ inline std::vector<xlsx::Sheet> BuildBook(const Settings& s, const std::vector<F
             if (!it.use)
                 base.color = 3;
             std::vector<Grid::Col> row = {C(xlsx::Text(it.label), 1, base), C(xlsx::Text(it.place), 2, base)};
+            if (side)
+                row.push_back(std::isfinite(it.arm) ? N(SideFromArm(it.arm, s.armFrom, s.B), armFmt, 1, base)
+                                                    : C(xlsx::Text("нач."), 1, base));
             if (it.reference && !std::isfinite(it.arm))
                 row.push_back(C(xlsx::Text("нач."), 1, base));
             else

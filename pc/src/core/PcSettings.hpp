@@ -53,6 +53,9 @@ struct PcSettings
     int uiDensity = 0;       // интерфейс: 0 — авто (компактный, если окно ниже 800 точек), 1 — обычный, 2 — компактный
     // Проект опыта (*.krenomer): автосохранение рядом с записями и недавние проекты (последний — первым)
     bool projectAutosave = true;
+    // «Обработка»: плечи вводятся от ДП (0), от ЛБ (1) или от ПрБ (2); ширина судна / модели B (м или мм)
+    int armFrom = 0;
+    double heelB = 0.0;
     std::vector<std::string> recentProjects;
     static constexpr std::size_t kRecentMax = 8;
     int rsInstrument = -1;   // табл. 6.5: Δθ — среднее приборов (-1) или пост 0…3
@@ -177,6 +180,8 @@ struct PcSettings
         if (kv.count("rs_groups"))
             rsGroups = kv["rs_groups"];
         projectAutosave = flag("project_autosave", projectAutosave);
+        armFrom = num("arm_from", armFrom, 0, 2);
+        heelB = real("heel_b", heelB, 0.0, 1e7);
         if (kv.count("recent_projects"))
         {
             recentProjects.clear();
@@ -246,6 +251,7 @@ struct PcSettings
                 << "\nrs_main=" << rsMain << "\nrs_main_groups=" << rsMainGroups << "\nproc_split=" << procSplit << "\nui_density=" << uiDensity << "\nrs_instrument=" << rsInstrument << "\nrs_dh=" << rsDh
                 << "\nrs_dworst=" << rsDworst << "\nrs_group_mode=" << (rsGroupMode ? 1 : 0) << "\nrs_groups=" << rsGroups
                 << "\n";
+            out << "arm_from=" << armFrom << "\nheel_b=" << heelB << "\n";
             out << "project_autosave=" << (projectAutosave ? 1 : 0) << "\nrecent_projects=";
             for (std::size_t i = 0; i < recentProjects.size(); i++)
                 out << (i ? "|" : "") << recentProjects[i];

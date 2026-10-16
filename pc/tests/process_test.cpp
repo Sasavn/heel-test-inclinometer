@@ -1344,6 +1344,73 @@ void TestVodnik()
     fs::remove_all(dir, ec);
 }
 
+// Опыт M024 (модель, tests/data/m024: только Ms, CalcX, CalcY; положения — как у руководителя в проекте). Ошибка
+// 1.7: среднее положения — по окну Ω = 3·Tc в самом конце участка (у модели Tc ≈ 2 с — 6 с), и в нём — медленное
+// «гуляние» крена и начало следующего переноса: на графике линия среднего уходила от сигнала на 0,1–0,25° (положение 8
+// кормы: −4,842° при сигнале −4,97°). Теперь окно — вторая половина установившегося крена (без переходных начала и
+// конца участка), не короче 3·Tc: уровень совпадает с сигналом.
+void TestM024()
+{
+    SECTION("M024: среднее положения совпадает с сигналом (окно — вторая половина установившегося крена, не 6 с в конце)");
+    heel::Settings s;
+    s.units.model = true;
+    s.D = 52.5;
+    s.P = 2.5;
+    s.L = 240;
+    const fs::path dir = testutil::TestDataDir() / "m024";
+    const auto loaded = heel::LoadAll(heel::ListCsv(dir), text::PathToUtf8(dir), nullptr, &s);
+    CHECK(loaded.files.size() == 2);
+    auto ms = heel::Group(loaded.files, {});
+    CHECK(ms.size() == 1);
+    if (ms.size() != 1)
+        return;
+    const double sp[9][3] = {{2, 38.986, 5},          {49.886, 93.986, 95},   {102.686, 142.086, 170},
+                             {148.686, 182.286, 220}, {189.186, 231.286, 280}, {279.786, 310.886, -35},
+                             {321.286, 356.386, -100}, {366.786, 407.086, -180}, {428.786, 473.194, -280}};
+    auto rawMedian = [&](int post, double a, double b) {
+        std::vector<double> t, v, w;
+        heel::Series(loaded.files[static_cast<std::size_t>(ms[0].post[post].file)].log, 0, t, v);
+        for (std::size_t i = 0; i < t.size(); i++)
+            if (t[i] >= a && t[i] <= b)
+                w.push_back(v[i]);
+        return filt::MedianOf(w);
+    };
+    for (const filt::Method method : {filt::Method::MedianEma, filt::Method::Kalman, filt::Method::SavGol})
+    {
+        s.filter.method = method;
+        std::vector<heel::Position> pos(9);
+        for (int i = 0; i < 9; i++)
+        {
+            pos[i].t0 = sp[i][0];
+            pos[i].t1 = sp[i][1];
+            pos[i].arm = sp[i][2];
+        }
+        const auto sum = heel::ComputePositions(s, loaded.files, ms[0], pos);
+        for (int post = 0; post < 2; post++)
+            for (int i = 0; i < 9; i++)
+            {
+                const auto& e = pos[i].est[post];
+                // Окно — внутри установившегося крена, не короче 3·Tc, уровень — на сигнале окна
+                CHECK(e.settledT0 >= pos[i].t0 - 1e-9 && e.settledT1 <= pos[i].t1 + 1e-9 && e.winT1 == e.settledT1);
+                CHECK_MSG(e.winT1 - e.winT0 >= 3.0 * e.tcS - 0.2, "%s: положение %d, пост %d: окно %.1f с < 3·Tc",
+                          filt::MethodName(method), i + 1, post, e.winT1 - e.winT0);
+                const double med = rawMedian(post, e.winT0, e.winT1);
+                CHECK_MSG(std::fabs(pos[i].Level(post) - med) <= 0.1, "%s: положение %d, пост %d: уровень %.3f, сигнал %.3f",
+                          filt::MethodName(method), i + 1, post, pos[i].Level(post), med);
+            }
+        // Положение 8 (корма и нос): уровень = сигналу всего положения (было −4,842° кормы при сигнале −4,97°)
+        for (int post = 0; post < 2; post++)
+            CHECK_MSG(std::fabs(pos[7].Level(post) - rawMedian(post, sp[7][0], sp[7][1])) <= 0.03,
+                      "%s: положение 8, пост %d: уровень %.3f, сигнал %.3f", filt::MethodName(method), post,
+                      pos[7].Level(post), rawMedian(post, sp[7][0], sp[7][1]));
+        // Устойчивые положения 3–5 — как были (≈ сигнал до 0,01°)
+        for (int i = 2; i <= 4; i++)
+            CHECK(std::fabs(pos[i].Level(1) - rawMedian(1, sp[i][0], sp[i][1])) <= 0.015);
+        CHECK_RANGE(sum.h, 0.095, 0.105, "M024: h от начального, м");
+        CHECK_RANGE(sum.ls.h, 0.095, 0.105, "M024: h по МНК, м");
+    }
+}
+
 // Опыт на модели отсека (M021, tests/data/m021: только Ms, CalcX, CalcY): малое судно D = 53,5 кг, груз 2,5 кг, два
 // датчика, 9 положений (расстояние от ПрБ 29,5 … 48 см, ДП — 27,5 см: плечи от ДП −20 … −205 мм). Часть положений
 // короче 10 с и с качкой — детектор их не находит, они задаются вручную; плечо начального — от ДП.
@@ -1379,6 +1446,25 @@ void TestM021()
     }
     const auto sum = heel::ComputePositions(s, loaded.files, ms[0], pos);
     const auto sumRel = heel::ComputePositions(s, loaded.files, ms[0], posRel);
+    // Плечи «от борта»: как мерили студенты — расстояние от ПрБ до центра груза, ширина модели B = 550 мм
+    {
+        const double fromPrb[9] = {295, 230, 180, 130, 70, 330, 380, 430, 480};
+        auto posSide = pos;
+        for (int i = 0; i < 9; i++)
+        {
+            posSide[i].arm = heel::ArmFromSide(fromPrb[i], 2, 550.0);
+            CHECK_NEAR(posSide[i].arm, armDp[i], 1e-12, "от ПрБ: l = B/2 − x");
+            CHECK_NEAR(heel::SideFromArm(armDp[i], 2, 550.0), fromPrb[i], 1e-12, "x = B/2 − l");
+            CHECK_NEAR(heel::ArmFromSide(heel::SideFromArm(armDp[i], 1, 550.0), 1, 550.0), armDp[i], 1e-12, "от ЛБ туда и обратно");
+        }
+        CHECK(heel::ArmFromSide(400, 1, 550.0) == 125.0 && heel::ArmFromSide(-20, 0, 550.0) == -20.0);
+        auto sSide = s;
+        sSide.armFrom = 2;
+        sSide.B = 550.0;
+        const auto sumSide = heel::ComputePositions(sSide, loaded.files, ms[0], posSide);
+        CHECK_NEAR(sumSide.h, sum.h, 1e-12, "плечи от ПрБ — тот же h");
+        CHECK_NEAR(sumSide.ls.h, sum.ls.h, 1e-12, "плечи от ПрБ — тот же h по МНК");
+    }
     CHECK_NEAR(sum.h, sumRel.h, 1e-12, "плечи от ДП (у начального задано) = плечи от начального");
     CHECK_NEAR(sum.ls.h, sumRel.ls.h, 1e-12, "МНК: от ДП = от начального");
     CHECK(sum.n == 16); // 8 положений × 2 датчика
@@ -1394,12 +1480,15 @@ void TestM021()
     CHECK(!k.legacy && k.postIds.size() == 2 && k.r.m.size() == 8);
     CHECK(k.r.n == 8 && k.r.ok661 && k.r.ok662 && k.r.ok664 && k.r.excludedCount == 0);
     CHECK_NEAR(k.r.hk, 0.0531, 0.001, "h_k по табл. 6.5, м");
-    CHECK_NEAR(k.r.err, 0.0148, 0.001, "вероятная ошибка, м");
+    CHECK_NEAR(k.r.err, 0.0124, 0.001, "вероятная ошибка, м"); // 1.7: 0,0148 (Калман по всему участку)
     CHECK_NEAR(k.r.m[0].dM, 0.0025 * 0.065, 1e-12, "ΔM_1 = P·Δl, т·м");
     for (const auto& q : k.r.m)
         CHECK(q.h > 0.03 && q.h < 0.07);
     CHECK(k.checks[5].state == 0); // крен ±11° — не 1°–4°
-    CHECK(k.checks[9].state == 0 && k.r.maxSpreadAt == 5); // на коротком положении 7 приборы расходятся (0,17°)
+    // Сверка приборов: наибольшее расхождение — на коротком положении 7; до 1.7.1 Калман стартовал с медианы первых
+    // 2 с и на 7-секундном участке не успевал сойтись (0,17°), теперь — с медианы окна (0,07°, в пределах 0,1°)
+    CHECK_MSG(k.checks[9].state == 1 && k.r.maxSpreadAt == 5 && k.r.maxSpread < 0.1,
+              "сверка приборов: состояние %d, наибольшее %.3f° на замере %d", k.checks[9].state, k.r.maxSpread, k.r.maxSpreadAt);
     // Датчик, поставленный «задом наперёд»: обратный знак обоих — h отрицательная; обратный знак одного — приборы
     // расходятся; обратный знак у ApplyInvert возвращает исходное
     {
@@ -1842,7 +1931,7 @@ void TestUserMethod()
         std::string err;
         CHECK(um::FromText(um::ToText(art), back, &err));
         CHECK(back.name == art.name && back.consts == art.consts && back.stages.size() == 2 &&
-              back.stages[1].formula == art.stages[1].formula && back.mean == um::MeanKind::Window && back.meanArg == "3*Tc");
+              back.stages[1].formula == art.stages[1].formula && back.mean == um::MeanKind::Window && back.meanArg == "max(3*Tc, (T1 - T0)/2)");
         CHECK(!um::FromText("hello", back, &err) && err.find("krenomer-method") != std::string::npos);
         CHECK(!um::FromText("krenomer-method 1\nfoo = 1\n", back, &err) && err.find("строка 2") != std::string::npos);
 
@@ -2000,6 +2089,8 @@ void TestProject()
     p.D = 53.5;
     p.P = 2.5;
     p.L = 200;
+    p.B = 550;
+    p.armFrom = 2;
     p.axis = 1;
     p.windowS = 20;
     p.thresholdDeg = 0.05;
@@ -2049,6 +2140,7 @@ void TestProject()
     std::string err;
     CHECK_MSG(proj::FromJson(text, q, &err), "%s", err.c_str());
     CHECK(q.model && q.D == 53.5 && q.P == 2.5 && q.L == 200 && q.axis == 1 && q.windowS == 20 && q.thresholdDeg == 0.05);
+    CHECK(q.B == 550 && q.armFrom == 2 && text.find("\"arms_from\": \"ПрБ\"") != std::string::npos);
     CHECK(q.plateauS == 4 && q.stepDeg == 0.3 && q.method == 5 && q.medianN == 5 && q.fcHz == 0.25 && q.tcS == 1.5);
     CHECK(q.sgWindowS == 3 && q.wholeSpan && q.userMethod == p.userMethod && q.userMethodText == p.userMethodText);
     CHECK(q.sensors.size() == 2 && q.sensors[0].key == 2 && q.sensors[0].name == "Нос, ЛБ" && q.sensors[0].inverted &&
@@ -2129,6 +2221,47 @@ void TestProject()
     CHECK_MSG(proj::Load(root / L"Ф" / L"п.krenomer", fb, &err), "%s", err.c_str());
     CHECK(fb.files.size() == 1 && fs::equivalent(text::PathFromUtf8(fb.files[0]), root / L"Ф" / "M002_D3.CSV", ec));
     CHECK(!proj::Load(root / L"нет.krenomer", fb, &err) && err.find("не открывается") != std::string::npos);
+
+    // Записи под похожим именем (Telegram, Проводник: « (1)», « - копия», регистр): находятся, в notes — что взято;
+    // имя с припиской не мешает номеру замера и датчику
+    CHECK(heel::CopyStem("2026-10-16_M024_D2 (1)") == "2026-10-16_M024_D2");
+    CHECK(heel::CopyStem("2026-10-16_M024_D2(2)") == "2026-10-16_M024_D2");
+    CHECK(heel::CopyStem("2026-10-16_M024_D2 - копия (2)") == "2026-10-16_M024_D2");
+    CHECK(heel::CopyStem("Копия M_001_1 - Copy") == "M_001_1");
+    CHECK(heel::CopyStem("M_001_1") == "M_001_1" && heel::CopyStem("опыт (без груза)") == "опыт (без груза)");
+    CHECK(heel::RecordNameKey("2026-10-16_M024_D2 (1).CSV") == heel::RecordNameKey("2026-10-16_m024_d2.csv"));
+    CHECK(heel::RecordNameKey("Опыт - копия.CSV") == heel::RecordNameKey("опыт.csv"));
+    CHECK(heel::RecordNameKey("2026-10-16_M024_D2.CSV") != heel::RecordNameKey("2026-10-16_M024_D3.CSV"));
+    {
+        heel::File nf;
+        nf.path = root / L"2026-10-16_M024_D3 (1).CSV";
+        nf.name = text::PathToUtf8(nf.path.filename());
+        heel::NameInfo(nf);
+        CHECK(nf.number == 24 && nf.sensor == heel::SensorKey(3, false));
+    }
+    const fs::path tg = root / L"Телеграм";
+    fs::create_directories(tg, ec);
+    WriteText(tg / L"2026-10-16_M024_D2 (1).CSV", "x");
+    WriteText(tg / L"2026-10-16_m024_d3.csv", "x");
+    proj::Project t;
+    t.folder = "K:\\Нет такого";
+    t.files = {"K:\\Нет такого\\2026-10-16_M024_D2.CSV", "K:\\Нет такого\\2026-10-16_M024_D3.CSV"};
+    CHECK(proj::Save(tg / L"Опыт.krenomer", t, &err));
+    proj::Project tb;
+    CHECK_MSG(proj::Load(tg / L"Опыт.krenomer", tb, &err), "%s", err.c_str());
+    CHECK(tb.files.size() == 2 && tb.notes.size() == 2 && tb.missing.empty());
+    CHECK(tb.files.size() == 2 && fs::equivalent(text::PathFromUtf8(tb.files[0]), tg / L"2026-10-16_M024_D2 (1).CSV", ec) &&
+          fs::equivalent(text::PathFromUtf8(tb.files[1]), tg / L"2026-10-16_m024_d3.csv", ec));
+    // Две похожие — неоднозначно: не найдено, причина — в err, проект всё равно разобран (missing)
+    WriteText(tg / L"2026-10-16_M024_D2 - копия.CSV", "x");
+    proj::Project ta;
+    CHECK(!proj::Load(tg / L"Опыт.krenomer", ta, &err) && err.find("похожих несколько") != std::string::npos);
+    CHECK(ta.missing.size() == 1 && ta.missing[0] == "2026-10-16_M024_D2.CSV" && ta.files.size() == 2);
+    // Нет ни одной похожей — тоже missing
+    const fs::path empty = root / L"Пусто";
+    CHECK(proj::Save(empty / L"Опыт.krenomer", t, &err));
+    proj::Project te;
+    CHECK(!proj::Load(empty / L"Опыт.krenomer", te, &err) && te.missing.size() == 2 && err.find("не найдены") != std::string::npos);
     fs::remove_all(root, ec);
 }
 
@@ -2196,6 +2329,7 @@ int main(int argc, char** argv)
     TestRules();
     TestVodnik();
     TestM021();
+    TestM024();
     TestXlsxRead();
     TestRealRecord();
     TestFilters();

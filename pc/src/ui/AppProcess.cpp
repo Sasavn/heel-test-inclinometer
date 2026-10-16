@@ -27,6 +27,7 @@
 #include <imgui.h>
 #include <implot.h>
 
+#include "../core/FileBusy.hpp"
 #include "../core/HeelReport.hpp"
 #include "../core/HeelProtocol.hpp"
 #include "../core/Png.hpp"
@@ -168,6 +169,8 @@ heel::Settings App::ProcSettings() const
     s.D = settings_.heelD;
     s.P = settings_.heelP;
     s.L = settings_.heelL;
+    s.B = settings_.heelB;
+    s.armFrom = settings_.heelB > 0 ? settings_.armFrom : 0;
     s.windowS = settings_.heelWinS;
     s.thresholdDeg = settings_.heelThr;
     s.axis = settings_.heelAxis;
@@ -208,6 +211,91 @@ heel::Settings App::ProcSettings() const
     return s;
 }
 
+// Плечи «от борта» (переключатель над таблицей и ширина B задана)
+bool App::ProcArmSide() const
+{
+    return settings_.armFrom != 0 && settings_.heelB > 0;
+}
+
+std::string App::ProcArmHeader() const
+{
+    const char* u = settings_.heelSmall ? "мм" : "м";
+    if (ProcArmSide())
+        return Fmt("От %s x, %s → l от ДП (?)", heel::ArmFromName(settings_.armFrom), u);
+    return Fmt("Плечо l, %s (?)", u);
+}
+
+// Поле плеча в таблице. arm — плечо от ДП (или от начального, как раньше); при «от борта» в поле — расстояние от
+// борта до центра груза, справа серым — плечо от ДП. hideValue — текст поля не показывать («нач.»). true — изменено.
+bool App::ProcArmField(const char* id, double& arm, const ImVec4& color, bool hideValue)
+{
+    const int dig = std::max(3, settings_.digArm);
+    if (!ProcArmSide())
+    {
+        ImGui::SetNextItemWidth(-FLT_MIN);
+        ImGui::PushStyleColor(ImGuiCol_Text, color);
+        const bool ch = ImGui::InputDouble(id, &arm, 0.0, 0.0, NumFmt(arm, dig).c_str());
+        ImGui::PopStyleColor();
+        return ch;
+    }
+    const int from = settings_.armFrom;
+    const double B = settings_.heelB;
+    double x = heel::SideFromArm(arm, from, B);
+    const int digX = settings_.heelSmall ? 1 : 3;
+    const float cw = ImGui::GetContentRegionAvail().x;
+    ImGui::SetNextItemWidth(std::floor(cw * 0.5f));
+    ImGui::PushStyleColor(ImGuiCol_Text, color);
+    const bool ch = ImGui::InputDouble(id, &x, 0.0, 0.0, NumFmt(x, digX).c_str());
+    ImGui::PopStyleColor();
+    if (ch)
+        arm = heel::ArmFromSide(x, from, B);
+    if (!hideValue)
+    {
+        // плечо от ДП — серым справа от поля (рисунком: последним элементом остаётся поле — его подсказки)
+        const ImVec2 r1 = ImGui::GetItemRectMax(), r0 = ImGui::GetItemRectMin();
+        const std::string t = Fmt("%+.*f", settings_.heelSmall ? 1 : 3, arm);
+        ImGui::GetWindowDrawList()->AddText(ImVec2(r1.x + S(6), r0.y + ImGui::GetStyle().FramePadding.y), U32(pal.muted),
+                                            t.c_str());
+    }
+    return ch;
+}
+
+// «Плечи от: ДП / ЛБ / ПрБ» и ширина B — над таблицей положений / замеров
+void App::ProcArmFromSwitch()
+{
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("Плечи от");
+    Hint("Как вводить плечи в таблице. «ДП» — плечо груза от диаметральной плоскости (+ к правому борту). «ЛБ» / "
+         "«ПрБ» — расстояние от выбранного борта до центра груза, как его мерят; плечо от ДП программа считает по "
+         "ширине B: от ПрБ l = B/2 − x, от ЛБ l = x − B/2 (серым — рядом). Переключение только меняет вид ввода — "
+         "введённые плечи не теряются. В режиме «Группы» плечи перемещений — разности, способ на них не влияет.");
+    ImGui::SameLine(0, S(8));
+    static const char* labels[] = {"ДП", "ЛБ", "ПрБ"};
+    static const int values[] = {0, 1, 2};
+    if (Segmented("armfrom", &settings_.armFrom, labels, values, 3))
+        SaveSettingsSoon();
+    if (settings_.armFrom != 0)
+    {
+        ImGui::SameLine(0, S(14));
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted(settings_.heelSmall ? "B, мм" : "B, м");
+        ImGui::SameLine(0, S(6));
+        ImGui::SetNextItemWidth(S(110));
+        if (ImGui::InputDouble("##armB", &settings_.heelB, 0.0, 0.0, NumFmt(settings_.heelB, settings_.heelSmall ? 1 : 3).c_str()))
+        {
+            settings_.heelB = std::clamp(settings_.heelB, 0.0, 1e7);
+            proc_.dirty = true;
+            SaveSettingsSoon();
+        }
+        if (!(settings_.heelB > 0))
+        {
+            ImGui::SameLine(0, S(8));
+            ImGui::AlignTextToFramePadding();
+            TextColored(pal.warn, "задайте ширину B — пока плечи вводятся от ДП");
+        }
+    }
+}
+
 // Формат поля: digits знаков, но ненулевое число не показывается нулём (знаков — сколько нужно, до 6).
 std::string App::NumFmt(double v, int digits) const
 {
@@ -245,6 +333,7 @@ void App::ProcSetSmallShip(bool model)
         settings_.heelP *= k;
         settings_.heelL *= k;
     }
+    settings_.heelB *= k;
     for (auto& [n, a] : proc_.arm)
         a *= k;
     for (auto& p : proc_.pos)
@@ -696,6 +785,29 @@ void App::TickProcess()
             std::error_code ec;
             fs::create_directories(dir, ec);
             std::string warn, err;
+            // Книга или картинка открыта в другой программе (Excel держит книгу) — весь комплект под следующим
+            // свободным номером: «Отчет_Кренование (2).xlsx», «График_Нос (2).png», …
+            std::vector<std::string> names = {heel::kReportName};
+            if (ctrlFrame)
+                names.push_back(heel::kControlPlotName);
+            for (int post = 0; post < heel::kMaxPosts; post++)
+            {
+                if (frames[post])
+                    names.push_back(plotName[post]);
+                if (posFrames[post])
+                    names.push_back(posName[post]);
+            }
+            const int n = std::max(1, filebusy::FreeSuffix(dir, names));
+            const std::string reportName = filebusy::SuffixName(heel::kReportName, n);
+            if (n > 1)
+            {
+                std::string busy;
+                for (const auto& nm : names)
+                    if (filebusy::Busy(dir / text::PathFromUtf8(nm)))
+                        busy += (busy.empty() ? "" : ", ") + nm;
+                out.push_back("⚠ Отчёт открыт в другой программе (" + busy + ") — сохранено как " + reportName +
+                              (names.size() > 1 ? " и картинки с тем же номером (" + std::to_string(n) + ")" : std::string()));
+            }
             // Картинки: PNG-файлами рядом и в книгу (лист «Протокол» — контроль и запись основного поста, «Графики» — все)
             std::vector<heel::ReportImage> images;
             auto picture = [&](const std::shared_ptr<offscreen::Frame>& fr, const std::string& file, const std::string& caption,
@@ -724,21 +836,23 @@ void App::TickProcess()
                 if (!im.png.empty())
                     images.push_back(std::move(im));
             };
-            picture(ctrlFrame, heel::kControlPlotName, "График контроля замеров: кренящий момент – tg θ (п. 5.5 прил. 3)",
-                    true, false, "График контроля");
+            picture(ctrlFrame, filebusy::SuffixName(heel::kControlPlotName, n),
+                    "График контроля замеров: кренящий момент – tg θ (п. 5.5 прил. 3)", true, false, "График контроля");
             for (int post = 0; post < heel::kMaxPosts; post++)
             {
                 const std::string pn = s.PostName(post);
-                picture(frames[post], plotName[post],
+                picture(frames[post], filebusy::SuffixName(plotName[post], n),
                         (cont ? "Запись крена с положениями груза — пост «" : "Крен по замерам — пост «") + pn + "»", false,
                         true, "График");
-                picture(posFrames[post], posName[post], "Положения крупно — пост «" + pn + "»", false, false, "Положения");
+                picture(posFrames[post], filebusy::SuffixName(posName[post], n), "Положения крупно — пост «" + pn + "»",
+                        false, false, "Положения");
             }
             const auto sheets = heel::BuildBook(s, *files, meas, cont, rec, pos, sum, rsCase, info, images, &warn);
-            if (xlsx::Write(dir / text::PathFromUtf8(heel::kReportName), sheets, &err))
-                out.insert(out.begin(), std::string("✓ Отчёт сохранён: ") + heel::kReportName);
+            const std::size_t at = n > 1 ? 1 : 0; // после строки «⚠ … сохранено как …»
+            if (xlsx::Write(dir / text::PathFromUtf8(reportName), sheets, &err))
+                out.insert(out.begin() + static_cast<std::ptrdiff_t>(at), "✓ Отчёт сохранён: " + reportName);
             else
-                out.insert(out.begin(), std::string("✗ ") + heel::kReportName + " не сохранён: " + err);
+                out.insert(out.begin() + static_cast<std::ptrdiff_t>(at), "✗ " + reportName + " не сохранён: " + err);
             if (!warn.empty())
                 out.push_back(warn);
             return out;
@@ -748,12 +862,28 @@ void App::TickProcess()
     {
         const auto lines = proc_.save.get();
         bool ok = true;
+        std::string failed;
         for (const auto& l : lines)
         {
             ProcLog(l);
-            ok = ok && l.rfind("✗", 0) != 0;
+            if (l.rfind("✗", 0) == 0)
+            {
+                ok = false;
+                failed += (failed.empty() ? "" : "\n") + l;
+            }
         }
-        Notify(ok ? "Отчёт и графики сохранены в папку " + Shown(proc_.outDir) : lines.front(), ok ? 1 : 2, 6000);
+        // Не молчать: ошибка и «сохранено под другим именем» — заметным сообщением с «Открыть папку» (журнал — на
+        // вкладке, его не видно)
+        if (!ok)
+            Notify("Отчёт сохранён не полностью:\n" + failed, 2, 12000, proc_.outDir);
+        else if (!lines.empty() && lines.front().rfind("⚠", 0) == 0)
+        {
+            const std::string& l = lines.front();
+            const std::size_t k = l.find("сохранено как ");
+            Notify("Отчёт открыт в другой программе — " + (k == std::string::npos ? l : l.substr(k)), 0, 12000, proc_.outDir);
+        }
+        else
+            Notify("Отчёт и графики сохранены в папку " + Shown(proc_.outDir), 1, 6000, proc_.outDir);
     }
     if (proc_.dirty && !proc_.load.valid())
         ProcRecompute();
@@ -938,6 +1068,13 @@ void App::ProcParams(float w)
             ImGui::EndGroup();
         }
         {
+            const std::string labB = std::string("Ширина B, ") + (model ? "мм" : "м");
+            const std::string fmtB = NumFmt(settings_.heelB, model ? 1 : 3);
+            field(labB.c_str(), "##hb", &settings_.heelB, model ? 10 : 0.1, model ? 100 : 1, fmtB.c_str(), 0.0, 1e7, S(120),
+                  "Ширина судна (модели) — для плеч «от борта»: в таблице вводится расстояние от выбранного борта до\n"
+                  "центра груза, плечо от ДП программа считает сама (от ПрБ l = B/2 − x, от ЛБ l = x − B/2)");
+        }
+        {
             flow(S(40) + S(8) + S(84));
             ImGui::BeginGroup();
             ImGui::AlignTextToFramePadding();
@@ -1066,12 +1203,14 @@ void App::ProcTable(float w, float h)
                 hdr.push_back("Крен " + PostTitle(p));
                 hdrH.push_back("h " + SensorTitleOfPost(p) + ", м");
             }
+            if (!settings_.rsGroupMode)
+                ProcArmFromSwitch();
             ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(S(6), S(2)));
             ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, ImVec2(S(8), S(3)));
             if (ImGui::BeginTable("##proc_t", 3 + 2 * static_cast<int>(usedPosts.size()),
-                                  ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_ScrollY |
+                                  ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerH | (procNatural_ ? 0 : ImGuiTableFlags_ScrollY) |
                                       ImGuiTableFlags_SizingFixedFit,
-                                  ImVec2(0, ImGui::GetContentRegionAvail().y)))
+                                  ImVec2(0, procNatural_ ? 0.f : ImGui::GetContentRegionAvail().y)))
             {
                 ImGui::TableSetupScrollFreeze(0, 1);
                 ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed, S(24));
@@ -1079,9 +1218,9 @@ void App::ProcTable(float w, float h)
                 for (const auto& m : proc_.meas)
                     numW = std::max(numW, ImGui::CalcTextSize(m.label.c_str()).x + S(20));
                 ImGui::TableSetupColumn("Замер", ImGuiTableColumnFlags_WidthFixed, std::min(numW, S(170)));
-                const char* armHdr = settings_.heelSmall ? "Плечо l, мм (?)" : "Плечо l, м (?)";
-                ImGui::TableSetupColumn(armHdr, ImGuiTableColumnFlags_WidthFixed,
-                                        std::max(S(76), ImGui::CalcTextSize(armHdr).x + S(6)));
+                const std::string armHdr = ProcArmHeader();
+                ImGui::TableSetupColumn(armHdr.c_str(), ImGuiTableColumnFlags_WidthFixed,
+                                        std::max(ProcArmSide() ? S(150) : S(76), ImGui::CalcTextSize(armHdr.c_str()).x + S(6)));
                 for (std::size_t k = 0; k < usedPosts.size(); k++)
                 {
                     ImGui::TableSetupColumn(hdr[k].c_str(), ImGuiTableColumnFlags_WidthStretch);
@@ -1145,14 +1284,11 @@ void App::ProcTable(float w, float h)
                     {
                         const bool own = proc_.arm.count(m.number) > 0;
                         double arm = std::isfinite(m.arm) ? m.arm : settings_.heelL;
-                        ImGui::SetNextItemWidth(-FLT_MIN);
-                        ImGui::PushStyleColor(ImGuiCol_Text, own ? pal.accent : tc);
-                        if (ImGui::InputDouble("##arm", &arm, 0.0, 0.0, NumFmt(arm, std::max(3, settings_.digArm)).c_str()))
+                        if (ProcArmField("##arm", arm, own ? pal.accent : tc))
                         {
                             proc_.arm[m.number] = std::clamp(arm, -1e7, 1e7);
                             proc_.dirty = true;
                         }
-                        ImGui::PopStyleColor();
                         if (ImGui::IsItemHovered())
                             ImGui::SetTooltip(own ? "Своё плечо переноса этого замера, м (L = %.2f м — кнопка «Всем»)"
                                                   : "Плечо переноса груза, м: пока = L (%.2f м); можно задать своё.\n"
@@ -1516,22 +1652,24 @@ void App::ProcPositions(float w, float h)
                 if (m.post[p].file >= 0)
                     posts[np++] = p;
             const bool showDelta = np == 1;
+            if (!settings_.rsGroupMode)
+                ProcArmFromSwitch();
             ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(S(6), S(2)));
             ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, ImVec2(S(6), S(3)));
             const int cols = 6 + np * (showDelta ? 3 : 2);
             if (ImGui::BeginTable("##pos_t", cols,
-                                  ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_ScrollY |
+                                  ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerH | (procNatural_ ? 0 : ImGuiTableFlags_ScrollY) |
                                       ImGuiTableFlags_SizingFixedFit,
-                                  ImVec2(0, ImGui::GetContentRegionAvail().y)))
+                                  ImVec2(0, procNatural_ ? 0.f : ImGui::GetContentRegionAvail().y)))
             {
                 ImGui::TableSetupScrollFreeze(0, 1);
                 ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed, S(22));
                 ImGui::TableSetupColumn("№", ImGuiTableColumnFlags_WidthFixed, S(34));
                 ImGui::TableSetupColumn("Начало, с", ImGuiTableColumnFlags_WidthFixed, S(62));
                 ImGui::TableSetupColumn("Конец, с", ImGuiTableColumnFlags_WidthFixed, S(62));
-                const char* armHdr = settings_.heelSmall ? "Плечо l, мм (?)" : "Плечо l, м (?)";
-                ImGui::TableSetupColumn(armHdr, ImGuiTableColumnFlags_WidthFixed,
-                                        std::max(S(68), ImGui::CalcTextSize(armHdr).x + S(6)));
+                const std::string armHdr = ProcArmHeader();
+                ImGui::TableSetupColumn(armHdr.c_str(), ImGuiTableColumnFlags_WidthFixed,
+                                        std::max(ProcArmSide() ? S(150) : S(68), ImGui::CalcTextSize(armHdr.c_str()).x + S(6)));
                 std::string hdr[heel::kMaxPosts], hdrH[heel::kMaxPosts];
                 for (int k = 0; k < np; k++)
                 {
@@ -1604,16 +1742,13 @@ void App::ProcPositions(float w, float h)
                     {
                         // Начальное положение: плечо необязательно; задано — плечи всех положений от ДП
                         const bool own = std::isfinite(ps.arm);
-                        double arm = own ? ps.arm : 0.0;
-                        ImGui::SetNextItemWidth(-FLT_MIN);
-                        ImGui::PushStyleColor(ImGuiCol_Text, own ? pal.accent : ImVec4(0, 0, 0, 0));
-                        if (ImGui::InputDouble("##arm0", &arm, 0.0, 0.0, NumFmt(arm, std::max(3, settings_.digArm)).c_str()))
+                        double arm = own ? ps.arm : (ProcArmSide() ? heel::ArmFromSide(0.0, settings_.armFrom, settings_.heelB) : 0.0);
+                        if (ProcArmField("##arm0", arm, own ? pal.accent : ImVec4(0, 0, 0, 0), !own))
                         {
                             ps.arm = std::clamp(arm, -1e7, 1e7);
                             proc_.posEdited = true;
                             proc_.dirty = true;
                         }
-                        ImGui::PopStyleColor();
                         if (!own && !ImGui::IsItemActive())
                         {
                             const ImVec2 r0 = ImGui::GetItemRectMin();
@@ -1650,15 +1785,12 @@ void App::ProcPositions(float w, float h)
                     {
                         const bool own = std::isfinite(ps.arm);
                         double arm = own ? ps.arm : settings_.heelL;
-                        ImGui::SetNextItemWidth(-FLT_MIN);
-                        ImGui::PushStyleColor(ImGuiCol_Text, own ? pal.accent : tc);
-                        if (ImGui::InputDouble("##arm", &arm, 0.0, 0.0, NumFmt(arm, std::max(3, settings_.digArm)).c_str()))
+                        if (ProcArmField("##arm", arm, own ? pal.accent : tc))
                         {
                             ps.arm = std::clamp(arm, -1e7, 1e7);
                             proc_.posEdited = true;
                             proc_.dirty = true;
                         }
-                        ImGui::PopStyleColor();
                         if (ImGui::IsItemHovered())
                             ImGui::SetTooltip(own ? "Плечо переноса груза от начального положения, м (L = %.2f м — кнопка «Всем»)"
                                                   : "Плечо переноса груза от начального положения, м: пока = L (%.2f м).\n"
@@ -2655,7 +2787,8 @@ const char* kSyntaxHelp =
     "Среднее: по окну последних T с положения (window), по всему положению (all) или формулой (expr) с\n"
     "avg(), avgw(T), med(), medw(T), last(), T0, T1. Нечисловой результат (1/0) заменяется предыдущим значением.\n"
     "Пример — метод статьи: const fc = 0.5; const a = 2*pi*fc/(2*pi*fc + fs); стадии median(x, 3) и\n"
-    "a*x + (1 - a)*y[n-1]; среднее — window 3*Tc.";
+    "a*x + (1 - a)*y[n-1]; среднее — window max(3*Tc, (T1 - T0)/2).\n"
+    "T0, T1 — начало и конец установившегося крена положения (без переходных начала и конца участка).";
 
 } // namespace
 

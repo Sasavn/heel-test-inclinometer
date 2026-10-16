@@ -11,6 +11,7 @@
 #include <vector>
 
 #include <imgui.h>
+#include <imgui_internal.h>
 #include <implot.h>
 
 #include "../core/HeelReport.hpp"
@@ -210,7 +211,9 @@ void App::ProcKpis(float w)
     const double hMain = byTable ? rc.r.hFinal : s.h - rc.dh;
     const double hOther = byTable ? s.h - rc.dh : rc.r.hFinal;
     const float gap = compactUi ? S(8) : S(12), h = compactUi ? S(46) : S(52); // значок, число и подпись — в строку
-    const float cw = std::floor((w - 3 * gap) / 4);
+    // Узко (окно 1024–1152 точек) — 2 × 2, чтобы подписи не обрезались
+    const int cols = w < S(1000) ? 2 : 4;
+    const float cw = std::floor((w - (cols - 1) * gap) / cols);
     int bad = 0, known = 0;
     std::string badList;
     for (const rs::Check& c : rc.checks)
@@ -224,12 +227,14 @@ void App::ProcKpis(float w)
     }
     auto card = [&](int i, const char* title, const std::string& value, const ImVec4& valueColor, const std::string& sub,
                     const ImVec4& subColor, const ImVec4& soft, const ImVec4& fg, const char* glyph, const std::string& tip) {
-        if (i)
+        if (i % cols)
             ImGui::SameLine(0, gap);
+        else if (i)
+            ImGui::Dummy(ImVec2(0, gap - ImGui::GetStyle().ItemSpacing.y));
         char id[16];
         std::snprintf(id, sizeof(id), "##kpi%d", i);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(S(10), S(6)));
-        const bool open = BeginCard(id, ImVec2(i == 3 ? w - 3 * (cw + gap) : cw, h));
+        const bool open = BeginCard(id, ImVec2(i % cols == cols - 1 ? w - (cols - 1) * (cw + gap) : cw, h));
         ImGui::PopStyleVar();
         if (open)
         {
@@ -330,7 +335,9 @@ void App::ProcTabsCard(float w, float h)
         ImGui::SetCursorScreenPos(start);
         Tabs("ptabs", &proc_.tab, labels, values, 4, right - start.x - bs - S(10));
         ImGui::Dummy(ImVec2(0, S(2)));
-        const ImVec2 avail = ImGui::GetContentRegionAvail();
+        ImVec2 avail = ImGui::GetContentRegionAvail();
+        if (procNatural_)
+            avail.y = 0.f; // по содержимому (карточки и таблицы — AutoResizeY)
         cardFlat++;
         switch (proc_.tab)
         {
@@ -341,7 +348,8 @@ void App::ProcTabsCard(float w, float h)
             ImGui::PushStyleColor(ImGuiCol_ChildBg, pal.cardAlt);
             ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(S(10), S(6)));
             ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(S(6), S(2)));
-            ImGui::BeginChild("##proclog2", avail, ImGuiChildFlags_AlwaysUseWindowPadding);
+            ImGui::BeginChild("##proclog2", ImVec2(avail.x, procNatural_ ? 0.f : avail.y),
+                              ImGuiChildFlags_AlwaysUseWindowPadding | NaturalChild());
             ProcLogLines();
             ImGui::EndChild();
             ImGui::PopStyleVar(2);
@@ -417,8 +425,14 @@ void App::PageProcess()
     const float sp = ImGui::GetStyle().ItemSpacing.y;
     ProcHeader(W);
     ImGui::Dummy(ImVec2(0, gap - sp));
+    if (proc_.projMissing)
+    {
+        ProcProjectMissingCard(W);
+        ImGui::Dummy(ImVec2(0, gap - sp));
+    }
     const bool cont = ProcCont();
-    if (proc_.expanded == 0 || !proc_.files)
+    const int view = proc_.files ? ProcView() : 1;
+    if ((proc_.expanded == 0 && view != 2) || !proc_.files)
     {
         if (proc_.files)
         {
@@ -433,6 +447,8 @@ void App::PageProcess()
         ProcKpis(W);
         ImGui::Dummy(ImVec2(0, gap - sp));
     }
+    // Видимая высота страницы (страница «Обработки» прокручивается целиком; карточки — своей высоты)
+    const float pageH = std::max(S(300), ImGui::GetWindowHeight() - 2 * ImGui::GetStyle().WindowPadding.y);
     const float avail = std::max(S(260), ImGui::GetContentRegionAvail().y);
     if (proc_.expanded == 1)
     {
@@ -452,12 +468,31 @@ void App::PageProcess()
         ProcTabsCard(W, avail);
         return;
     }
-    // Обзор: сверху запись / графики и контроль, снизу — вкладки; делитель между ними перетаскивается мышью (доля
-    // высоты графиков запоминается в настройках)
-    const float rows = avail - gap - sp;
-    const float minH = S(150);
-    const float topH = std::clamp(std::floor(rows * static_cast<float>(settings_.procSplit)), minH, std::max(minH, rows - minH));
-    const float botH = std::max(minH, rows - topH);
+    if (!proc_.files)
+        return;
+    if (view == 1)
+    {
+        // «Положения и расчёт»: таблица положений / Правила РС / перемещения / журнал — во всю ширину и высоту
+        ProcTabsCardAuto(W);
+        return;
+    }
+    if (view == 2)
+    {
+        // «Графики»: запись с положениями (и положение крупно) и контроль — друг под другом, крупно
+        const float g1 = std::max(S(320), std::floor((avail - gap - sp) * 0.56f));
+        const float g2 = std::max(S(300), avail - g1 - gap - sp);
+        if (cont)
+            ProcSeriesCard(W, g1);
+        else
+            ProcPlots(W, g1);
+        ImGui::Dummy(ImVec2(0, gap - sp));
+        ProcControlCard(W, g2);
+        return;
+    }
+    // Обзор: сверху запись / графики и контроль (высота — делителем, доля видимой высоты страницы), снизу — вкладки
+    // во всю высоту содержимого; страница прокручивается целиком
+    const float minH = S(240);
+    const float topH = std::clamp(std::floor(pageH * static_cast<float>(settings_.procSplit)), minH, std::max(minH, pageH - S(80)));
     const float lw = std::floor((W - gap) * 0.6f);
     if (compactUi) // HD ready: графики — вкладками в одной карточке на всю ширину
         ProcGraphsCard(W, topH);
@@ -471,15 +506,15 @@ void App::PageProcess()
         ProcControlCard(W - lw - gap, topH);
     }
     {
-        // Делитель: полоса высотой в промежуток между карточками
+        // Делитель: высота графиков (доля видимой высоты страницы, запоминается)
         const ImVec2 p(ImGui::GetCursorScreenPos().x, ImGui::GetItemRectMax().y);
         ImGui::SetCursorScreenPos(p);
         ImGui::InvisibleButton("##procsplit", ImVec2(W, gap));
         const bool hov = ImGui::IsItemHovered(), act = ImGui::IsItemActive();
         if (hov || act)
             ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNS);
-        if (act && ImGui::GetIO().MouseDelta.y != 0.f && rows > 0)
-            settings_.procSplit = std::clamp(settings_.procSplit + ImGui::GetIO().MouseDelta.y / rows, 0.25, 0.85);
+        if (act && ImGui::GetIO().MouseDelta.y != 0.f)
+            settings_.procSplit = std::clamp(settings_.procSplit + ImGui::GetIO().MouseDelta.y / pageH, 0.25, 0.85);
         if (ImGui::IsItemDeactivated())
             SaveSettingsSoon();
         ImDrawList* dl = ImGui::GetWindowDrawList();
@@ -487,10 +522,41 @@ void App::PageProcess()
         dl->AddRectFilled(ImVec2(cx - S(22), cy - S(2)), ImVec2(cx + S(22), cy + S(2)),
                           U32(hov || act ? pal.accent : Alpha(pal.muted, 0.45f)), S(2));
         if (hov && !act)
-            ImGui::SetTooltip("Перетащите, чтобы графикам досталось больше или меньше места");
+            ImGui::SetTooltip("Перетащите, чтобы сделать графики выше или ниже (страница прокручивается целиком)");
         ImGui::SetCursorScreenPos(ImVec2(p.x, p.y + gap));
     }
-    ProcTabsCard(W, botH);
+    ProcTabsCardAuto(W);
+}
+
+// Подпункт «Обработки»: выбранный вручную или сам — на широком и высоком окне «Обзор», иначе «Положения и расчёт».
+bool App::ProcWideScreen() const
+{
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    return vp->WorkSize.x / uiScale >= 1279.5f && vp->WorkSize.y / uiScale >= 799.5f;
+}
+
+int App::ProcView() const
+{
+    const bool wide = ProcWideScreen();
+    if (proc_.view == 1 || proc_.view == 2)
+        return proc_.view;
+    if (proc_.view == 0 && wide)
+        return 0;
+    return wide ? 0 : 1;
+}
+
+// Карточка вкладок во всю высоту содержимого: таблицы без своей прокрутки, панели и карточка — по содержимому
+// (AutoResizeY); прокручивается страница целиком.
+int App::NaturalChild() const
+{
+    return procNatural_ ? ImGuiChildFlags_AutoResizeY : ImGuiChildFlags_None;
+}
+
+void App::ProcTabsCardAuto(float w)
+{
+    procNatural_ = true;
+    ProcTabsCard(w, 0.f);
+    procNatural_ = false;
 }
 
 } // namespace ui

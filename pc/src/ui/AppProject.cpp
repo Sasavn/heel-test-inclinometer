@@ -12,6 +12,7 @@
 
 #include <imgui.h>
 
+#include "../core/FileBusy.hpp"
 #include "../core/TextUtil.hpp"
 #include "Dialogs.hpp"
 #include "Widgets.hpp"
@@ -46,6 +47,8 @@ proj::Project App::ProcProjectNow() const
     p.D = settings_.heelD;
     p.P = settings_.heelP;
     p.L = settings_.heelL;
+    p.B = settings_.heelB;
+    p.armFrom = settings_.armFrom;
     p.axis = settings_.heelAxis;
     p.windowS = settings_.heelWinS;
     p.thresholdDeg = settings_.heelThr;
@@ -132,7 +135,19 @@ bool App::ProcSaveProjectTo(const std::string& path, bool autosave)
         return false;
     if (proc_.dirty)
         ProcRecompute();
-    const fs::path file = text::PathFromUtf8(path);
+    fs::path file = text::PathFromUtf8(path);
+    // Файл проекта открыт другой программой — под следующим свободным номером «Опыт (2).krenomer»
+    std::string movedTo;
+    if (filebusy::Busy(file))
+    {
+        const int n = filebusy::FreeSuffix(file.parent_path(), {text::PathToUtf8(file.filename())});
+        if (n > 1)
+        {
+            file = file.parent_path() / text::PathFromUtf8(filebusy::SuffixName(text::PathToUtf8(file.filename()), n));
+            movedTo = text::PathToUtf8(file);
+        }
+    }
+    const std::string savedPath = movedTo.empty() ? path : movedTo;
     std::error_code ec;
     const bool existed = fs::exists(file, ec);
     std::string err;
@@ -144,11 +159,19 @@ bool App::ProcSaveProjectTo(const std::string& path, bool autosave)
             proc_.projAutoFailed = true; // не повторять каждые 3 с
         return false;
     }
-    proc_.projectPath = path;
+    proc_.projectPath = savedPath;
     proc_.projSnap = ProcProjectSnapshot();
     proc_.projSaveAt = 0;
-    settings_.AddRecentProject(path);
+    settings_.AddRecentProject(savedPath);
     SaveSettingsSoon();
+    if (!movedTo.empty())
+    {
+        ProcLog("⚠ " + FileNameOf(path) + " открыт в другой программе — проект сохранён как " + FileNameOf(movedTo),
+                Shown(movedTo));
+        Notify("Проект открыт в другой программе — сохранено как " + FileNameOf(movedTo), 0, 12000,
+               text::PathToUtf8(file.parent_path()));
+        return true;
+    }
     if (!autosave)
     {
         ProcLog("✓ Проект сохранён: " + FileNameOf(path), Shown(path));
@@ -206,6 +229,8 @@ void App::ProcApplyProjectSettings(const proj::Project& p)
     settings_.heelD = p.D;
     settings_.heelP = p.P;
     settings_.heelL = p.L;
+    settings_.heelB = p.B;
+    settings_.armFrom = p.armFrom;
     settings_.heelAxis = p.axis;
     settings_.heelWinS = p.windowS;
     settings_.heelThr = p.thresholdDeg;
@@ -302,7 +327,8 @@ void App::ProcApplyProjectExperiment(const proj::Project& p)
             for (std::size_t i = 0; i < proc_.meas.size() && found < 0; i++)
             {
                 const int mp = heel::MainPost(proc_.meas[i]);
-                if (mp >= 0 && (*proc_.files)[static_cast<std::size_t>(proc_.meas[i].post[mp].file)].name == p.recordFile)
+                if (mp >= 0 && heel::RecordNameKey((*proc_.files)[static_cast<std::size_t>(proc_.meas[i].post[mp].file)].name) ==
+                                   heel::RecordNameKey(p.recordFile))
                     found = static_cast<int>(i);
             }
             if (found < 0)
@@ -348,9 +374,71 @@ bool App::ProcessOpenProject(const std::string& path)
     if (!proj::Load(text::PathFromUtf8(path), p, &err))
     {
         ProcLog("✗ Проект " + FileNameOf(path) + " не открыт: " + err, Shown(path));
-        Notify("Проект не открыт: " + err, 2, 7000);
+        if (!p.missing.empty())
+        {
+            // Записи не нашлись — проект разобран: записи можно указать вручную («Указать файлы…»)
+            proc_.projMissing = std::make_shared<proj::Project>(p);
+            proc_.projMissingPath = path;
+            Notify("Проект открыт не полностью: не найдены записи — укажите файлы", 2, 7000);
+        }
+        else
+            Notify("Проект не открыт: " + err, 2, 7000);
         return false;
     }
+    return ProcOpenProjectLoaded(path, p);
+}
+
+// Указать записи проекта вручную (когда они не нашлись): по одному файлу на запись проекта, в любом порядке — запись
+// проекта ищется по похожему имени, иначе — по порядку.
+bool App::ProcessProjectPickFiles(const std::vector<std::string>& files)
+{
+    if (!proc_.projMissing || files.empty() || ProcessBusy())
+        return false;
+    proj::Project p = *proc_.projMissing;
+    std::vector<std::string> picked = files;
+    std::vector<std::string> out(p.files.size());
+    // по ключу имени (без приписок копии и регистра)
+    for (std::size_t i = 0; i < p.files.size(); i++)
+    {
+        const std::string want = heel::RecordNameKey(text::PathToUtf8(text::PathFromUtf8(p.files[i]).filename()));
+        for (std::size_t k = 0; k < picked.size(); k++)
+            if (!picked[k].empty() && heel::RecordNameKey(FileNameOf(picked[k])) == want)
+            {
+                out[i] = picked[k];
+                picked[k].clear();
+                break;
+            }
+    }
+    // остальные — по порядку
+    std::size_t k = 0;
+    for (auto& o : out)
+        if (o.empty())
+        {
+            while (k < picked.size() && picked[k].empty())
+                k++;
+            if (k < picked.size())
+                o = picked[k++];
+        }
+    for (; k < picked.size(); k++)
+        if (!picked[k].empty())
+            out.push_back(picked[k]); // лишние — тоже в чтение
+    out.erase(std::remove(out.begin(), out.end(), std::string()), out.end());
+    p.files = out;
+    p.folder = text::PathToUtf8(text::PathFromUtf8(out.front()).parent_path());
+    std::string list;
+    for (const auto& f : out)
+        list += (list.empty() ? "" : ", ") + FileNameOf(f);
+    p.notes.push_back("Записи проекта указаны вручную: " + list);
+    p.missing.clear();
+    return ProcOpenProjectLoaded(proc_.projMissingPath, p);
+}
+
+bool App::ProcOpenProjectLoaded(const std::string& path, const proj::Project& p)
+{
+    proc_.projMissing.reset();
+    proc_.projMissingPath.clear();
+    for (const auto& n : p.notes)
+        ProcLog(n, Shown(path));
     ProcApplyProjectSettings(p);
     proc_.projectPath = path;
     settings_.AddRecentProject(path);
@@ -363,6 +451,40 @@ bool App::ProcessOpenProject(const std::string& path)
     proc_.dirty = true;
     ProcLoad();
     return true;
+}
+
+// Записи проекта не найдены: что не нашлось, «Указать файлы…» и «Закрыть».
+void App::ProcProjectMissingCard(float w)
+{
+    if (!proc_.projMissing)
+        return;
+    if (BeginCard("##proj_missing", ImVec2(w, 0)))
+    {
+        std::string list;
+        for (const auto& m : proc_.projMissing->missing)
+            list += (list.empty() ? "" : ", ") + m;
+        ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x);
+        TextColored(pal.warn, "⚠ Проект %s: не найдены записи — %s. Их нет ни рядом с проектом, ни по прежнему пути, ни под "
+                              "похожим именем («… (1)», «… - копия»). Укажите файлы — плечи, положения и правки "
+                              "проекта применятся к ним.",
+                    FileNameOf(proc_.projMissingPath).c_str(), list.c_str());
+        ImGui::PopTextWrapPos();
+        if (Button("Указать файлы…", BtnKind::Primary, ImVec2(0, 0), ProcessBusy(), "Идёт чтение"))
+        {
+            std::vector<std::string> picked;
+            const std::string dir = text::PathToUtf8(text::PathFromUtf8(proc_.projMissingPath).parent_path());
+            if (dialogs::PickFiles(picked, dir, L"Файлы записей (*.CSV, *.TXT)\0*.CSV;*.TXT\0Все файлы\0*.*\0",
+                                   L"Записи проекта"))
+                ProcessProjectPickFiles(picked);
+        }
+        ImGui::SameLine(0, S(8));
+        if (Button("Закрыть", BtnKind::Normal))
+        {
+            proc_.projMissing.reset();
+            proc_.projMissingPath.clear();
+        }
+    }
+    EndCard();
 }
 
 // Папка опыта, рядом с записями которой лежит «Опыт.krenomer» (автосохранение), открывается вместе с проектом: плечи,

@@ -11,12 +11,17 @@
 #include "../comm/SerialConnection.hpp"
 #include "../comm/SimConnection.hpp"
 #include "../core/TextUtil.hpp"
+#include "Dialogs.hpp"
 #include "Widgets.hpp"
 
 #ifdef KRENOMER_PROJECT_VERSION
 namespace
 {
-// kAppVersion («1.7») — начало версии из CMakeLists.txt (project VERSION 1.7.0): сведения о файле и окно — одно.
+// kAppVersion («1.7.1») — начало версии из CMakeLists.txt (project VERSION 1.7.1): сведения о файле и окно — одно.
+// 1.7.1: среднее положения — по второй половине установившегося крена (не 6 с в самом конце участка, M024); записи
+// проекта под похожим именем (« (1)», « - копия») и «Указать файлы…»; отчёт и проект, открытые в другой программе, —
+// под «(2)» с сообщением; «Обработка» прокручивается целиком, подпункты «Обзор / Положения и расчёт / Графики»;
+// плечи «от ЛБ / ПрБ» по ширине B.
 // 1.7: проект опыта — файл *.krenomer (записи, параметры, датчики, метод, Правила РС, положения и правки):
 // «Открыть проект» / «Сохранить проект», недавние, автосохранение «Опыт.krenomer» рядом с записями.
 // 1.6.1: компактный интерфейс для экранов HD ready (1280×720, 1366×768).
@@ -174,9 +179,9 @@ std::string App::WindowTitle() const
     return std::string("Регистратор крена — программа для ПК ") + kAppVersion;
 }
 
-void App::Notify(const std::string& text, int kind, int ms)
+void App::Notify(const std::string& text, int kind, int ms, const std::string& folder)
 {
-    toasts_.push_back({text, kind, link_->NowMs() + ms});
+    toasts_.push_back({text, kind, link_->NowMs() + ms, folder});
     if (toasts_.size() > 4)
         toasts_.erase(toasts_.begin());
 }
@@ -530,6 +535,38 @@ void App::RenderSidebar(float w, float h)
             if (badge)
                 dl->AddText(fontBold, fontBold->FontSize, ImVec2(p.x + iw - S(20), p.y + (ih - fontBold->FontSize) * 0.5f),
                             U32(bc), badge);
+            // «Обработка»: подпункты — обзор (на широком окне), положения и расчёт, графики
+            if (it.page == Page::Process && page_ == Page::Process)
+            {
+                const int cur = ProcView();
+                struct Sub
+                {
+                    int view;
+                    const char* label;
+                };
+                const Sub subs[] = {{0, "Обзор"}, {1, "Положения и расчёт"}, {2, "Графики"}};
+                for (const Sub& sb : subs)
+                {
+                    if (sb.view == 0 && !ProcWideScreen())
+                        continue;
+                    const ImVec2 q = ImGui::GetCursorScreenPos();
+                    const float sh = S(30);
+                    ImGui::PushID(100 + sb.view);
+                    if (ImGui::InvisibleButton("##sub", ImVec2(iw, sh)))
+                        proc_.view = sb.view;
+                    const bool shov = ImGui::IsItemHovered();
+                    ImGui::PopID();
+                    const bool ssel = cur == sb.view;
+                    if (ssel || shov)
+                        dl->AddRectFilled(ImVec2(q.x + S(30), q.y), ImVec2(q.x + iw, q.y + sh),
+                                          U32(ssel ? Alpha(pal.navSel, 0.7f) : pal.navHover), S(6));
+                    dl->AddCircleFilled(ImVec2(q.x + S(44), q.y + sh * 0.5f), S(2.5f),
+                                        U32(ssel ? pal.orange : pal.navMuted));
+                    dl->AddText(ssel ? fontBold : fontBody, fontBody->FontSize,
+                                ImVec2(q.x + S(56), q.y + (sh - fontBody->FontSize) * 0.5f),
+                                U32(ssel ? ImVec4(1, 1, 1, 1) : pal.navText), sb.label);
+                }
+            }
         }
     }
     // Пульт имитатора — своим блоком
@@ -640,6 +677,17 @@ void App::RenderNavRail(float w, float h)
         ImGui::PushID(i);
         if (icon("##it", it.icon, page_ == it.page, it.label, badge))
             page_ = it.page;
+        // «Обработка»: подпункты значками
+        if (it.page == Page::Process && page_ == Page::Process)
+        {
+            const int cur = ProcView();
+            if (ProcWideScreen() && icon("##v0", "■", cur == 0, "Обработка: обзор", nullptr))
+                proc_.view = 0;
+            if (icon("##v1", "▥", cur == 1, "Обработка: положения и расчёт", nullptr))
+                proc_.view = 1;
+            if (icon("##v2", "◔", cur == 2, "Обработка: графики", nullptr))
+                proc_.view = 2;
+        }
         ImGui::PopID();
     }
     if (snap_.demo && sim_)
@@ -769,14 +817,24 @@ void App::RenderToasts()
         char id[32];
         std::snprintf(id, sizeof(id), "##toast%d", i);
         ImGui::SetNextWindowSizeConstraints(ImVec2(0, 0), ImVec2(S(460), FLT_MAX));
+        const bool action = !it->folder.empty();
         ImGui::Begin(id, nullptr,
                      ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings |
-                         ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoInputs);
+                         ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav |
+                         (action ? ImGuiWindowFlags_None : ImGuiWindowFlags_NoInputs));
         ImGui::PushTextWrapPos(S(430));
         ImGui::PushStyleColor(ImGuiCol_Text, pal.text);
         ImGui::TextUnformatted(it->text.c_str());
         ImGui::PopStyleColor();
         ImGui::PopTextWrapPos();
+        if (action)
+        {
+            if (Button("Открыть папку", BtnKind::Normal))
+                dialogs::OpenFolder(it->folder);
+            // наведена мышь — сообщение не гаснет
+            if (ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows))
+                it->until = std::max(it->until, link_->NowMs() + 1500);
+        }
         y -= ImGui::GetWindowHeight() + S(8);
         ImGui::End();
         ImGui::PopStyleVar(3);

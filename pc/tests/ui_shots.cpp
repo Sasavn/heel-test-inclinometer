@@ -27,6 +27,7 @@
 #include "RulesMockups.hpp"
 #include "TestUtil.hpp"
 #include "VodnikData.hpp"
+#include "core/FileBusy.hpp"
 #include "core/TextUtil.hpp"
 #include "fw/Firmware.hpp"
 #include "ui/App.hpp"
@@ -217,8 +218,10 @@ struct Stand
             if (w->ScrollMax.x > 0.5f && wn.find("##termlog") == std::string::npos &&
                 wn.find("##fwlog") == std::string::npos)
                 CHECK_MSG(false, "%s: горизонтальная прокрутка %.0f px в окне «%s»", name, w->ScrollMax.x, wn.c_str());
-            if (fitPage && wn.find("##page") != std::string::npos && wn.find("/##page") != std::string::npos &&
-                wn.rfind('/') == wn.find("/##page"))
+            // «Обработка» с 1.7.1 прокручивается целиком (таблицы — во всю высоту): вертикальная прокрутка страницы
+            // допустима, горизонтальная — нет
+            if (fitPage && app->GetPage() != ui::Page::Process && wn.find("##page") != std::string::npos &&
+                wn.find("/##page") != std::string::npos && wn.rfind('/') == wn.find("/##page"))
                 CHECK_MSG(w->ScrollMax.y <= 0.5f, "%s: страница не помещается по высоте (%.0f px)", name, w->ScrollMax.y);
         }
         const std::string path = (fs::path(g_out) / (std::string(name) + ".png")).string();
@@ -239,7 +242,8 @@ struct Stand
             const std::string wn = w->Name;
             if (w->ScrollMax.x > 0.5f && wn.find("##termlog") == std::string::npos && wn.find("##fwlog") == std::string::npos)
                 out += "  гориз. прокрутка " + std::to_string(static_cast<int>(w->ScrollMax.x)) + " px: " + wn + "\n";
-            if (wn.find("/##page") != std::string::npos && wn.rfind('/') == wn.find("/##page") && w->ScrollMax.y > 0.5f)
+            if (app->GetPage() != ui::Page::Process && wn.find("/##page") != std::string::npos &&
+                wn.rfind('/') == wn.find("/##page") && w->ScrollMax.y > 0.5f)
                 out += "  страница длиннее окна на " + std::to_string(static_cast<int>(w->ScrollMax.y)) + " px\n";
         }
         return out;
@@ -380,6 +384,22 @@ int main(int argc, char** argv)
     for (int i = 1; i < argc; i++)
         if (std::strcmp(argv[i], "--sizes-strict") == 0)
             g_sizesStrict = true;
+    // Отчёт программы по проекту: KRENOMER_REPORT_PROJECT — проект (*.krenomer), KRENOMER_REPORT_SHOW — «папка=как
+    // показывать» (пути в отчёте). Книга и картинки — в папку записей, как кнопкой «Сохранить отчёт»; снимки — в --out.
+    // Через переменные окружения: пути с кириллицей в argv на Windows не доходят в UTF-8.
+    std::string reportProject, reportShowFrom, reportShowAs;
+    if (const wchar_t* e = _wgetenv(L"KRENOMER_REPORT_PROJECT"); e && *e)
+        reportProject = text::Narrow(e);
+    if (const wchar_t* e = _wgetenv(L"KRENOMER_REPORT_SHOW"); e && *e)
+    {
+        const std::string v = text::Narrow(e);
+        const auto eq = v.find('=');
+        if (eq != std::string::npos)
+        {
+            reportShowFrom = v.substr(0, eq);
+            reportShowAs = v.substr(eq + 1);
+        }
+    }
     std::error_code ec;
     fs::create_directories(g_out, ec);
 
@@ -402,6 +422,41 @@ int main(int argc, char** argv)
     std::printf("атлас шрифтов %d × %d\n", tw, th);
     CHECK(ui::fontBody && ui::fontBody != ui::fontBig); // шрифты из ресурсов, не встроенный ImGui
     CHECK(tw <= 2048 && th <= 2048);
+
+    if (!reportProject.empty())
+    {
+        SECTION("отчёт по проекту");
+        ui::AppOptions o{false, false, false};
+        o.noHardware = true;
+        ui::App app(o);
+        app.SetProjectAutosaveAllowed(false);
+        if (!reportShowFrom.empty())
+            app.SetShownPaths({{reportShowFrom, reportShowAs}});
+        Stand st{&app};
+        app.SetPage(ui::Page::Process);
+        st.Run(300);
+        auto waitBusy = [&] {
+            for (int i = 0; i < 3000 && app.ProcessBusy(); i++)
+            {
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                st.Run(50);
+            }
+        };
+        waitBusy();
+        CHECK(app.ProcessOpenProject(reportProject));
+        waitBusy();
+        st.Run(1000);
+        std::printf("h от начального %.5f (МНК %.5f), основной %.5f, h_k %.5f\n", app.ProcessPositionsSummary().h,
+                    app.ProcessPositionsSummary().ls.h, app.ProcessRs().hMain, app.ProcessRs().r.hk);
+        for (const auto& q : app.ProcessPositions())
+            std::printf("  %7.2f…%7.2f  плечо %7.1f  Д2 %+8.4f  Д3 %+8.4f\n", q.t0, q.t1, q.arm, q.Level(0), q.Level(1));
+        st.Shot("report_process");
+        app.ProcessSaveReport();
+        st.Run(100);
+        waitBusy();
+        st.Run(300);
+        return TestSummary();
+    }
 
     // 1. Нет связи (настоящий поиск COM-порта; прибора на этом ПК нет)
     SECTION("нет связи");
@@ -967,6 +1022,26 @@ int main(int argc, char** argv)
             CHECK_NEAR(rc.r.hk, 0.0531, 0.001, "M021: h_k по табл. 6.5");
             CHECK_RANGE(app.ProcessPositionsSummary().h, 0.045, 0.052, "M021: h от начального");
             {
+                // Плечи «от ПрБ»: расстояние от правого борта до центра груза, B = 550 мм — те же плечи от ДП и h
+                const double h = app.ProcessPositionsSummary().h, hk = rc.r.hk;
+                const double fromPrb[9] = {295, 230, 180, 130, 70, 330, 380, 430, 480};
+                app.ProcessSetArmFrom(2, 550.0);
+                for (int i = 0; i < 9; i++)
+                    app.ProcessSetPositionArmInput(i, fromPrb[i]);
+                st.Run(300);
+                for (int i = 0; i < 9 && i < static_cast<int>(app.ProcessPositions().size()); i++)
+                    CHECK_NEAR(app.ProcessPositions()[i].arm, armDp[i], 1e-9, "от ПрБ -> плечо от ДП");
+                CHECK_NEAR(app.ProcessPositionsSummary().h, h, 1e-9, "плечи от ПрБ: тот же h");
+                CHECK_NEAR(app.ProcessRs().r.hk, hk, 1e-9, "плечи от ПрБ: тот же h_k");
+                app.ProcessSetView(0);
+                app.ProcessSetSubView(1);
+                st.Run(300);
+                st.Shot("36_arms_from_prb");
+                app.ProcessSetSubView(-1);
+                app.ProcessSetArmFrom(0, 0.0);
+                st.Run(300);
+            }
+            {
                 const double h = app.ProcessPositionsSummary().h, hk = rc.r.hk;
                 // Автосохранение: правка -> через 3 с «Опыт.krenomer» рядом с записями
                 const fs::path autoFile = md / L"Опыт.krenomer";
@@ -1071,6 +1146,99 @@ int main(int argc, char** argv)
                     fs::copy_file(md / f, fs::path(g_out) / (L"29_m021_" + std::wstring(f)),
                                   fs::copy_options::overwrite_existing, ec);
             CHECK_MSG(fs::file_size(md / L"Отчет_Кренование.xlsx", ec) > 10000, "нет отчёта M021");
+#ifdef _WIN32
+            // Отчёт открыт в Excel (файл держат без совместной записи и удаления): сохранение не молчит — весь
+            // комплект под «(2)», в журнале и всплывающем сообщении «сохранено как …» с «Открыть папку»
+            {
+                HANDLE held = CreateFileW((md / L"Отчет_Кренование.xlsx").c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr,
+                                          OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+                CHECK(held != INVALID_HANDLE_VALUE);
+                CHECK(filebusy::Busy(md / L"Отчет_Кренование.xlsx") && !filebusy::Busy(md / L"График_Нос.png"));
+                const auto before = fs::last_write_time(md / L"Отчет_Кренование.xlsx", ec);
+                app.ProcessSaveReport();
+                st.Run(100);
+                wait();
+                st.Run(100);
+                CloseHandle(held);
+                CHECK(fs::last_write_time(md / L"Отчет_Кренование.xlsx", ec) == before);
+                CHECK_MSG(fs::file_size(md / L"Отчет_Кренование (2).xlsx", ec) > 10000, "нет «Отчет_Кренование (2).xlsx»");
+                CHECK(fs::exists(md / L"График_Нос (2).png", ec) && fs::exists(md / L"Положения_Нос (2).png", ec) &&
+                      fs::exists(md / L"График_контроля (2).png", ec));
+                bool toast = false;
+                for (const auto& t : app.Toasts())
+                    toast |= t.text.find("сохранено как Отчет_Кренование (2).xlsx") != std::string::npos && !t.folder.empty();
+                CHECK_MSG(toast, "нет сообщения «сохранено как …»");
+                st.Shot("35_report_busy", true);
+                st.Run(13000); // сообщение погасло
+            }
+#endif
+            app.ProcessSetSmallShip(false);
+            app.ProcessSetShip(1500.0, 15.0);
+            st.Run(300);
+        }
+
+        // Опыт M024, присланный через Telegram: записи с припиской « (1)», проект ссылается на имена без неё и на
+        // чужой диск — записи находятся по похожему имени; проект без записей рядом — «Указать файлы…»
+        {
+            const fs::path tg = ShotsWorkDir() / L"Из Telegram";
+            fs::remove_all(tg, ec);
+            fs::create_directories(tg, ec);
+            std::vector<std::string> tgFiles;
+            for (const char* n : {"2026-10-16_M024_D2", "2026-10-16_M024_D3"})
+            {
+                const fs::path dst = tg / text::PathFromUtf8(std::string(n) + " (1).CSV");
+                fs::copy_file(testutil::TestDataDir() / "m024" / (std::string(n) + ".CSV"), dst,
+                              fs::copy_options::overwrite_existing, ec);
+                tgFiles.push_back(text::PathToUtf8(dst));
+            }
+            proj::Project p;
+            p.folder = "K:\\Опыты\\Бассейн";
+            p.files = {"K:\\Опыты\\Бассейн\\2026-10-16_M024_D3.CSV", "K:\\Опыты\\Бассейн\\2026-10-16_M024_D2.CSV"};
+            p.model = true;
+            p.D = 52.5;
+            p.P = 2.5;
+            p.L = 240;
+            p.method = 0; // Медиана + EMA (статья) — как на картинке руководителя
+            p.mode = 1;
+            p.recordFile = "2026-10-16_M024_D2.CSV";
+            p.positionsEdited = true;
+            const double sp[9][3] = {{2, 38.986, 5},          {49.886, 93.986, 95},   {102.686, 142.086, 170},
+                                     {148.686, 182.286, 220}, {189.186, 231.286, 280}, {279.786, 310.886, -35},
+                                     {321.286, 356.386, -100}, {366.786, 407.086, -180}, {428.786, 473.194, -280}};
+            for (const auto& q : sp)
+            {
+                heel::Position pos;
+                pos.t0 = q[0];
+                pos.t1 = q[1];
+                pos.arm = q[2];
+                p.positions.push_back(pos);
+            }
+            const fs::path tgProj = tg / L"Опыт.krenomer";
+            CHECK(proj::Save(tgProj, p));
+            CHECK(app.ProcessOpenProject(text::PathToUtf8(tgProj)));
+            wait();
+            st.Run(300);
+            CHECK(app.ProcessContinuous() && app.ProcessPositions().size() == 9 && !app.ProcessProjectMissing());
+            CHECK(app.ProcessPositions().size() == 9 && std::fabs(app.ProcessPositions()[7].Level(1) + 4.958) < 0.02);
+            app.ProcessShowPost(1);
+            app.ProcessSelectPosition(7);
+            st.Run(300);
+            st.Shot("34_m024_position8", true);
+            // Тот же проект в папке без записей (и без похожих имён) — карточка «Указать файлы…»
+            const fs::path lost = ShotsWorkDir() / L"Проект без записей";
+            fs::remove_all(lost, ec);
+            CHECK(proj::Save(lost / L"Опыт.krenomer", p));
+            CHECK(!app.ProcessOpenProject(text::PathToUtf8(lost / L"Опыт.krenomer")));
+            CHECK(app.ProcessProjectMissing());
+            st.Run(7500);
+            st.Shot("34_project_missing");
+            CHECK(app.ProcessProjectPickFiles({tgFiles[1], tgFiles[0]}));
+            wait();
+            st.Run(300);
+            CHECK(!app.ProcessProjectMissing() && app.ProcessContinuous() && app.ProcessPositions().size() == 9);
+            CHECK(app.ProcessPositions().size() == 9 && std::fabs(app.ProcessPositions()[7].Level(1) + 4.958) < 0.02);
+            app.ProcessShowPost(0);
+            app.ProcessSelectPosition(-1);
             app.ProcessSetSmallShip(false);
             app.ProcessSetShip(1500.0, 15.0);
             st.Run(300);
@@ -1108,17 +1276,28 @@ int main(int argc, char** argv)
         {
             ui::Page page;
             const char* name;
+            int view = -1; // «Обработка»: подпункт (-1 — сам по размеру окна)
+            int tab = 0;
         };
-        const Pg pages[] = {{ui::Page::Measure, "measure"}, {ui::Page::Process, "process"}, {ui::Page::Settings, "settings"},
-                            {ui::Page::Diag, "diag"},       {ui::Page::Files, "files"},     {ui::Page::Firmware, "firmware"},
+        const Pg pages[] = {{ui::Page::Measure, "measure"},
+                            {ui::Page::Process, "process"},
+                            {ui::Page::Process, "process_table", 1},
+                            {ui::Page::Process, "process_rules", 1, 1},
+                            {ui::Page::Process, "process_graphs", 2},
+                            {ui::Page::Settings, "settings"},
+                            {ui::Page::Diag, "diag"},
+                            {ui::Page::Files, "files"},
+                            {ui::Page::Firmware, "firmware"},
                             {ui::Page::Terminal, "terminal"}};
-        const ImVec2 sizes[] = {{1280, 720}, {1366, 768}, {1920, 1080}};
+        const ImVec2 sizes[] = {{1024, 768}, {1152, 864}, {1280, 720}, {1366, 768}, {1920, 1080}};
         const ImVec2 keep = st.size;
         for (const ImVec2& sz : sizes)
             for (const Pg& pg : pages)
             {
                 st.size = sz;
                 app.SetPage(pg.page);
+                app.ProcessSetSubView(pg.view);
+                app.ProcessSetTab(pg.tab);
                 st.Run(300);
                 const std::string name =
                     std::to_string(static_cast<int>(sz.x)) + "x" + std::to_string(static_cast<int>(sz.y)) + "_" + pg.name;
@@ -1129,6 +1308,8 @@ int main(int argc, char** argv)
                 st.Save((fs::path(g_sizesOut) / (name + ".png")).string(), name.c_str());
             }
         st.size = keep;
+        app.ProcessSetSubView(-1);
+        app.ProcessSetTab(0);
         std::ofstream(fs::path(g_sizesOut) / "sizes.txt", std::ios::binary) << report;
         std::printf("%s", report.c_str());
         app.ProcessSetSmallShip(false);
