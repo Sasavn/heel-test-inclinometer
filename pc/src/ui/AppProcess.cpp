@@ -499,8 +499,9 @@ void App::ProcLoad()
     else
     {
         folder = proc_.dir;
-        if (!proc_.projPending && folder != proc_.outDir && ProcAutoOpenProject(folder))
-            return; // папка опыта с «Опыт.krenomer»: открыт проект (он сам читает записи)
+        if (!proc_.projPending && !proc_.askSkip && folder != proc_.outDir && ProcAskProject(folder))
+            return; // в папке есть проект: сначала вопрос — открыть его или начать новый
+        proc_.askSkip = false;
         settings_.procDir = folder == files_.dir ? "" : folder; // запомнить, если не папка «Файлов на карте»
         std::string err;
         bool sub = false;
@@ -671,7 +672,7 @@ void App::TickProcess()
         heel::Loaded r = proc_.load.get();
         const std::shared_ptr<proj::Project> pend = std::move(proc_.projPending);
         proc_.projPending.reset();
-        if (r.folder != proc_.outDir || pend) // другой опыт: плечи и снятые замеры — заново (или из проекта)
+        if (r.folder != proc_.outDir || pend || proc_.freshStart) // другой опыт: плечи и снятые замеры — заново (или из проекта)
         {
             proc_.arm.clear();
             proc_.off.clear();
@@ -722,6 +723,14 @@ void App::TickProcess()
         else if (!proc_.files->empty())
             ProcLog("Ни один файл не понят как файл замера (что не так — выше)");
         ProcChooseMode(true); // режим по содержимому: одна запись — весь опыт или файл = замер
+        if (proc_.freshStart)
+        {
+            // «Создать новый проект кренования»: чистые плечи, без прежних правок положений этой записи
+            proc_.freshStart = false;
+            proc_.projectPath.clear();
+            if (ProcCont())
+                ProcFindPositions(false);
+        }
         if (pend)
             ProcApplyProjectExperiment(*pend);
         ProcRecompute();
@@ -924,7 +933,7 @@ void App::ProcParams(float w)
                               "и датчик; записи на ПК «…_PC_Dk.CSV» и файлы с другими именами — каждый свой замер.\n"
                               "Сюда же сохраняется отчёт.");
         ImGui::SameLine(0, S(12));
-        const float btnW = S(156) + S(104) + S(126) + 3 * S(8);
+        const float btnW = S(130) + S(8); // «Записи ▼»
         ImGui::SetNextItemWidth(std::max(S(120), right - ImGui::GetCursorScreenPos().x - btnW));
         if (PathInput("##pdir", proc_.dir, sizeof(proc_.dir), ImGuiInputTextFlags_EnterReturnsTrue) && !loading)
         {
@@ -935,34 +944,52 @@ void App::ProcParams(float w)
             ImGui::SetTooltip("Выбраны отдельные файлы (%d) — «Перечитать» читает их; Enter в поле — вся папка",
                               static_cast<int>(proc_.picked.size()));
         ImGui::SameLine(0, S(8));
-        if (Button("Выбрать папку…", BtnKind::Normal, ImVec2(S(156), 0), loading, "Идёт чтение файлов"))
+        // «Записи ▼»: выбрать папку, выбрать файлы, перечитать — одной нейтральной кнопкой
+        if (Button(loading ? "Чтение…" : "Записи ▼", BtnKind::Normal, ImVec2(S(130), 0), loading, "Идёт чтение файлов") ||
+            proc_.recMenu > 0)
         {
-            std::string d = proc_.dir;
-            if (dialogs::PickFolder(d))
-            {
-                std::snprintf(proc_.dir, sizeof(proc_.dir), "%s", d.c_str());
-                proc_.picked.clear();
-                ProcLoad();
-            }
+            ImGui::OpenPopup("##recmenu");
+            proc_.recMenu = 0;
         }
-        ImGui::SameLine(0, S(8));
-        if (Button("Файлы…", BtnKind::Normal, ImVec2(S(104), 0), loading, "Идёт чтение файлов"))
+        if (ImGui::IsItemHovered() && !loading)
+            ImGui::SetTooltip("Откуда записи опыта: папка, отдельные файлы, перечитать");
+        ImGui::SetNextWindowPos(ImVec2(ImGui::GetItemRectMax().x, ImGui::GetItemRectMax().y + S(4)), ImGuiCond_Appearing,
+                                ImVec2(1, 0));
+        if (ImGui::BeginPopup("##recmenu"))
         {
-            std::vector<std::string> picked;
-            if (dialogs::PickFiles(picked, proc_.dir, L"Файлы замеров (*.CSV, *.TXT)\0*.CSV;*.TXT\0Все файлы\0*.*\0",
-                                   L"Файлы замеров для обработки"))
+            if (ImGui::MenuItem("Выбрать папку…"))
             {
-                proc_.picked = picked;
-                const std::string d = text::PathToUtf8(text::PathFromUtf8(picked.front()).parent_path());
-                std::snprintf(proc_.dir, sizeof(proc_.dir), "%s", d.c_str());
-                ProcLoad();
+                std::string d = proc_.dir;
+                if (dialogs::PickFolder(d))
+                {
+                    std::snprintf(proc_.dir, sizeof(proc_.dir), "%s", d.c_str());
+                    proc_.picked.clear();
+                    ProcLoad();
+                }
             }
+            if (ImGui::MenuItem("Выбрать файлы…"))
+            {
+                std::vector<std::string> picked;
+                if (dialogs::PickFiles(picked, proc_.dir, L"Файлы замеров (*.CSV, *.TXT)\0*.CSV;*.TXT\0Все файлы\0*.*\0",
+                                       L"Файлы замеров для обработки"))
+                {
+                    proc_.picked = picked;
+                    const std::string d = text::PathToUtf8(text::PathFromUtf8(picked.front()).parent_path());
+                    std::snprintf(proc_.dir, sizeof(proc_.dir), "%s", d.c_str());
+                    ProcLoad();
+                }
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Отдельные файлы (Ctrl / Shift — несколько)");
+            ImGui::Separator();
+            if (ImGui::MenuItem("Перечитать"))
+                ProcLoad();
+            if (proc_.recMenu < 0)
+                ImGui::CloseCurrentPopup();
+            ImGui::EndPopup();
         }
-        if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("Выбрать отдельные файлы (Ctrl / Shift — несколько)");
-        ImGui::SameLine(0, S(8));
-        if (Button(loading ? "Чтение…" : "Перечитать", BtnKind::Normal, ImVec2(S(126), 0), loading))
-            ProcLoad();
+        if (proc_.recMenu < 0)
+            proc_.recMenu = 0;
 
         // Строки 2–3: исходные данные (переносятся по ширине окна)
         bool first = true;

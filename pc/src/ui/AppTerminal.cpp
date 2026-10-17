@@ -63,7 +63,7 @@ void App::PageTerminal()
     }
 
     // Журнал
-    const float inputH = ImGui::GetFrameHeight() + S(4) + 2 * ImGui::GetStyle().ItemSpacing.y;
+    const float inputH = ImGui::GetFrameHeight() + S(9) + 2 * ImGui::GetStyle().ItemSpacing.y; // «Отправить» — главная, выше на 5
     ImGui::PushStyleColor(ImGuiCol_ChildBg, pal.card);
     ImGui::PushStyleColor(ImGuiCol_Border, pal.border);
     ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, S(8));

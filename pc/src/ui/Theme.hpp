@@ -1,11 +1,21 @@
 #pragma once
 // Палитра и стиль интерфейса (с 1.6 — «дашборд»: тёмно-синяя левая панель и шапка, светлая рабочая область,
-// белые карточки со скруглением и мягкой тенью, акценты синий / зелёный / оранжевый): светлая (по умолчанию — лучше
-// видна на старых мониторах и проекторах) и тёмная в том же духе.
+// белые карточки со скруглением и мягкой тенью): светлая (по умолчанию — лучше видна на старых мониторах и
+// проекторах) и тёмная в том же духе. С 1.8.1 — цвета руководителя: тёмно-синий #103269 — основной (шапка, панель),
+// оранжевый #F87128 — главное действие (тёмный текст: белый на нём — 2,8 : 1, тёмный — 5,9 : 1), лимонный #B8E039 —
+// заметные кнопки («Параметры», тёмный текст 11 : 1); ок / предупреждение / ошибка / инфо — свои, не путаются с
+// акцентом (красная ошибка ≠ красно-оранжевый #DF5023; рядом всегда значок ✓ ⚠ ✗ — для дальтоников).
 #include <imgui.h>
 
 namespace ui
 {
+
+// Цвет из 0xRRGGBB
+constexpr ImVec4 Hex(unsigned rgb, float a = 1.f)
+{
+    return ImVec4(static_cast<float>((rgb >> 16) & 0xFF) / 255.f, static_cast<float>((rgb >> 8) & 0xFF) / 255.f,
+                  static_cast<float>(rgb & 0xFF) / 255.f, a);
+}
 
 struct Palette
 {
@@ -19,27 +29,29 @@ struct Palette
     // Левая панель и шапка (тёмно-синие в обеих темах), акценты, тень карточек
     ImVec4 nav, navText, navMuted, navLine, navFrame;
     ImVec4 orange, green, blueSoft, greenSoft, orangeSoft, redSoft;
+    ImVec4 lemon, onAccent; // заметная кнопка (#B8E039) и текст на оранжевом / лимонном (тёмный) — вариант, в кнопках не используется
+    ImVec4 action, actionHover, actionText; // главные действия: заливка, наведение, текст (≥ 7 : 1)
     ImVec4 shadow;
 };
 
 inline Palette MakeLight()
 {
     Palette p;
-    p.bg = {0.949f, 0.957f, 0.973f, 1.f};
-    p.panel = {0.925f, 0.937f, 0.957f, 1.f};
-    p.card = {1.f, 1.f, 1.f, 1.f};
-    p.cardAlt = {0.965f, 0.973f, 0.984f, 1.f};
-    p.border = {0.86f, 0.88f, 0.915f, 1.f};
-    p.text = {0.11f, 0.13f, 0.17f, 1.f};
-    p.textDim = {0.30f, 0.33f, 0.39f, 1.f};
-    p.muted = {0.43f, 0.47f, 0.53f, 1.f};
-    p.accent = {0.122f, 0.384f, 0.776f, 1.f};
-    p.accentHover = {0.18f, 0.45f, 0.85f, 1.f};
+    p.bg = Hex(0xF3F5F9);
+    p.panel = Hex(0xE9EDF4);
+    p.card = Hex(0xFFFFFF);
+    p.cardAlt = Hex(0xF6F8FB);
+    p.border = Hex(0xD5DBE6);
+    p.text = Hex(0x1A1D24);      // 16,9 : 1 на карточке
+    p.textDim = Hex(0x4A5468);   // 7,6 : 1
+    p.muted = Hex(0x6B7489);     // 4,7 : 1 — подписи (AA)
+    p.accent = Hex(0x1D4E9E);    // выбор, ссылки: 8,0 : 1 на белом, белый текст на нём — 8,0 : 1
+    p.accentHover = Hex(0x2A5FB5);
     p.accentText = {1.f, 1.f, 1.f, 1.f};
-    p.ok = {0.09f, 0.55f, 0.24f, 1.f};
-    p.warn = {0.78f, 0.47f, 0.02f, 1.f};
-    p.err = {0.80f, 0.16f, 0.16f, 1.f};
-    p.info = {0.13f, 0.40f, 0.80f, 1.f};
+    p.ok = Hex(0x1E7B3A);        // 5,3 : 1
+    p.warn = Hex(0x8A5A00);      // 5,9 : 1
+    p.err = Hex(0xC0262D);       // 5,9 : 1
+    p.info = Hex(0x1F5FBF);      // 6,1 : 1
     p.okBg = {0.86f, 0.95f, 0.88f, 1.f};
     p.warnBg = {1.00f, 0.94f, 0.80f, 1.f};
     p.errBg = {0.99f, 0.88f, 0.88f, 1.f};
@@ -47,20 +59,25 @@ inline Palette MakeLight()
     p.button = {1.f, 1.f, 1.f, 1.f};
     p.buttonHover = {0.925f, 0.945f, 0.98f, 1.f};
     p.buttonActive = {0.85f, 0.89f, 0.96f, 1.f};
-    p.buttonBorder = {0.76f, 0.79f, 0.84f, 1.f};
+    p.buttonBorder = Hex(0x7D879C); // контур нейтральных кнопок: 3,6 : 1 к белой карточке
     p.buttonDisabled = {0.91f, 0.92f, 0.94f, 1.f};
     p.frame = {0.965f, 0.97f, 0.98f, 1.f};
     p.frameHover = {0.93f, 0.945f, 0.97f, 1.f};
     p.sensor[0] = {0.12f, 0.42f, 0.80f, 1.f};
     p.sensor[1] = {0.88f, 0.42f, 0.05f, 1.f};
-    p.nav = {0.043f, 0.200f, 0.467f, 1.f};      // #0B3377
+    p.nav = Hex(0x103269);       // основной цвет руководителя; белый текст 12,5 : 1
     p.navText = {0.93f, 0.95f, 0.99f, 1.f};
     p.navMuted = {0.62f, 0.71f, 0.86f, 1.f};
     p.navLine = {1.f, 1.f, 1.f, 0.12f};
     p.navFrame = {1.f, 1.f, 1.f, 0.10f};
-    p.navSel = {0.11f, 0.29f, 0.58f, 1.f};
+    p.navSel = Hex(0x1D4E9E);
     p.navHover = {1.f, 1.f, 1.f, 0.07f};
-    p.orange = {0.96f, 0.45f, 0.13f, 1.f};
+    p.orange = Hex(0xF87128);    // главное действие — с тёмным текстом (5,9 : 1)
+    p.lemon = Hex(0xB8E039);     // заметные кнопки — с тёмным текстом (11,0 : 1)
+    p.onAccent = Hex(0x1A1D24);
+    p.action = Hex(0x1A4FA8);    // главные действия: белый текст 7,7 : 1, к фону карточки 7,7 : 1
+    p.actionHover = Hex(0x2D63C4);
+    p.actionText = Hex(0xFFFFFF);
     p.green = {0.33f, 0.66f, 0.18f, 1.f};
     p.blueSoft = {0.92f, 0.95f, 1.f, 1.f};
     p.greenSoft = {0.91f, 0.97f, 0.89f, 1.f};
@@ -73,21 +90,21 @@ inline Palette MakeLight()
 inline Palette MakeDark()
 {
     Palette p;
-    p.bg = {0.067f, 0.082f, 0.110f, 1.f};
-    p.panel = {0.085f, 0.105f, 0.14f, 1.f};
-    p.card = {0.115f, 0.140f, 0.185f, 1.f};
-    p.cardAlt = {0.100f, 0.122f, 0.162f, 1.f};
-    p.border = {0.19f, 0.23f, 0.30f, 1.f};
-    p.text = {0.92f, 0.94f, 0.96f, 1.f};
-    p.textDim = {0.75f, 0.78f, 0.83f, 1.f};
-    p.muted = {0.55f, 0.60f, 0.67f, 1.f};
-    p.accent = {0.25f, 0.55f, 0.98f, 1.f};
-    p.accentHover = {0.35f, 0.62f, 1.f, 1.f};
+    p.bg = Hex(0x121826);
+    p.panel = Hex(0x161D2D);
+    p.card = Hex(0x1B2233);
+    p.cardAlt = Hex(0x18202F);
+    p.border = Hex(0x2E3850);
+    p.text = Hex(0xE8ECF4);      // 13,4 : 1 на карточке
+    p.textDim = Hex(0xB3BDD1);   // 8,4 : 1
+    p.muted = Hex(0x8A95AD);     // 5,3 : 1
+    p.accent = Hex(0x3D7BE0);    // заливка выбора с белым текстом 4,2 : 1 (жирный / крупный)
+    p.accentHover = Hex(0x4C88EA);
     p.accentText = {1.f, 1.f, 1.f, 1.f};
-    p.ok = {0.32f, 0.84f, 0.47f, 1.f};
-    p.warn = {0.98f, 0.76f, 0.22f, 1.f};
-    p.err = {0.97f, 0.40f, 0.38f, 1.f};
-    p.info = {0.45f, 0.66f, 1.f, 1.f};
+    p.ok = Hex(0x5FD07F);        // 8,2 : 1
+    p.warn = Hex(0xF2B84B);      // 8,9 : 1
+    p.err = Hex(0xFF6B6B);       // 5,7 : 1
+    p.info = Hex(0x7FB0FF);      // 7,2 : 1
     p.okBg = {0.13f, 0.28f, 0.18f, 1.f};
     p.warnBg = {0.32f, 0.25f, 0.08f, 1.f};
     p.errBg = {0.35f, 0.13f, 0.13f, 1.f};
@@ -95,20 +112,25 @@ inline Palette MakeDark()
     p.button = {0.18f, 0.21f, 0.25f, 1.f};
     p.buttonHover = {0.22f, 0.27f, 0.33f, 1.f};
     p.buttonActive = {0.27f, 0.34f, 0.44f, 1.f};
-    p.buttonBorder = {0.29f, 0.33f, 0.39f, 1.f};
+    p.buttonBorder = Hex(0x77829C); // 4,1 : 1 к карточке #1B2233
     p.buttonDisabled = {0.15f, 0.17f, 0.20f, 1.f};
     p.frame = {0.17f, 0.20f, 0.24f, 1.f};
     p.frameHover = {0.21f, 0.25f, 0.30f, 1.f};
     p.sensor[0] = {0.36f, 0.62f, 1.f, 1.f};
     p.sensor[1] = {1.f, 0.62f, 0.25f, 1.f};
-    p.nav = {0.035f, 0.075f, 0.165f, 1.f};
+    p.nav = Hex(0x0B2247);       // тёмный вариант #103269
     p.navText = {0.90f, 0.93f, 0.98f, 1.f};
     p.navMuted = {0.55f, 0.63f, 0.78f, 1.f};
     p.navLine = {1.f, 1.f, 1.f, 0.10f};
     p.navFrame = {1.f, 1.f, 1.f, 0.08f};
-    p.navSel = {0.13f, 0.27f, 0.52f, 1.f};
+    p.navSel = Hex(0x1D3F7A);
     p.navHover = {1.f, 1.f, 1.f, 0.06f};
-    p.orange = {0.98f, 0.55f, 0.22f, 1.f};
+    p.orange = Hex(0xF87128);
+    p.lemon = Hex(0xB8E039);
+    p.onAccent = Hex(0x1A1D24);
+    p.action = Hex(0x7FA8F5);    // светло-синяя на тёмной карточке (6,7 : 1 к #1B2233), тёмный текст 7,5 : 1
+    p.actionHover = Hex(0x9BBCF8);
+    p.actionText = Hex(0x0B1733);
     p.green = {0.45f, 0.80f, 0.32f, 1.f};
     p.blueSoft = {0.14f, 0.20f, 0.32f, 1.f};
     p.greenSoft = {0.14f, 0.25f, 0.17f, 1.f};

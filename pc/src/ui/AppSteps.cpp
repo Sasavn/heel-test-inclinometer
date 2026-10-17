@@ -57,7 +57,7 @@ void App::ProcStepsView(const steps::Steps& st, const std::vector<std::string>& 
                 {
                     const bool wide = h.find('=') != std::string::npos;
                     const bool mid = h.find("ΔM") != std::string::npos || h.find("Участок") != std::string::npos;
-                    ImGui::TableSetupColumn(h.c_str(), ImGuiTableColumnFlags_WidthStretch, wide ? 2.6f : mid ? 2.4f : 1.0f);
+                    ImGui::TableSetupColumn(h.c_str(), ImGuiTableColumnFlags_WidthStretch, wide ? 3.4f : mid ? 3.2f : 1.0f);
                 }
                 ImGui::TableHeadersRow();
                 for (const auto& row : sec->table.rows)

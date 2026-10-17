@@ -54,7 +54,8 @@ struct PcSettings
     int uiDensity = 0;       // интерфейс: 0 — авто (компактный, если окно ниже 800 точек), 1 — обычный, 2 — компактный
     // Проект опыта (*.krenomer): автосохранение рядом с записями и недавние проекты (последний — первым)
     bool projectAutosave = true;
-    bool reportFull = false;  // «Сохранить отчёт»: полный (+ лист «Расчёт по шагам») или краткий
+    bool reportFull = false;
+    int navCollapsed = -1;    // левая панель: -1 — сама (компактный режим — значками), 0 — раскрыта, 1 — значками  // «Сохранить отчёт»: полный (+ лист «Расчёт по шагам») или краткий
     // «Обработка»: плечи вводятся от ДП (0), от ЛБ (1) или от ПрБ (2); ширина судна / модели B (м или мм)
     int armFrom = 0;
     double heelB = 0.0;
@@ -183,6 +184,7 @@ struct PcSettings
             rsGroups = kv["rs_groups"];
         projectAutosave = flag("project_autosave", projectAutosave);
         reportFull = flag("report_full", reportFull);
+        navCollapsed = num("nav_collapsed", navCollapsed, -1, 1);
         armFrom = num("arm_from", armFrom, 0, 2);
         heelB = real("heel_b", heelB, 0.0, 1e7);
         if (kv.count("recent_projects"))
@@ -255,7 +257,7 @@ struct PcSettings
                 << "\nrs_dworst=" << rsDworst << "\nrs_group_mode=" << (rsGroupMode ? 1 : 0) << "\nrs_groups=" << rsGroups
                 << "\n";
             out << "arm_from=" << armFrom << "\nheel_b=" << heelB << "\n";
-            out << "report_full=" << (reportFull ? 1 : 0) << "\n";
+            out << "report_full=" << (reportFull ? 1 : 0) << "\nnav_collapsed=" << navCollapsed << "\n";
             out << "project_autosave=" << (projectAutosave ? 1 : 0) << "\nrecent_projects=";
             for (std::size_t i = 0; i < recentProjects.size(); i++)
                 out << (i ? "|" : "") << recentProjects[i];

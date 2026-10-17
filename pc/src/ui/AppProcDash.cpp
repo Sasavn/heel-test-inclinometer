@@ -106,8 +106,8 @@ void App::ProcHeader(float w)
 {
     const float x0 = ImGui::GetCursorScreenPos().x;
     const float saveW = std::max(S(160), ImGui::CalcTextSize("Сохранить отчёт (полный)").x + S(28)) + ImGui::GetFrameHeight() + S(2);
-    const float openW = ImGui::CalcTextSize("Открыть папку").x + S(28);
-    const bool narrow = w < S(960); // узко — проект одной кнопкой «Проект ▾»
+    const float openW = 0.f;   // «Открыть папку» — в меню «Проект ▼»
+    const bool narrow = true;  // проект — одной кнопкой «Проект ▼» (меню: новый, открыть, недавние, сохранить, …)
     const float projW = ProcProjectButtons(0, narrow, true) + S(8);
     {
         FontScope f(fontH2);
@@ -153,9 +153,6 @@ void App::ProcHeader(float w)
     const bool cont = ProcCont();
     const bool saving = proc_.save.valid() || proc_.saveRequested;
     const bool canSave = proc_.files && !proc_.meas.empty() && !proc_.load.valid() && (!cont || !proc_.pos.empty());
-    if (Button("Открыть папку", BtnKind::Normal, ImVec2(openW, 0), proc_.outDir.empty() && !proc_.dir[0]))
-        dialogs::OpenFolder(proc_.outDir.empty() ? std::string(proc_.dir) : proc_.outDir);
-    ImGui::SameLine(0, S(8));
     const float arrowW = ImGui::GetFrameHeight();
     if (Button(saving ? "Сохранение…" : settings_.reportFull ? "Сохранить отчёт (полный)" : "Сохранить отчёт", BtnKind::Orange,
                ImVec2(saveW - arrowW - S(2), 0), saving || !canSave,
@@ -206,8 +203,8 @@ void App::ProcParamsStrip(float w)
     if (BeginCard("##proc_strip2", ImVec2(w, 0)))
     {
         const float right = ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x;
-        const char* tgl = proc_.paramsOpen ? "Скрыть параметры ▲" : "Параметры ▼";
-        const float tw = ImGui::CalcTextSize("Скрыть параметры ▲").x + S(26);
+        const char* tgl = proc_.paramsOpen ? "⚙ Скрыть параметры ▲" : "⚙ Параметры опыта ▼";
+        const float tw = ImGui::CalcTextSize("⚙ Скрыть параметры ▲").x + S(26);
         const bool model = settings_.heelSmall;
         std::string sens;
         for (const int k : proc_.keys)
@@ -229,7 +226,7 @@ void App::ProcParamsStrip(float w)
             ImGui::SetTooltip("%s", full.c_str());
         ProcModeSwitch(right - tw - S(10));
         ImGui::SameLine(right - tw - ImGui::GetWindowPos().x);
-        if (Button(tgl, BtnKind::Normal, ImVec2(tw, 0)))
+        if (Button(tgl, BtnKind::Secondary, ImVec2(tw, 0)))
             proc_.paramsOpen = !proc_.paramsOpen;
     }
     EndCard();
@@ -245,7 +242,7 @@ void App::ProcKpis(float w)
     const bool dh = rc.dh != 0.0;
     const double hMain = byTable ? rc.r.hFinal : s.h - rc.dh;
     const double hOther = byTable ? s.h - rc.dh : rc.r.hFinal;
-    const float gap = compactUi ? S(8) : S(12), h = compactUi ? S(46) : S(52); // значок, число и подпись — в строку
+    const float gap = compactUi ? S(12) : S(20), h = compactUi ? S(46) : S(52); // значок, число и подпись — в строку
     // Узко (окно 1024–1152 точек) — 2 × 2, чтобы подписи не обрезались
     const int cols = w < S(1000) ? 2 : 4;
     const float cw = std::floor((w - (cols - 1) * gap) / cols);
@@ -376,6 +373,7 @@ void App::ProcTabsCard(float w, float h)
         ImGui::SetCursorScreenPos(start);
         Tabs("ptabs", &proc_.tab, labels, values, 4, right - start.x - bs - S(10));
         ImGui::Dummy(ImVec2(0, S(2)));
+        const float contentTop = ImGui::GetCursorPosY();
         ImVec2 avail = ImGui::GetContentRegionAvail();
         if (procNatural_)
             avail.y = 0.f; // по содержимому (карточки и таблицы — AutoResizeY)
@@ -389,8 +387,10 @@ void App::ProcTabsCard(float w, float h)
             ImGui::PushStyleColor(ImGuiCol_ChildBg, pal.cardAlt);
             ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(S(10), S(6)));
             ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(S(6), S(2)));
-            ImGui::BeginChild("##proclog2", ImVec2(avail.x, procNatural_ ? 0.f : avail.y),
-                              ImGuiChildFlags_AlwaysUseWindowPadding | NaturalChild());
+            // журнал растёт без конца — в карточке во всю высоту он своей прокрутки высотой с наибольшую вкладку
+            ImGui::BeginChild("##proclog2",
+                              ImVec2(avail.x, procNatural_ ? std::max(S(240), proc_.tabsMin - contentTop - S(14)) : avail.y),
+                              ImGuiChildFlags_AlwaysUseWindowPadding);
             ProcLogLines();
             ImGui::EndChild();
             ImGui::PopStyleVar(2);
@@ -404,6 +404,13 @@ void App::ProcTabsCard(float w, float h)
                 ProcTable(avail.x, avail.y);
         }
         cardFlat--;
+        // не ниже наибольшей из вкладок этого опыта — переключение вкладок карточку не «дёргает»
+        if (procNatural_)
+        {
+            const float want = proc_.tabsMin - ImGui::GetStyle().WindowPadding.y * 2;
+            if (ImGui::GetCursorPosY() < want)
+                ImGui::Dummy(ImVec2(0, want - ImGui::GetCursorPosY()));
+        }
     }
     EndCard();
 }
@@ -444,6 +451,7 @@ void App::PageProcess()
 {
     ProcMethodWindow(); // окно своих методов — поверх страницы
     ProcKpiDetail();    // окно «Подробнее» карточки-показателя
+    ProcAskProjectDialog(); // в папке есть проект — открыть его или начать новый
     if (!proc_.opened)
     {
         proc_.opened = true;
@@ -455,37 +463,52 @@ void App::PageProcess()
     }
     if (proc_.dirty && !proc_.load.valid())
         ProcRecompute();
-    // Параметры раскрыты, пока файлов нет; после первого чтения — свёрнуты в строку (раскрываются кнопкой)
+    // Параметры опыта раскрыты по умолчанию (кнопка «Скрыть параметры» — свернуть в строку)
     if (proc_.files && !proc_.paramsAuto)
     {
         proc_.paramsAuto = true;
-        proc_.paramsOpen = proc_.meas.empty();
+        proc_.paramsOpen = true;
     }
 
     const float W = ImGui::GetContentRegionAvail().x;
     const float gap = compactUi ? S(8) : S(12);
     const float sp = ImGui::GetStyle().ItemSpacing.y;
-    ProcHeader(W);
+    const bool cont = ProcCont();
+    const int view = proc_.files ? ProcView() : 1;
+    const bool full = (proc_.expanded == 0 && view != 2) || !proc_.files;
+    // Одна верхняя карточка: название, проект / папка / отчёт, источник и параметры опыта (строкой; «Параметры» —
+    // полностью)
+    if (BeginCard("##proc_top", ImVec2(W, 0)))
+    {
+        const float iw = ImGui::GetContentRegionAvail().x;
+        ProcHeader(iw);
+        if (full)
+        {
+            cardFlat++;
+            if (proc_.files)
+            {
+                ImGui::Dummy(ImVec2(0, S(2)));
+                ProcParamsStrip(iw);
+            }
+            if (proc_.paramsOpen || !proc_.files)
+            {
+                const ImVec2 p = ImGui::GetCursorScreenPos();
+                ImGui::GetWindowDrawList()->AddLine(ImVec2(p.x, p.y + S(2)), ImVec2(p.x + iw, p.y + S(2)), U32(pal.border));
+                ImGui::Dummy(ImVec2(0, S(6)));
+                ProcParams(iw);
+            }
+            cardFlat--;
+        }
+    }
+    EndCard();
     ImGui::Dummy(ImVec2(0, gap - sp));
     if (proc_.projMissing)
     {
         ProcProjectMissingCard(W);
         ImGui::Dummy(ImVec2(0, gap - sp));
     }
-    const bool cont = ProcCont();
-    const int view = proc_.files ? ProcView() : 1;
-    if ((proc_.expanded == 0 && view != 2) || !proc_.files)
+    if (full)
     {
-        if (proc_.files)
-        {
-            ProcParamsStrip(W);
-            ImGui::Dummy(ImVec2(0, gap - sp));
-        }
-        if (proc_.paramsOpen || !proc_.files)
-        {
-            ProcParams(W);
-            ImGui::Dummy(ImVec2(0, gap - sp));
-        }
         ProcKpis(W);
         ImGui::Dummy(ImVec2(0, gap - sp));
     }
@@ -596,9 +619,20 @@ int App::NaturalChild() const
 
 void App::ProcTabsCardAuto(float w)
 {
+    // Сменился опыт (строк положений / замеров, режим) — наибольшая высота заново
+    const std::uint64_t key = static_cast<std::uint64_t>(proc_.pos.size()) | static_cast<std::uint64_t>(proc_.meas.size()) << 12 |
+                              static_cast<std::uint64_t>(proc_.rs.r.m.size()) << 24 | static_cast<std::uint64_t>(ProcCont()) << 36 |
+                              static_cast<std::uint64_t>(settings_.rsGroupMode) << 37 | static_cast<std::uint64_t>(compactUi) << 38;
+    if (key != proc_.tabsKey)
+    {
+        proc_.tabsKey = key;
+        proc_.tabsMin = 0.f;
+    }
     procNatural_ = true;
     ProcTabsCard(w, 0.f);
     procNatural_ = false;
+    if (proc_.tab != 3) // журнал — своей прокруткой, высоту не задаёт
+        proc_.tabsMin = std::max(proc_.tabsMin, ImGui::GetItemRectSize().y);
 }
 
 } // namespace ui

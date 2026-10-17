@@ -9,6 +9,7 @@
 #include <ctime>
 #include <filesystem>
 #include <system_error>
+#include <type_traits>
 
 #include <imgui.h>
 
@@ -487,28 +488,143 @@ void App::ProcProjectMissingCard(float w)
     EndCard();
 }
 
-// Папка опыта, рядом с записями которой лежит «Опыт.krenomer» (автосохранение), открывается вместе с проектом: плечи,
-// положения и правки — как были. Только если проект про эту же папку и автосохранение не отключено.
-bool App::ProcAutoOpenProject(const std::string& folder)
+// В папке записей есть проект кренования (*.krenomer; «Опыт.krenomer» — первым, иначе самый свежий): не открывать
+// молча — спросить, открыть его или начать новый проект (чистые плечи). Спрашивается при каждом открытии папки (кроме
+// явного «Открыть проект»). true — вопрос задан, записи пока не читаются.
+bool App::ProcAskProject(const std::string& folder)
 {
-    if (!settings_.projectAutosave || folder.empty())
+    if (folder.empty())
         return false;
     const fs::path dir = text::PathFromUtf8(folder);
-    const fs::path file = dir / proj::kAutoName;
     std::error_code ec;
-    if (!fs::is_regular_file(file, ec))
+    fs::path file;
+    if (fs::is_regular_file(dir / proj::kAutoName, ec))
+        file = dir / proj::kAutoName;
+    else
+    {
+        fs::file_time_type best{};
+        for (fs::directory_iterator it(dir, ec), end; !ec && it != end; it.increment(ec))
+            if (it->is_regular_file(ec) && it->path().extension() == L".krenomer")
+            {
+                const auto t = fs::last_write_time(it->path(), ec);
+                if (file.empty() || t > best)
+                {
+                    file = it->path();
+                    best = t;
+                }
+            }
+    }
+    if (file.empty())
         return false;
     proj::Project p;
     std::string err;
-    if (!proj::Load(file, p, &err))
+    if (!proj::Load(file, p, &err) && p.missing.empty())
     {
-        ProcLog("✗ " + FileNameOf(text::PathToUtf8(file)) + " в папке не прочитан: " + err + " — опыт открыт без проекта",
+        ProcLog("✗ " + FileNameOf(text::PathToUtf8(file)) + " в папке не прочитан: " + err + " — папка открыта без проекта",
                 Shown(text::PathToUtf8(file)));
         return false;
     }
-    if (!p.files.empty() || !fs::equivalent(text::PathFromUtf8(p.folder), dir, ec))
-        return false;
-    return ProcessOpenProject(text::PathToUtf8(file));
+    auto a = std::make_shared<std::remove_reference_t<decltype(*proc_.ask)>>();
+    a->path = text::PathToUtf8(file);
+    a->folder = folder;
+    a->saved = p.saved;
+    a->program = p.program;
+    a->positions = static_cast<int>(p.positions.size());
+    a->measurements = static_cast<int>(p.arms.size());
+    a->h = p.h;
+    proc_.ask = a;
+    return true;
+}
+
+// «Проект ▼ → Новый проект кренования»: записи текущей папки заново — чистые плечи, без прежних правок положений
+void App::ProcessNewProject()
+{
+    if (ProcessBusy())
+        return;
+    if (!proc_.outDir.empty() && proc_.picked.empty())
+        std::snprintf(proc_.dir, sizeof(proc_.dir), "%s", proc_.outDir.c_str());
+    proc_.askSkip = true;
+    proc_.freshStart = true;
+    ProcLog("Новый проект кренования по записям папки");
+    ProcLoad();
+}
+
+void App::ProcessAnswerProject(int answer)
+{
+    if (!proc_.ask)
+        return;
+    const auto a = proc_.ask;
+    proc_.ask.reset();
+    if (answer == 1)
+        ProcessOpenProject(a->path);
+    else if (answer == 2)
+    {
+        // новый проект кренования: записи этой папки, плечи и правки — чистые
+        proc_.askSkip = true;
+        proc_.freshStart = true;
+        std::snprintf(proc_.dir, sizeof(proc_.dir), "%s", a->folder.c_str());
+        proc_.picked.clear();
+        ProcLog("Новый проект кренования по записям папки (проект " + FileNameOf(a->path) + " не открыт)");
+        ProcLoad();
+    }
+    else
+        ProcLog("Папка " + Shown(a->folder) + " не прочитана: в ней проект " + FileNameOf(a->path) + " — выберите, что открыть");
+}
+
+// Диалог «в папке есть проект»: «Открыть проект из этой папки» / «Создать новый проект кренования» / «Отмена».
+void App::ProcAskProjectDialog()
+{
+    if (!proc_.ask)
+        return;
+    const char* id = "Проект кренования в этой папке##askproj";
+    if (!ImGui::IsPopupOpen(id))
+        ImGui::OpenPopup(id);
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + vp->WorkSize.x * 0.5f, vp->WorkPos.y + vp->WorkSize.y * 0.45f), ImGuiCond_Always,
+                            ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(std::min(vp->WorkSize.x - S(40), S(620)), 0));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(S(20), S(16)));
+    if (ImGui::BeginPopupModal(id, nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoMove))
+    {
+        const auto a = proc_.ask;
+        ImGui::PushTextWrapPos(0.f);
+        ImGui::TextUnformatted("В папке с записями уже есть сохранённый проект. Открыть его — или начать новый проект "
+                               "кренования по этим записям?");
+        ImGui::PopTextWrapPos();
+        ImGui::Spacing();
+        if (BeginKV("##askkv", S(150)))
+        {
+            KV("Проект", FileNameOf(a->path));
+            KV("Сохранён", a->saved.empty() ? std::string("—") : a->saved);
+            KV("Положений груза", a->positions ? std::to_string(a->positions) : std::string("— (файл = замер)"));
+            if (std::isfinite(a->h) && a->h != 0.0)
+                KV("h при сохранении", Fmt("%.4f м", a->h));
+            if (!a->program.empty())
+                KV("Программа", a->program);
+            EndKV();
+        }
+        ImGui::Spacing();
+        const float bw = (ImGui::GetContentRegionAvail().x - S(8)) * 0.5f;
+        int answer = -1;
+        if (Button("Открыть проект из этой папки", BtnKind::Orange, ImVec2(bw, S(36))))
+            answer = 1;
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Плечи, положения, параметры и правки — как сохранены в проекте");
+        ImGui::SameLine(0, S(8));
+        if (Button("Создать новый проект кренования", BtnKind::Normal, ImVec2(bw, S(36))))
+            answer = 2;
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Загрузить записи из папки с чистыми плечами и без прежних правок (проект не трогается)");
+        if (Button("Отмена", BtnKind::Normal, ImVec2(S(120), 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape))
+            answer = 0;
+        if (answer >= 0)
+        {
+            ImGui::CloseCurrentPopup();
+            ProcessAnswerProject(answer);
+        }
+        ImGui::EndPopup();
+    }
+    ImGui::PopStyleVar();
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -521,6 +637,11 @@ void App::ProcProjectMenus(bool open, bool save)
     const bool canSave = proc_.files && !proc_.meas.empty() && !busy;
     if (open)
     {
+        if (ImGui::MenuItem("Новый проект кренования", nullptr, false, !busy && (proc_.dir[0] || !proc_.outDir.empty())))
+            ProcessNewProject();
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+            ImGui::SetTooltip("Записи этой папки заново — с чистыми плечами и без прежних правок положений\n"
+                              "(сохранённый проект не трогается)");
         if (ImGui::MenuItem("Открыть файл проекта…", nullptr, false, !busy))
         {
             std::string path = proc_.projectPath.empty() ? std::string() : proc_.projectPath;
@@ -564,6 +685,11 @@ void App::ProcProjectMenus(bool open, bool save)
             if (dialogs::SaveFile(path, kProjectFilter, L"Сохранить проект опыта", L"krenomer"))
                 ProcessSaveProject(path);
         }
+        const std::string folder = proc_.outDir.empty() ? std::string(proc_.dir) : proc_.outDir;
+        if (ImGui::MenuItem("Открыть папку проекта", nullptr, false, !folder.empty()))
+            dialogs::OpenFolder(folder);
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled) && !folder.empty())
+            ImGui::SetTooltip("%s — в Проводнике (записи, отчёт, проект)", Shown(folder).c_str());
         ImGui::Separator();
         if (ImGui::MenuItem("Автосохранение рядом с записями", nullptr, settings_.projectAutosave))
         {

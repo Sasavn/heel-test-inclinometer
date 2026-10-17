@@ -578,7 +578,7 @@ inline xlsx::Sheet StepsSheet(const steps::Steps& st, int G)
                 for (int c = 0; c < nc && c < G; c++)
                 {
                     const std::string v = c < static_cast<int>(row.size()) ? row[static_cast<std::size_t>(c)] : std::string();
-                    const bool numeric = !v.empty() && (std::isdigit(static_cast<unsigned char>(v[0])) || v[0] == '+' || v[0] == '-') &&
+                    const bool numeric = !v.empty() && (std::isdigit(static_cast<unsigned char>(v[0])) || v[0] == '+' || v[0] == '-' || v.rfind("−", 0) == 0) &&
                                          v.find(' ') == std::string::npos;
                     cells.push_back(T(v, span[static_cast<std::size_t>(c)], numeric ? 3 : 1));
                 }

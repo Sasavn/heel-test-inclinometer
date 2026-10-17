@@ -43,13 +43,21 @@ struct Section
 
 using Steps = std::vector<Section>;
 
+// Минус — знаком «−» (U+2212): по нему, в отличие от дефиса, ни окно, ни Excel не переносят число посреди
+inline std::string Minus(std::string t)
+{
+    if (!t.empty() && t[0] == '-')
+        t = "−" + t.substr(1);
+    return t;
+}
+
 inline std::string F(double v, int digits)
 {
     if (!std::isfinite(v))
         return "—";
     char b[64];
     std::snprintf(b, sizeof(b), "%.*f", digits, v);
-    return b;
+    return Minus(b);
 }
 
 inline std::string Fs(double v, int digits) // со знаком
@@ -58,7 +66,7 @@ inline std::string Fs(double v, int digits) // со знаком
         return "—";
     char b[64];
     std::snprintf(b, sizeof(b), "%+.*f", digits, v);
-    return b;
+    return Minus(b);
 }
 
 // Число в подстановке: отрицательное — в скобках («0,0535·(−0,23296)»)
@@ -92,6 +100,12 @@ inline steps::Steps BuildSteps(const Settings& s, const std::vector<File>& files
     const double D = s.units.ToTonnes(s.D), P = s.units.ToTonnes(s.P);
     const std::string mu = s.units.Mass(), au = s.units.Arm();
     const int armDig = mm ? 1 : 3;
+    // Подстановки — в единицах опыта: малое судно — кг, мм, кг·мм (h — в мм, затем в м), большое — т, м, т·м
+    const double Dv = mm ? s.D : D, Pv = mm ? s.P : P;            // кг или т
+    const auto armV = [&](double m) { return mm ? m * 1000.0 : m; }; // плечо из м — в мм или м
+    const auto momV = [&](double tm) { return mm ? tm * 1e6 : tm; }; // момент из т·м — в кг·мм или т·м
+    const std::string momU = mm ? "кг·мм" : "т·м";
+    const int dDig = mm ? 3 : 4, pDig = mm ? 3 : 6, aDig = mm ? 1 : 4, mDig = mm ? 1 : 6;
     std::vector<int> posts;
     if (cont && rec >= 0 && rec < static_cast<int>(meas.size()))
     {
@@ -112,7 +126,8 @@ inline steps::Steps BuildSteps(const Settings& s, const std::vector<File>& files
     // 1. Исходные данные
     {
         Section sec{"input", "Исходные данные", "", {}, {}, ""};
-        sec.rows.push_back({"Водоизмещение при креновании Δ", "", F(s.D, mm ? 3 : 1) + " " + mu, F(D, 4) + " т", "разд. 6 прил. 3"});
+        sec.rows.push_back({"Водоизмещение при креновании Δ", "", F(s.D, mm ? 3 : 1) + " " + mu, F(Dv, dDig) + " " + mu,
+                            "разд. 6 прил. 3"});
         if (s.rsGroupMode)
         {
             std::string g;
@@ -121,7 +136,7 @@ inline steps::Steps BuildSteps(const Settings& s, const std::vector<File>& files
             sec.rows.push_back({"Крен-балласт (группы)", "ΔM_i = ∑ m_g·l_ig", g.empty() ? "—" : g, "", "табл. 6.5, п. 5.4"});
         }
         else
-            sec.rows.push_back({"Масса крен-балласта P", "", F(s.P, mm ? 4 : 3) + " " + mu, F(P, 6) + " т", "табл. 6.5"});
+            sec.rows.push_back({"Масса крен-балласта P", "", F(s.P, mm ? 4 : 3) + " " + mu, F(Pv, pDig) + " " + mu, "табл. 6.5"});
         std::string arms = "плечо от начального положения со знаком («+» — к правому борту)";
         if (s.armFrom != 0 && s.B > 0 && !s.rsGroupMode)
             arms = std::string("вводились от ") + ArmFromName(s.armFrom) + " (x — до центра груза), B = " + F(s.B, armDig) +
@@ -186,7 +201,7 @@ inline steps::Steps BuildSteps(const Settings& s, const std::vector<File>& files
     // 3. h от начального положения и МНК
     {
         Section sec{"initial", "h от начального положения", "", {}, {}, ""};
-        sec.table.head = {"Положение", "Прибор", "Δθ, °", "l, м", "h = P·l / (Δ·tg|Δθ|)", "h, м", "Примечание"};
+        sec.table.head = {"Положение", "Прибор", "Δθ, °", std::string("l, ") + au, "h = P·l / (Δ·tg|Δθ|)", "h, м", "Примечание"};
         double refArm = 0.0;
         if (cont)
             for (const Position& q : pos)
@@ -196,10 +211,11 @@ inline steps::Steps BuildSteps(const Settings& s, const std::vector<File>& files
                     break;
                 }
         auto point = [&](const std::string& label, int p, const PointResult& r, double thetaDeg, double armM) {
-            std::vector<std::string> row = {label, s.PostName(p), Fs(thetaDeg, 3), Fs(armM, 4)};
+            std::vector<std::string> row = {label, s.PostName(p), Fs(thetaDeg, 3), Fs(armV(armM), aDig)};
             if (r.counted)
             {
-                row.push_back(F(P, 6) + "·" + F(std::fabs(armM), 4) + " / (" + F(D, 4) + "·tg " + F(std::fabs(thetaDeg), 3) + "°)");
+                row.push_back(F(Pv, pDig) + "·" + F(std::fabs(armV(armM)), aDig) + " / (" + F(Dv, dDig) + "·tg " +
+                              F(std::fabs(thetaDeg), 3) + "°)" + (mm ? " = " + F(r.h * 1000.0, 1) + " мм" : std::string()));
                 row.push_back(F(r.h, 4));
                 row.push_back("");
             }
@@ -263,7 +279,7 @@ inline steps::Steps BuildSteps(const Settings& s, const std::vector<File>& files
     const rs::Result& r = k.r;
     {
         Section sec{"t65", "Табл. 6.5: замеры по приращениям", "табл. 6.5 прил. 3", {}, {}, ""};
-        sec.table.head = {"Замер i", "Положения", "ΔM_i, т·м"};
+        sec.table.head = {"Замер i", "Положения", "ΔM_i, " + momU};
         for (std::size_t j = 0; j < k.postIds.size(); j++)
             sec.table.head.push_back("Δθ " + s.PostName(k.postIds[j]) + ", °");
         sec.table.head.push_back("Δθ_i, °");
@@ -277,14 +293,16 @@ inline steps::Steps BuildSteps(const Settings& s, const std::vector<File>& files
             const std::string to = q.to < static_cast<int>(k.label.size()) ? k.label[static_cast<std::size_t>(q.to)] : std::to_string(q.to);
             std::vector<std::string> row = {std::to_string(i + 1), from + " → " + to};
             if (!k.groupMode && q.to < static_cast<int>(k.in.arm.size()))
-                row.push_back(F(P, 6) + "·(" + F(k.in.arm[static_cast<std::size_t>(q.to)], 4) + " − " +
-                              Pa(k.in.arm[static_cast<std::size_t>(q.from)], 4) + ") = " + F(q.dM, 6));
+                row.push_back(F(Pv, pDig) + "·(" + F(armV(k.in.arm[static_cast<std::size_t>(q.to)]), aDig) + " − " +
+                              Pa(armV(k.in.arm[static_cast<std::size_t>(q.from)]), aDig) + ") = " + F(momV(q.dM), mDig));
             else
-                row.push_back(Fs(q.dM, 6));
+                row.push_back(F(momV(q.dM), mDig));
             for (std::size_t j = 0; j < k.postIds.size(); j++)
                 row.push_back(j < q.dThetaPost.size() ? Fs(q.dThetaPost[j], 3) : "—");
             row.push_back(Fs(q.dTheta, 3));
-            row.push_back(std::isfinite(q.h) ? F(q.dM, 6) + " / (" + F(D, 4) + "·" + Pa(q.dTheta * rs::kPi / 180.0, 5) + ")" : "");
+            row.push_back(std::isfinite(q.h) ? F(momV(q.dM), mDig) + " / (" + F(Dv, dDig) + "·" + Pa(q.dTheta * rs::kPi / 180.0, 5) + ")" +
+                                                   (mm ? " = " + F(q.h * 1000.0, 1) + " мм" : std::string())
+                                             : "");
             row.push_back(F(q.h, 4));
             row.push_back(q.autoExcluded ? "исключён (6.6.1)" : q.excluded ? (q.manual == 0 ? "исключён вручную" : "—") : "да");
             sec.table.rows.push_back(row);

@@ -17,7 +17,10 @@
 #ifdef KRENOMER_PROJECT_VERSION
 namespace
 {
-// kAppVersion («1.8») — начало версии из CMakeLists.txt (project VERSION 1.8.0): сведения о файле и окно — одно.
+// kAppVersion («1.8.1») — начало версии из CMakeLists.txt (project VERSION 1.8.1): сведения о файле и окно — одно.
+// 1.8.1: значок программы (SVG руководителя) в шапке и в .ico; палитра #103269 / #F87128 / #B8E039 с проверкой
+// контрастов; в папке с проектом — вопрос «открыть / новый»; одна верхняя карточка «Обработки», «Параметры» —
+// лимонная и раскрыта; вкладки без «дёрганья»; левая панель сворачивается в любом режиме; кг·мм в шагах малого судна.
 // 1.8: уровень положения — по всему диапазону положения (Правила, прил. 3-10 и 3-13), режим окна — в проекте;
 // «Подробнее» на карточках-показателях (расписанный расчёт); отчёт краткий / полный (+ лист «Расчёт по шагам»).
 // 1.7.1: среднее положения — по второй половине установившегося крена (не 6 с в самом конце участка, M024); записи
@@ -240,7 +243,7 @@ void App::Render()
                      ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
     ImGui::PopStyleVar(2);
     const float topH = compactUi ? S(44) : S(58);
-    const bool rail = compactUi && !navPinned_;
+    const bool rail = NavRail(); // свёрнута вручную (настройка) или сама в компактном режиме
     const float navW = rail ? S(56) : S(212);
     RenderTopBar(topH);
     if (rail)
@@ -256,6 +259,11 @@ void App::Render()
     ImGui::End();
     RenderAbout();
     RenderToasts();
+}
+
+bool App::NavRail() const
+{
+    return settings_.navCollapsed == 1 || (settings_.navCollapsed < 0 && compactUi);
 }
 
 void App::RenderTopBar(float h)
@@ -279,10 +287,8 @@ void App::RenderTopBar(float h)
         const float sz = compactUi ? S(26) : S(30);
         const float y0 = ImGui::GetWindowPos().y + (h - sz) * 0.5f;
         ImDrawList* dl = ImGui::GetWindowDrawList();
-        dl->AddRectFilled(ImVec2(p.x, y0), ImVec2(p.x + sz, y0 + sz), U32(pal.orange), S(7));
-        // уровень и «крен» — наклонная черта на горизонте
-        dl->AddLine(ImVec2(p.x + S(7), y0 + S(19)), ImVec2(p.x + sz - S(7), y0 + S(19)), U32(ImVec4(1, 1, 1, 0.55f)), S(2));
-        dl->AddLine(ImVec2(p.x + S(8), y0 + S(22)), ImVec2(p.x + sz - S(8), y0 + S(10)), U32(ImVec4(1, 1, 1, 1)), S(2.4f));
+        // значок программы (тот же, что в app.ico) — белым на тёмно-синей шапке
+        DrawAppIcon(dl, ImVec2(p.x + sz * 0.5f, y0 + sz * 0.5f), sz, U32(ImVec4(1, 1, 1, 1)));
         ImGui::SetCursorScreenPos(ImVec2(p.x + sz + S(12), p.y));
     }
     if (compactUi)
@@ -312,8 +318,9 @@ void App::RenderTopBar(float h)
 
     // Справа: порт, подключение, демо (на узком окне уже)
     const bool narrow = W < S(1180);
-    const float demoW = narrow ? S(136) : S(150), connW = narrow ? S(116) : S(128), portW = narrow ? S(180) : S(230);
-    const float rightX = W - S(18) - demoW - connW - portW - 2 * S(8);
+    // Демо: одна кнопка «Выйти из демо»; с прибором: порт, «Отключить / Подключить» и «Демо» — все нейтральные
+    const float demoW = narrow ? S(110) : S(124), connW = narrow ? S(116) : S(128), portW = narrow ? S(180) : S(230);
+    const float rightX = snap_.demo ? W - S(18) - S(150) : W - S(18) - demoW - connW - portW - 2 * S(8);
 
     // Состояние связи: полный текст, а если не влезает до кнопок — короткий
     ImGui::SameLine(0, S(28));
@@ -370,7 +377,21 @@ void App::RenderTopBar(float h)
     if (ImGui::IsItemHovered() && snap_.state != LinkState::Connected && !snap_.problem.empty())
         ImGui::SetTooltip("%s", snap_.problem.c_str());
 
+    const bool off = snap_.state == LinkState::Off;
+    const bool busy = updater_.Busy() || dl_.running || PcRecording();
+    const char* busyWhy = PcRecording() ? "Идёт запись на ПК — сначала остановите её" : "Идёт скачивание или перепрошивка";
     ImGui::SetCursorPos(ImVec2(rightX, (h - fh) * 0.5f));
+    if (snap_.demo)
+    {
+        if (Button("Выйти из демо", BtnKind::Nav, ImVec2(S(150), 0), busy, busyWhy))
+            StartDemo(false);
+        if (ImGui::IsItemHovered() && !busy)
+            ImGui::SetTooltip("Закрыть имитатор и искать настоящий прибор");
+        ImGui::EndChild();
+        ImGui::PopStyleVar();
+        ImGui::PopStyleColor();
+        return;
+    }
     ImGui::SetNextItemWidth(portW);
     // Поле порта на синем: полупрозрачная светлая заливка, светлый текст
     ImGui::PushStyleColor(ImGuiCol_FrameBg, pal.navFrame);
@@ -421,15 +442,11 @@ void App::RenderTopBar(float h)
                               "Выберите порт вручную, если в системе несколько таких устройств.");
     }
     ImGui::SameLine(0, S(8));
-    const bool off = snap_.state == LinkState::Off;
-    const bool busy = updater_.Busy() || dl_.running || PcRecording();
-    const char* busyWhy = PcRecording() ? "Идёт запись на ПК — сначала остановите её" : "Идёт скачивание или перепрошивка";
-    if (Button(off ? "Подключить" : "Отключить", BtnKind::Normal, ImVec2(connW, 0), busy, busyWhy))
+    if (Button(off ? "Подключить" : "Отключить", BtnKind::Nav, ImVec2(connW, 0), busy, busyWhy))
         link_->SetEnabled(off);
     ImGui::SameLine(0, S(8));
-    if (Button(snap_.demo ? "Выйти из демо" : "Демо-режим", snap_.demo ? BtnKind::Warn : BtnKind::Normal,
-               ImVec2(demoW, 0), busy, busyWhy))
-        StartDemo(!snap_.demo);
+    if (Button("Демо", BtnKind::Nav, ImVec2(demoW, 0), busy, busyWhy))
+        StartDemo(true);
     if (ImGui::IsItemHovered() && !snap_.demo)
         ImGui::SetTooltip("Имитатор прибора: все страницы работают без железа");
 
@@ -482,12 +499,15 @@ void App::RenderSidebar(float w, float h)
         dl->AddText(fontSmall, fontSmall->FontSize, ImVec2(p.x + S(10), ty), U32(hov ? pal.navText : pal.navMuted), title);
         dl->AddText(fontSmall, fontSmall->FontSize, ImVec2(p.x + iw - S(16), ty), U32(pal.navMuted), open ? "▼" : "▶");
     };
-    if (compactUi)
     {
+        // «◀ свернуть панель» — в любом режиме (выбор запоминается)
         const ImVec2 p = ImGui::GetCursorScreenPos();
         const float hh = S(28);
         if (ImGui::InvisibleButton("##unpin", ImVec2(iw, hh)))
-            navPinned_ = false;
+        {
+            settings_.navCollapsed = 1;
+            SaveSettingsSoon();
+        }
         const bool hov = ImGui::IsItemHovered();
         FontScope f(fontSmall);
         dl->AddText(fontSmall, fontSmall->FontSize, ImVec2(p.x + S(10), p.y + (hh - fontSmall->FontSize) * 0.5f),
@@ -650,7 +670,10 @@ void App::RenderNavRail(float w, float h)
     };
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, S(3)));
     if (icon("##pin", "☰", false, "Раскрыть панель (названия, группы, пульт имитатора)", nullptr))
-        navPinned_ = true;
+    {
+        settings_.navCollapsed = 0;
+        SaveSettingsSoon();
+    }
     struct Item
     {
         Page page;
@@ -698,7 +721,10 @@ void App::RenderNavRail(float w, float h)
         dl->AddLine(ImVec2(p.x + S(8), p.y + S(3)), ImVec2(p.x + iw - S(8), p.y + S(3)), U32(pal.navLine));
         ImGui::Dummy(ImVec2(iw, S(6)));
         if (icon("##sim", "◐", false, "Пульт имитатора прибора (раскрыть панель)", nullptr))
-            navPinned_ = true;
+        {
+            settings_.navCollapsed = 0;
+            SaveSettingsSoon();
+        }
     }
     ImGui::PopStyleVar();
     // Внизу: связь и «О программе»

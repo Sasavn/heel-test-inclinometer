@@ -32,7 +32,7 @@ struct ImVec4;
 namespace ui
 {
 
-inline constexpr const char* kAppVersion = "1.8";
+inline constexpr const char* kAppVersion = "1.8.1";
 
 enum class Page
 {
@@ -120,7 +120,8 @@ public:
     void ShowDemoPanel(bool on) { demoPanel_ = on; }
     // Интерфейс: 0 — авто, 1 — обычный, 2 — компактный (стенд и «Настройки»)
     void SetUiDensity(int d) { settings_.uiDensity = d; }
-    void SetNavPinned(bool on) { navPinned_ = on; }
+    void SetNavPinned(bool on) { settings_.navCollapsed = on ? 0 : -1; }
+    void SetNavCollapsed(int c) { settings_.navCollapsed = c; } // -1 — сама, 0 — раскрыта, 1 — значками
     // Запись на ПК (AppRecord.cpp)
     bool StartPcRecording();
     void StopPcRecording();
@@ -221,6 +222,11 @@ public:
     bool ProcessOpenProject(const std::string& path);
     bool ProcessProjectPickFiles(const std::vector<std::string>& files); // записи не нашлись — указать вручную
     bool ProcessProjectMissing() const { return proc_.projMissing != nullptr; }
+    // Вопрос «в папке есть проект»: идёт ли и ответ (1 — открыть проект, 2 — новый проект, 0 — отмена)
+    bool ProcessAskingProject() const { return proc_.ask != nullptr; }
+    void ProcessAnswerProject(int answer);
+    void ProcessNewProject(); // «Проект ▼ → Новый проект кренования»
+    void ProcessShowRecordsMenu(int m) { proc_.recMenu = m; } // стенд: 1 — открыть меню «Записи ▼», -1 — закрыть
     const std::string& ProcessProjectPath() const { return proc_.projectPath; }
     void SetProjectAutosaveAllowed(bool on) { projectAutosaveAllowed_ = on; } // стенд снимков: без автосохранения
     // Окно «Подробнее» карточки-показателя (0 — h основной, 1 — второй расчёт, 2 — Правила РС, 3 — вероятная ошибка;
@@ -354,7 +360,8 @@ private:
     void ProcApplyProjectSettings(const proj::Project& p);      // параметры, датчики, метод — до чтения записей
     void ProcApplyProjectExperiment(const proj::Project& p);    // запись, положения, правки — после чтения
     std::string ProcProjectTarget() const;                      // куда «Сохранить проект»
-    bool ProcAutoOpenProject(const std::string& folder);       // папка с «Опыт.krenomer» — открыть вместе с проектом
+    bool ProcAskProject(const std::string& folder);            // в папке есть проект — спросить (открыть / новый)
+    void ProcAskProjectDialog();
     void ProcProjectMenus(bool open, bool save);                // содержимое меню проекта
     float ProcProjectButtons(float x, bool narrow, bool measure); // кнопки проекта в шапке; ширина
     void TickProject();
@@ -380,7 +387,7 @@ private:
     LinkSnapshot snap_;
     Page page_ = Page::Measure;
     bool navOpen_[3] = {true, true, true}; // группы левой панели: опыт, устройство, имитатор
-    bool navPinned_ = false;               // компактный режим: левая панель раскрыта (иначе — значками)
+    bool NavRail() const; // левая панель значками: свёрнута вручную или сама в компактном режиме (App.cpp)
     std::vector<Toast> toasts_;
     bool themeChanged_ = false;
     bool aboutOpen_ = false;
@@ -567,7 +574,20 @@ private:
         int gtab = 0;                     // компактный режим: вкладка карточки графиков (0 — запись, 1 — контроль)
         int view = -1;                    // подпункт: -1 — сам, 0 — обзор, 1 — положения и расчёт, 2 — графики
         int kpiDetail = -1;               // открыто окно «Подробнее» карточки-показателя (номер) или -1
+        float tabsMin = 0.f;              // карточка вкладок: наибольшая высота среди вкладок (не «дёргается»)
+        std::uint64_t tabsKey = 0;        // её опыт (строк, режим): сменился — наибольшая заново
+        // В папке есть проект: спросить — открыть его или начать новый (каждый раз, кроме «Открыть проект»)
+        struct AskProject
+        {
+            std::string path, folder, saved, program;
+            int positions = 0, measurements = 0;
+            double h = 0.0;
+        };
+        std::shared_ptr<AskProject> ask;
+        bool askSkip = false;             // «Создать новый»: прочитать папку без вопроса
+        bool freshStart = false;          // новый опыт: чистые плечи, без восстановления прежних правок положений
         int saveMenu = 0;                 // стенд: 1 — открыть меню «Сохранить отчёт ▼», -1 — закрыть
+        int recMenu = 0;                  // стенд: 1 — открыть меню «Записи ▼», -1 — закрыть
         int tab = 0;                      // вкладка нижней карточки: 0 — положения / замеры, 1 — Правила РС, 2 — перемещения, 3 — журнал
         bool paramsOpen = true;           // полная карточка параметров раскрыта
         bool paramsAuto = false;          // после первого чтения параметры свёрнуты в строку

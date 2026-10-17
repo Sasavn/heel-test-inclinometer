@@ -1056,12 +1056,48 @@ int main(int argc, char** argv)
                 app.SetProjectAutosaveAllowed(false);
                 const fs::path mproj = ShotsWorkDir() / L"Проекты" / L"Модель отсека M021.krenomer";
                 CHECK(app.ProcessSaveProject(text::PathToUtf8(mproj)));
-                // Другой опыт, затем папка M021 снова — открывается вместе с «Опыт.krenomer»: плечи и границы как были
+                // Другой опыт, затем папка M021 снова — в ней «Опыт.krenomer»: не открывается молча, а спрашивается
+                // «открыть проект из этой папки / создать новый проект»; «Отмена» — папка не читается
                 app.ProcessOpen(text::PathToUtf8(vd));
                 wait();
                 st.Run(300);
-                CHECK(app.ProcessProjectPath().empty());
+                CHECK(app.ProcessProjectPath().empty() && !app.ProcessAskingProject());
                 app.ProcessOpen(text::PathToUtf8(md));
+                wait();
+                st.Run(1100);
+                CHECK(app.ProcessAskingProject());
+                st.Shot("38_ask_project");
+                ui::ApplyTheme(true, 1.f);
+                ImPlot::StyleColorsDark();
+                st.Shot("38_ask_project_dark");
+                ui::ApplyTheme(false, 1.f);
+                ImPlot::StyleColorsLight();
+                app.ProcessAnswerProject(0);
+                st.Run(300);
+                CHECK(!app.ProcessAskingProject() && app.ProcessMeasurements() == 11); // отмена: прежний опыт (весков) на месте
+                // «Создать новый проект кренования»: записи M021 с чистыми плечами, проект не открыт
+                app.ProcessOpen(text::PathToUtf8(md));
+                wait();
+                st.Run(300);
+                CHECK(app.ProcessAskingProject());
+                app.ProcessAnswerProject(2);
+                wait();
+                st.Run(300);
+                CHECK(!app.ProcessAskingProject() && app.ProcessContinuous() && app.ProcessProjectPath().empty());
+                {
+                    bool fresh = !app.ProcessPositions().empty();
+                    for (const auto& q : app.ProcessPositions())
+                        fresh = fresh && std::isnan(q.arm);
+                    CHECK_MSG(fresh, "новый проект: плечи не чистые");
+                }
+                // «Открыть проект из этой папки» — плечи и границы как были
+                app.ProcessOpen(text::PathToUtf8(vd));
+                wait();
+                app.ProcessOpen(text::PathToUtf8(md));
+                wait();
+                st.Run(300);
+                CHECK(app.ProcessAskingProject());
+                app.ProcessAnswerProject(1);
                 wait();
                 st.Run(300);
                 CHECK(app.ProcessContinuous() && app.ProcessPositions().size() == 9);
@@ -1137,10 +1173,36 @@ int main(int argc, char** argv)
             st.Shot("37_report_menu");
             app.ProcessShowSaveMenu(-1);
             st.Run(100);
+            app.ProcessShowRecordsMenu(1);
+            st.Run(1100);
+            st.Shot("40_records_menu");
+            app.ProcessShowRecordsMenu(-1);
+            st.Run(1100);
+            app.ProcessShowProjectMenu(1);
+            st.Run(1100);
+            st.Shot("40_project_menu");
+            app.ProcessShowProjectMenu(-1);
+            st.Run(1100);
             // Дашборд: тёмная тема, развёрнутая карточка записи (на всю область) и назад
             ui::ApplyTheme(true, 1.f);
             ImPlot::StyleColorsDark();
             st.Shot("29_m021_dark", true);
+            // Свёрнутая левая панель (в любом режиме), «Обработка» 1280 × 720 — светлая и тёмная
+            app.SetNavCollapsed(1);
+            st.Run(1100);
+            st.Shot("39_nav_collapsed_dark");
+            ui::ApplyTheme(false, 1.f);
+            ImPlot::StyleColorsLight();
+            st.Shot("39_nav_collapsed");
+            app.SetNavCollapsed(-1);
+            st.size = ImVec2(1280, 720);
+            st.Run(1100);
+            st.Shot("39_process_1280x720");
+            ui::ApplyTheme(true, 1.f);
+            ImPlot::StyleColorsDark();
+            st.Shot("39_process_1280x720_dark");
+            st.size = ImVec2(1280, 800);
+            st.Run(1100);
             ui::ApplyTheme(false, 1.f);
             ImPlot::StyleColorsLight();
             app.ProcessSetExpanded(1);

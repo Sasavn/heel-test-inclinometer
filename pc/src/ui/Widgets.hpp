@@ -302,13 +302,36 @@ inline void Chip(const char* text, const ImVec4& fg, const ImVec4& bg, bool dot 
     ImGui::Dummy(size);
 }
 
+// Значок программы (SVG руководителя «инстан.svg», 56,28 × 56,28): два кольца с разрывами и круг — векторно, теми же
+// пропорциями, что и src/app.ico (scratchpad: icons.py, resvg). Кольцо 1 — r 21,96…28,14, дуги −5,6…197,1° и
+// −119,3…−36,9°; кольцо 2 — r 14,25…20,40, дуга −292,4…24,1° (углы — от оси x против часовой); круг r 12,42.
+inline void DrawAppIcon(ImDrawList* dl, ImVec2 center, float size, ImU32 col)
+{
+    const float k = size / 56.28f;
+    constexpr float kDeg = 3.14159265f / 180.f;
+    auto ring = [&](float ri, float ro, float a0, float a1) {
+        const float r = 0.5f * (ri + ro) * k, w = (ro - ri) * k;
+        // экран: y вниз — угол со знаком минус; дуга от −a1 до −a0
+        const int seg = std::max(12, static_cast<int>((a1 - a0) / 6.f));
+        dl->PathArcTo(center, r, -a1 * kDeg, -a0 * kDeg, seg);
+        dl->PathStroke(col, ImDrawFlags_None, w);
+    };
+    ring(21.96f, 28.14f, -5.6f, 197.1f);
+    ring(21.96f, 28.14f, -119.3f, -36.9f);
+    ring(14.25f, 20.40f, -292.4f, 24.1f);
+    dl->AddCircleFilled(center, 12.42f * k, col, 32);
+}
+
 enum class BtnKind
 {
     Normal,
     Primary,
     Danger,
     Warn,
-    Orange, // главное действие страницы (как «добавить» в образце): оранжевая заливка
+    Orange, // с 1.8.1 (вариант «главные действия синие»): как Primary — синяя заливка #1F5FBF, белый текст 6,1 : 1
+    Lemon,  // с 1.8.1: нейтральная (лимонный — вариант палитры, в кнопках не используется)
+    Secondary, // вторичная: синий контур и синий текст на светлом
+    Nav,    // на тёмно-синей шапке: полупрозрачная, светлый текст, тонкий контур
 };
 
 // Кнопка. Обычная — светлая заливка с рамкой, при наведении рамка и фон с акцентным оттенком, при нажатии
@@ -322,24 +345,39 @@ inline bool Button(const char* label, BtnKind kind = BtnKind::Normal, ImVec2 siz
     switch (kind)
     {
     case BtnKind::Primary:
-        bg = pal.accent;
-        bgHover = pal.accentHover;
-        bgActive = Mix(pal.accent, black, 0.18f);
-        fg = pal.accentText;
-        border = pal.accent;
+    case BtnKind::Orange:
+        // Главное действие — одна система: синяя заливка, белый текст
+        bg = pal.action;
+        bgHover = pal.actionHover;
+        bgActive = Mix(pal.action, black, 0.22f);
+        fg = pal.actionText;
+        border = darkTheme ? pal.action : Mix(pal.action, black, 0.25f);
+        break;
+    case BtnKind::Secondary:
+        bg = pal.button;
+        bgHover = Mix(pal.button, pal.action, 0.08f);
+        bgActive = Mix(pal.button, pal.action, 0.16f);
+        fg = pal.action;
+        border = pal.action;
+        break;
+    case BtnKind::Nav:
+        bg = pal.navFrame;
+        bgHover = Alpha(pal.navText, 0.16f);
+        bgActive = Alpha(pal.navText, 0.24f);
+        fg = pal.navText;
+        border = pal.navLine;
         break;
     case BtnKind::Danger:
     case BtnKind::Warn:
-    case BtnKind::Orange:
-    {
-        const ImVec4 c = kind == BtnKind::Danger ? pal.err : kind == BtnKind::Orange ? pal.orange : pal.warn;
-        bg = c;
-        bgHover = Mix(c, ImVec4(1, 1, 1, 1), 0.12f);
-        bgActive = Mix(c, black, 0.15f);
-        fg = ImVec4(1, 1, 1, 1);
-        border = c;
+    case BtnKind::Lemon:
+        // Нейтральные контурные (цвет состояния — только у текста опасного действия): янтарный / лимонный / красный
+        // заливкой в кнопках не используются
+        bg = pal.button;
+        bgHover = pal.buttonHover;
+        bgActive = pal.buttonActive;
+        fg = kind == BtnKind::Danger ? pal.err : pal.text;
+        border = kind == BtnKind::Danger ? Mix(pal.buttonBorder, pal.err, 0.5f) : pal.buttonBorder;
         break;
-    }
     default:
         bg = pal.button;
         bgHover = pal.buttonHover;
@@ -348,7 +386,13 @@ inline bool Button(const char* label, BtnKind kind = BtnKind::Normal, ImVec2 siz
         border = pal.buttonBorder;
         break;
     }
-    if (disabled)
+    if (disabled && kind == BtnKind::Nav)
+    {
+        bg = bgHover = bgActive = pal.navFrame;
+        fg = pal.navMuted;
+        border = pal.navLine;
+    }
+    else if (disabled)
     {
         bg = bgHover = bgActive = pal.buttonDisabled;
         fg = pal.muted;
@@ -361,11 +405,37 @@ inline bool Button(const char* label, BtnKind kind = BtnKind::Normal, ImVec2 siz
     ImGui::PushStyleColor(ImGuiCol_Border, border);
     ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, S(1.f));
     ImGui::PushStyleVar(ImGuiStyleVar_DisabledAlpha, 1.f); // серость — цветами выше, без полупрозрачности
+    // Главное действие — заметнее: полужирный шрифт, на 5 точек выше, лёгкая тень под кнопкой
+    const bool main = kind == BtnKind::Primary || kind == BtnKind::Orange; // и недоступная — той же высоты
+    ImDrawList* mdl = ImGui::GetWindowDrawList();
+    if (main)
+    {
+        ImGui::PushFont(fontBold);
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,
+                            ImVec2(ImGui::GetStyle().FramePadding.x, ImGui::GetStyle().FramePadding.y + S(2.5f)));
+        mdl->ChannelsSplit(2);
+        mdl->ChannelsSetCurrent(1);
+    }
     if (disabled)
         ImGui::BeginDisabled();
     const bool pressed = ImGui::Button(label, size);
     if (disabled)
         ImGui::EndDisabled();
+    if (main)
+    {
+        mdl->ChannelsSetCurrent(0);
+        const ImVec2 a = ImGui::GetItemRectMin(), b = ImGui::GetItemRectMax();
+        if (!disabled)
+        {
+        const float r = ImGui::GetStyle().FrameRounding;
+        const ImVec4 sh = darkTheme ? ImVec4(0, 0, 0, 0.45f) : ImVec4(0.06f, 0.12f, 0.28f, 0.22f);
+        mdl->AddRectFilled(ImVec2(a.x + S(1), a.y + S(3)), ImVec2(b.x + S(1), b.y + S(3)), U32(sh), r);
+        mdl->AddRectFilled(ImVec2(a.x, a.y + S(1.5f)), ImVec2(b.x, b.y + S(1.5f)), U32(Alpha(sh, sh.w * 0.6f)), r);
+        }
+        mdl->ChannelsMerge();
+        ImGui::PopStyleVar();
+        ImGui::PopFont();
+    }
     // Наведение на обычную кнопку — рамка акцентного оттенка
     if (!disabled && kind == BtnKind::Normal && ImGui::IsItemHovered())
         ImGui::GetWindowDrawList()->AddRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(),
@@ -542,11 +612,13 @@ inline bool Segmented(const char* id, int* value, const char* const* labels, con
         if (i)
             ImGui::SameLine();
         const bool sel = *value == values[i];
+        // выбранный — светлая синяя подложка, синий текст и тонкая синяя рамка (не яркая заливка)
+        const ImVec4 selText = darkTheme ? Mix(pal.action, ImVec4(1, 1, 1, 1), 0.55f) : pal.action;
         if (sel)
         {
-            ImGui::PushStyleColor(ImGuiCol_Button, pal.accent);
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, pal.accentHover);
-            ImGui::PushStyleColor(ImGuiCol_Text, pal.accentText);
+            ImGui::PushStyleColor(ImGuiCol_Button, Mix(pal.card, pal.action, darkTheme ? 0.30f : 0.10f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, Mix(pal.card, pal.action, darkTheme ? 0.36f : 0.14f));
+            ImGui::PushStyleColor(ImGuiCol_Text, selText);
         }
         ImGui::PushID(i);
         if (ImGui::Button(labels[i]) && !sel)
@@ -554,6 +626,10 @@ inline bool Segmented(const char* id, int* value, const char* const* labels, con
             *value = values[i];
             changed = true;
         }
+        if (sel)
+            ImGui::GetWindowDrawList()->AddRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(),
+                                                U32(darkTheme ? Mix(pal.action, ImVec4(1, 1, 1, 1), 0.3f) : pal.action),
+                                                ImGui::GetStyle().FrameRounding, 0, S(1.2f));
         ImGui::PopID();
         if (sel)
             ImGui::PopStyleColor(3);

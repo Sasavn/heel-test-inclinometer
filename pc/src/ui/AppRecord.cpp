@@ -79,9 +79,12 @@ float CheckboxWidth(const char* label)
            ImGui::CalcTextSize(label).x;
 }
 
-float ButtonWidth(const char* label)
+float ButtonWidth(const char* label, bool bold = false)
 {
-    return ImGui::CalcTextSize(label).x + 2 * ImGui::GetStyle().FramePadding.x;
+    ImGui::PushFont(bold ? fontBold : ImGui::GetFont());
+    const float w = ImGui::CalcTextSize(label).x + 2 * ImGui::GetStyle().FramePadding.x;
+    ImGui::PopFont();
+    return w;
 }
 
 // Итог записи одной строкой: «2 мин 05 с · Д2 1 234 · Д3 1 230 строк · потеряно 3»
@@ -279,7 +282,7 @@ void App::RecordCard(float w, bool full)
     if (rec)
         rightW = ButtonWidth(stopLabel) + (full ? ButtonWidth(openLabel) + gap : 0.f);
     else
-        rightW = CheckboxWidth(xlsxLabel) + gap + std::max(ButtonWidth(startLabel), full ? S(220) : 0.f) +
+        rightW = CheckboxWidth(xlsxLabel) + gap + std::max(ButtonWidth(startLabel, true), full ? S(220) : 0.f) +
                  (full ? 0.f : ButtonWidth(dirLabel) + gap);
     float room = inner - rightW - S(16); // ширина под левую часть
 
@@ -337,7 +340,7 @@ void App::RecordCard(float w, bool full)
         }
         ImGui::SameLine(0, gap);
         const std::string whyTip = why.empty() ? std::string() : "Нельзя: " + why;
-        if (Button(startLabel, BtnKind::Primary, ImVec2(full ? std::max(ButtonWidth(startLabel), S(220)) : 0.f, 0),
+        if (Button(startLabel, BtnKind::Primary, ImVec2(full ? std::max(ButtonWidth(startLabel, true), S(220)) : 0.f, 0),
                    !why.empty(), whyTip.c_str()))
             StartPcRecording();
         if (why.empty() && ImGui::IsItemHovered())
