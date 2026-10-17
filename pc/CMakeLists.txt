@@ -7,7 +7,7 @@ if(WIN32 AND VCPKG_TARGET_TRIPLET MATCHES "-static(-|$)")
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 endif()
 
-project(Krenomer VERSION 1.7.1 LANGUAGES CXX RC)
+project(Krenomer VERSION 1.8.0 LANGUAGES CXX RC)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -70,6 +70,7 @@ add_library(krenomer_ui STATIC
     src/ui/AppRules.cpp
     src/ui/AppProcDash.cpp
     src/ui/AppProject.cpp
+    src/ui/AppSteps.cpp
     src/ui/AppFirmware.cpp
     src/ui/AppTerminal.cpp)
 target_include_directories(krenomer_ui PUBLIC src ${CSerialPort_INCLUDE_DIR})

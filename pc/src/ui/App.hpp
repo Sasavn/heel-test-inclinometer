@@ -23,6 +23,7 @@
 #include "../core/UserMethod.hpp"
 #include "../core/PcRecorder.hpp"
 #include "../core/PcSettings.hpp"
+#include "../core/HeelSteps.hpp"
 #include "../core/Project.hpp"
 #include "../fw/Firmware.hpp"
 
@@ -31,7 +32,7 @@ struct ImVec4;
 namespace ui
 {
 
-inline constexpr const char* kAppVersion = "1.7.1";
+inline constexpr const char* kAppVersion = "1.8";
 
 enum class Page
 {
@@ -222,6 +223,13 @@ public:
     bool ProcessProjectMissing() const { return proc_.projMissing != nullptr; }
     const std::string& ProcessProjectPath() const { return proc_.projectPath; }
     void SetProjectAutosaveAllowed(bool on) { projectAutosaveAllowed_ = on; } // стенд снимков: без автосохранения
+    // Окно «Подробнее» карточки-показателя (0 — h основной, 1 — второй расчёт, 2 — Правила РС, 3 — вероятная ошибка;
+    // -1 — закрыть); отчёт краткий / полный (+ лист «Расчёт по шагам»)
+    void ProcessShowKpiDetail(int card) { proc_.kpiDetail = card >= 0 ? card : proc_.kpiDetail >= 0 ? -2 : -1; }
+    int ProcessKpiDetail() const { return proc_.kpiDetail; }
+    void ProcessSetReportFull(bool full) { settings_.reportFull = full; }
+    void ProcessShowSaveMenu(int m) { proc_.saveMenu = m; }
+    steps::Steps ProcessSteps() const { return ProcSteps(); }
     void ProcessShowProjectMenu(int menu) { proc_.projMenu = menu; } // стенд: 1 — «Открыть проект», 2 — «Сохранить ▾», -1 — закрыть
 
 private:
@@ -350,6 +358,10 @@ private:
     void ProcProjectMenus(bool open, bool save);                // содержимое меню проекта
     float ProcProjectButtons(float x, bool narrow, bool measure); // кнопки проекта в шапке; ширина
     void TickProject();
+    // Расчёт по шагам (AppSteps.cpp): шаги, их вид, окно «Подробнее» карточки-показателя
+    steps::Steps ProcSteps() const;
+    void ProcStepsView(const steps::Steps& st, const std::vector<std::string>& ids);
+    void ProcKpiDetail();
     bool ProcOpenProjectLoaded(const std::string& path, const proj::Project& p);
     void ProcProjectMissingCard(float w);                        // записи проекта не найдены — «Указать файлы…»
     void ProcLoadNames();
@@ -554,6 +566,8 @@ private:
         int expanded = 0;                 // развёрнута карточка: 0 — нет, 1 — запись / графики, 2 — контроль, 3 — вкладки
         int gtab = 0;                     // компактный режим: вкладка карточки графиков (0 — запись, 1 — контроль)
         int view = -1;                    // подпункт: -1 — сам, 0 — обзор, 1 — положения и расчёт, 2 — графики
+        int kpiDetail = -1;               // открыто окно «Подробнее» карточки-показателя (номер) или -1
+        int saveMenu = 0;                 // стенд: 1 — открыть меню «Сохранить отчёт ▼», -1 — закрыть
         int tab = 0;                      // вкладка нижней карточки: 0 — положения / замеры, 1 — Правила РС, 2 — перемещения, 3 — журнал
         bool paramsOpen = true;           // полная карточка параметров раскрыта
         bool paramsAuto = false;          // после первого чтения параметры свёрнуты в строку

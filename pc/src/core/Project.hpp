@@ -60,7 +60,7 @@ struct Project
     // Обработка сигнала (core/Filters.hpp): метод 0…4 — встроенные, 5 — свой (имя и текст — в проекте)
     int method = 3, medianN = 3;
     double fcHz = 0.5, tcS = 0.0, sgWindowS = 4.0;
-    bool wholeSpan = false;
+    int window = 0;             // окно среднего (filt::Window): range / half / end3tc / strict
     std::string userMethod;     // имя своего метода
     std::string userMethodText; // его текст (um::ToText) — чтобы проект открывался и там, где метода нет
 
@@ -216,7 +216,8 @@ inline std::string ToJson(const Project& p, bool meta = true)
          ", \"plateau_s\": " + Num(p.plateauS) + ", \"step_deg\": " + Num(p.stepDeg) + "},\n";
     o += "  \"processing\": {\"method\": " + std::to_string(p.method) + ", \"median_n\": " + std::to_string(p.medianN) +
          ", \"fc_hz\": " + Num(p.fcHz) + ", \"tc_s\": " + Num(p.tcS) + ", \"sg_window_s\": " + Num(p.sgWindowS) +
-         ", \"whole_span\": " + Bool(p.wholeSpan) + ",\n    \"user_method\": " + Str(p.userMethod) +
+         ", \"window\": " + Str(filt::WindowKey(static_cast<filt::Window>(p.window))) + ",\n    \"user_method\": " +
+         Str(p.userMethod) +
          ", \"user_method_text\": " + Str(p.userMethodText) + "},\n";
     // Датчики
     o += "  \"sensors\": [";
@@ -465,7 +466,23 @@ inline bool FromJson(std::string_view text, Project& p, std::string* err = nullp
     r.Num(pr["fc_hz"], "processing.fc_hz", o.fcHz);
     r.Num(pr["tc_s"], "processing.tc_s", o.tcS);
     r.Num(pr["sg_window_s"], "processing.sg_window_s", o.sgWindowS);
-    r.Flag(pr["whole_span"], "processing.whole_span", o.wholeSpan);
+    // Окно среднего. Проекты 1.7 / 1.7.1 его не пишут: тогда — как считали они («whole_span»: false — вторая половина
+    // установившегося крена), чтобы открытый проект дал тот же h.
+    if (!pr["window"].IsNull())
+    {
+        std::string w;
+        r.Text(pr["window"], "processing.window", w);
+        if (w == "range" || w == "half" || w == "end3tc" || w == "strict")
+            o.window = w == "half" ? 1 : w == "end3tc" ? 2 : w == "strict" ? 3 : 0;
+        else
+            r.Bad("processing.window", "ожидается \"range\", \"half\", \"end3tc\" или \"strict\"");
+    }
+    else
+    {
+        bool whole = false;
+        r.Flag(pr["whole_span"], "processing.whole_span", whole);
+        o.window = whole ? 0 : 1;
+    }
     r.Text(pr["user_method"], "processing.user_method", o.userMethod);
     r.Text(pr["user_method_text"], "processing.user_method_text", o.userMethodText);
 

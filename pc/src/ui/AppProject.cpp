@@ -59,7 +59,7 @@ proj::Project App::ProcProjectNow() const
     p.fcHz = settings_.fltFc;
     p.tcS = settings_.fltTc;
     p.sgWindowS = settings_.fltSgWin;
-    p.wholeSpan = settings_.fltWhole;
+    p.window = settings_.fltWindow;
     if (p.method == static_cast<int>(filt::Method::User))
     {
         p.userMethod = settings_.fltUser;
@@ -241,7 +241,7 @@ void App::ProcApplyProjectSettings(const proj::Project& p)
     settings_.fltFc = p.fcHz;
     settings_.fltTc = p.tcS;
     settings_.fltSgWin = p.sgWindowS;
-    settings_.fltWhole = p.wholeSpan;
+    settings_.fltWindow = p.window;
     // Свой метод: нет в программе — взять из проекта (и сохранить); есть, но другой — под своим именем «… (проект)»
     if (p.method == static_cast<int>(filt::Method::User))
     {

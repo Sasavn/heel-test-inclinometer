@@ -71,6 +71,45 @@ struct Custom
                          double tcS, double& winT0, double& winT1, double& tcUsed) const = 0;
 };
 
+// Окно среднего (уровня) на участке положения.
+//  Range  — весь выделенный диапазон положения без переходных начала и конца (SettledSpan: крен ещё не успокоился после
+//           переноса / уже уходит к следующему). По Правилам (прил. 3-10, 3-13 Инструктивных указаний): угол замера —
+//           ось колебаний, проведённая через всю запись перебежки. По умолчанию с 1.8.
+//  Half   — вторая половина установившегося крена, не короче 3·Tc (1.7.1).
+//  EndTc  — 3·Tc в самом конце участка (13) статьи (1.4–1.7).
+//  Strict — весь выделенный диапазон без исключений (как выделен).
+enum class Window
+{
+    Range = 0,
+    Half = 1,
+    EndTc = 2,
+    Strict = 3,
+    Count
+};
+
+inline const char* WindowName(Window w)
+{
+    switch (w)
+    {
+    case Window::Range: return "весь диапазон положения (без переходных краёв)";
+    case Window::Half: return "вторая половина установившегося крена (≥ 3·Tc)";
+    case Window::EndTc: return "3·Tc в конце участка (статья)";
+    case Window::Strict: return "весь диапазон строго, как выделен";
+    default: return "?";
+    }
+}
+
+inline const char* WindowKey(Window w)
+{
+    switch (w)
+    {
+    case Window::Half: return "half";
+    case Window::EndTc: return "end3tc";
+    case Window::Strict: return "strict";
+    default: return "range";
+    }
+}
+
 struct Params
 {
     Method method = Method::Kalman;
@@ -79,7 +118,7 @@ struct Params
     double alpha = 0.0;     // 0 — по формуле (12) из fc и частоты опроса; иначе — заданное α
     double tcS = 0.0;       // период собственных колебаний Tc, с; 0 — по данным
     double sgWindowS = 4.0; // Савицкий–Голай: окно, с
-    bool wholeSpan = false; // среднее (MedianEma, SavGol) — по всему участку, а не по окну Ω = 3·Tc статьи
+    Window window = Window::Range; // окно среднего (уровня) на участке положения
     std::shared_ptr<const Custom> custom; // Method::User
     int sgOrder = 2;        // Савицкий–Голай: степень
 };
@@ -90,9 +129,11 @@ inline std::string Describe(const Params& p)
     char b[640];
     const std::string tc = p.tcS > 0 ? "Tc = " + std::to_string(static_cast<int>(std::lround(p.tcS))) + " с"
                                      : std::string("Tc — по данным");
-    const std::string win = p.wholeSpan ? "среднее — по установившемуся крену (без переходных начала и конца участка)"
-                                        : "среднее — по окну Ω в конце установившегося крена: вторая его половина, не "
-                                          "короче 3·Tc, " + tc;
+    const std::string win = std::string("среднее — ") +
+                            (p.window == Window::Range ? "по всему диапазону положения (без переходных начала и конца)"
+                             : p.window == Window::Strict ? "по всему выделенному диапазону положения"
+                             : p.window == Window::EndTc  ? "по окну Ω = 3·Tc в конце участка, " + tc
+                                                          : "по второй половине установившегося крена, не короче 3·Tc, " + tc);
     switch (p.method)
     {
     case Method::MedianEma:
@@ -108,7 +149,12 @@ inline std::string Describe(const Params& p)
                       p.sgWindowS, win.c_str());
         return b;
     case Method::Mean: return std::string(MethodName(p.method)) + ": по всему участку, без выбросов";
-    case Method::Kalman: return std::string(MethodName(p.method)) + ": уровень по окну Ω в конце установившегося крена";
+    case Method::Kalman:
+        return std::string(MethodName(p.method)) + ": уровень " +
+               (p.window == Window::Range    ? "по всему диапазону положения (без переходных начала и конца)"
+                : p.window == Window::Strict ? "по всему выделенному диапазону положения"
+                : p.window == Window::EndTc  ? "в конце участка (фильтр — по всему участку)"
+                                             : "по второй половине установившегося крена (≥ 3·Tc)");
     case Method::DampedSine: return std::string(MethodName(p.method)) + ": равновесный угол θ∞ по всему участку";
     case Method::User: return p.custom ? "Свой метод «" + p.custom->Name() + "»" : std::string("Свой метод — не выбран");
     default: return MethodName(p.method);
@@ -632,12 +678,17 @@ inline Estimate EstimateSpan(const std::vector<double>& t, const std::vector<dou
     // Окно Ω — в конце установившегося крена (без переходных головы и хвоста), длина — вторая половина
     // установившегося крена, но не меньше 3·Tc статьи. Одни 3·Tc (у модели Tc ≈ 2 с — 6 с) не усредняют медленное
     // «гуляние» крена (биения, дрейф с периодом 10–20 с), и среднее на графике уходит от сигнала на 0,1–0,2°.
-    const Settled set = SettledSpan(st, sx, e.tcS, fop);
+    // Окно по режиму: Range — весь диапазон без переходных краёв (по умолчанию, как ось колебаний на инклинограмме
+    // Правил), Half — 1.7.1, EndTc — 1.4–1.7 (статья), Strict — весь выделенный диапазон.
+    Settled set = SettledSpan(st, sx, e.tcS, fop);
+    if (p.window == Window::Strict || p.window == Window::EndTc)
+        set = Settled{st.front(), st.back()};
     e.settledT0 = set.t0;
     e.settledT1 = set.t1;
     e.winT1 = set.t1;
-    e.winT0 = p.wholeSpan ? set.t0
-                          : std::max(set.t0, e.winT1 - std::max(3.0 * e.tcS, 0.5 * (set.t1 - set.t0)) + 0.5 / fop);
+    e.winT0 = p.window == Window::Range || p.window == Window::Strict ? set.t0
+              : p.window == Window::EndTc ? std::max(set.t0, e.winT1 - 3.0 * e.tcS + 0.5 / fop)
+                                          : std::max(set.t0, e.winT1 - std::max(3.0 * e.tcS, 0.5 * (set.t1 - set.t0)) + 0.5 / fop);
     std::size_t nSettled = st.size(); // отсчётов до конца установившегося крена
     while (nSettled > 1 && st[nSettled - 1] > e.winT1)
         nSettled--;
@@ -707,11 +758,21 @@ inline Estimate EstimateSpan(const std::vector<double>& t, const std::vector<dou
     }
     case Method::Kalman:
     {
-        // Фильтр — по окну Ω (как у остальных методов): медленный уход начала участка уровень не тянет
+        if (p.window == Window::EndTc)
+        {
+            // как в 1.4–1.7: фильтр по всему участку, уровень — в конце
+            const std::vector<double> lev = KalmanLevel(st, sx, std::isfinite(w) ? w : 2 * kPi / e.tcS);
+            e.level = lev.back();
+            e.winT0 = e.winT1 = st.back();
+            e.t = st;
+            e.y = lev;
+            break;
+        }
+        // Фильтр — по окну (как у остальных методов), с медианы окна: переходные края уровень не тянут
         const std::vector<double> wt(st.begin() + static_cast<std::ptrdiff_t>(nWin0), st.begin() + static_cast<std::ptrdiff_t>(nSettled));
         const std::vector<double> wx(sx.begin() + static_cast<std::ptrdiff_t>(nWin0), sx.begin() + static_cast<std::ptrdiff_t>(nSettled));
         const std::vector<double> lev = KalmanLevel(wt, wx, std::isfinite(w) ? w : 2 * kPi / e.tcS, 0.05, MedianOf(wx));
-        e.level = lev.back(); // уровень в конце установившегося крена
+        e.level = lev.back(); // уровень в конце окна (фильтр сошёлся по всему окну)
         e.t = wt;
         e.y = lev;
         break;

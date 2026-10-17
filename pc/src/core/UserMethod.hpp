@@ -196,8 +196,8 @@ inline Method PresetArticle()
     m.name = "Медиана + EMA (статья, формулами)";
     m.consts = {{"fc", "0.5"}, {"a", "2*pi*fc/(2*pi*fc + fs)"}};
     m.stages = {{"median(x, 3)", "x[0]"}, {"a*x + (1 - a)*y[n-1]", "x[0]"}};
-    m.mean = MeanKind::Window;
-    m.meanArg = "max(3*Tc, (T1 - T0)/2)";
+    m.mean = MeanKind::All; // по всему диапазону положения (T0…T1 — без переходных краёв), как встроенный
+    m.meanArg.clear();
     return m;
 }
 

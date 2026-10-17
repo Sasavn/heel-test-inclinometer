@@ -105,7 +105,7 @@ float App::ProcCardTitle(const char* title, int card)
 void App::ProcHeader(float w)
 {
     const float x0 = ImGui::GetCursorScreenPos().x;
-    const float saveW = std::max(S(160), ImGui::CalcTextSize("Сохранение…").x + S(28));
+    const float saveW = std::max(S(160), ImGui::CalcTextSize("Сохранить отчёт (полный)").x + S(28)) + ImGui::GetFrameHeight() + S(2);
     const float openW = ImGui::CalcTextSize("Открыть папку").x + S(28);
     const bool narrow = w < S(960); // узко — проект одной кнопкой «Проект ▾»
     const float projW = ProcProjectButtons(0, narrow, true) + S(8);
@@ -156,13 +156,48 @@ void App::ProcHeader(float w)
     if (Button("Открыть папку", BtnKind::Normal, ImVec2(openW, 0), proc_.outDir.empty() && !proc_.dir[0]))
         dialogs::OpenFolder(proc_.outDir.empty() ? std::string(proc_.dir) : proc_.outDir);
     ImGui::SameLine(0, S(8));
-    if (Button(saving ? "Сохранение…" : "Сохранить отчёт", BtnKind::Orange, ImVec2(saveW, 0), saving || !canSave,
+    const float arrowW = ImGui::GetFrameHeight();
+    if (Button(saving ? "Сохранение…" : settings_.reportFull ? "Сохранить отчёт (полный)" : "Сохранить отчёт", BtnKind::Orange,
+               ImVec2(saveW - arrowW - S(2), 0), saving || !canSave,
                saving ? "Отчёт сохраняется" : cont ? "Нет положений" : "Нет замеров"))
         ProcessSaveReport();
     if (ImGui::IsItemHovered() && !saving && canSave)
-        ImGui::SetTooltip("В папку с файлами: %s (лист «Протокол» с графиками, «Графики», таблицы, «Проверки»),\n"
-                          "картинки графиков — PNG рядом",
-                          heel::kReportName);
+        ImGui::SetTooltip("В папку с файлами: %s (лист «Протокол» с графиками, «Графики», таблицы, «Проверки»%s),\n"
+                          "картинки графиков — PNG рядом. Краткий / полный — стрелка рядом",
+                          heel::kReportName, settings_.reportFull ? ", «Расчёт по шагам»" : "");
+    ImGui::SameLine(0, S(2));
+    const ImVec2 sm0 = ImGui::GetCursorScreenPos();
+    if (Button("▼##repmenu", BtnKind::Orange, ImVec2(arrowW, 0), saving || !canSave) || proc_.saveMenu > 0)
+    {
+        ImGui::OpenPopup("##repmenu_pop");
+        proc_.saveMenu = 0;
+    }
+    ImGui::SetNextWindowPos(ImVec2(sm0.x + arrowW, ImGui::GetItemRectMax().y + S(4)), ImGuiCond_Appearing, ImVec2(1, 0));
+    if (ImGui::BeginPopup("##repmenu_pop"))
+    {
+        if (ImGui::MenuItem("Краткий отчёт", nullptr, !settings_.reportFull))
+        {
+            settings_.reportFull = false;
+            SaveSettingsSoon();
+            ProcessSaveReport();
+        }
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("«Протокол», «Графики», «Проверки», таблицы, сырые данные");
+        if (ImGui::MenuItem("Полный отчёт (+ «Расчёт по шагам»)", nullptr, settings_.reportFull))
+        {
+            settings_.reportFull = true;
+            SaveSettingsSoon();
+            ProcessSaveReport();
+        }
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Краткий и ещё лист «Расчёт по шагам»: исходные данные → уровни положений → Δθ по приборам →\n"
+                              "h_i → h_k → 6.6.1 … 6.6.5 → поправки → итог; формулы, подстановка чисел, пункты Правил");
+        if (proc_.saveMenu < 0)
+            ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
+    if (proc_.saveMenu < 0)
+        proc_.saveMenu = 0;
 }
 
 // Параметры опыта кратко (одной строкой) + режим + «Параметры ▾» (полная карточка — ProcParams).
@@ -270,7 +305,13 @@ void App::ProcKpis(float w)
         }
         EndCard();
         if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("%s%s%s\n%s", title, tip.empty() ? "" : " — ", tip.c_str(), sub.c_str());
+        {
+            ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+            ImGui::SetTooltip("%s%s%s\n%s\n\nПодробнее — щелчок: расписанный расчёт", title, tip.empty() ? "" : " — ",
+                              tip.c_str(), sub.c_str());
+        }
+        if (ImGui::IsItemClicked(ImGuiMouseButton_Left) && proc_.files)
+            proc_.kpiDetail = i;
     };
     const bool mm = settings_.heelSmall;
     auto hText = [&](double v) { return std::isfinite(v) ? Fmt("%.3f м", v) : std::string("—"); };
@@ -402,6 +443,7 @@ void App::ProcGraphsCard(float w, float h)
 void App::PageProcess()
 {
     ProcMethodWindow(); // окно своих методов — поверх страницы
+    ProcKpiDetail();    // окно «Подробнее» карточки-показателя
     if (!proc_.opened)
     {
         proc_.opened = true;

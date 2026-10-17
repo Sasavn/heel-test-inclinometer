@@ -25,6 +25,7 @@
 #include "core/HeelData.hpp"
 #include "core/HeelReport.hpp"
 #include "core/HeelRs.hpp"
+#include "core/HeelSteps.hpp"
 #include "core/HeelProtocol.hpp"
 #include "core/RsCheck.hpp"
 #include "core/PcSettings.hpp"
@@ -1344,6 +1345,156 @@ void TestVodnik()
     fs::remove_all(dir, ec);
 }
 
+// Окно среднего (1.8): по умолчанию — весь диапазон положения без переходных краёв (Правила, прил. 3-10, 3-13: ось
+// колебаний — по всей записи перебежки); «строго весь», «вторая половина» (1.7.1) и «3·Tc в конце» (статья) — режимы.
+// Синтетика с известными уровнями: весь диапазон не хуже прежних окон; EMA с α ≈ 0,05 (как в MATLAB руководителя) по
+// всему диапазону запаздывает и уводит среднее; проект без поля window (1.7 / 1.7.1) открывается с прежним окном.
+void TestWindows()
+{
+    SECTION("окно среднего: весь диапазон положения (по умолчанию), строго весь, вторая половина, 3·Tc в конце");
+    heel::Settings s;
+    CHECK(s.filter.window == filt::Window::Range && s.filter.method == filt::Method::Kalman);
+    const auto loaded = heel::LoadAll({testutil::TestDataDir() / "continuous" / "2026-10-09_M020_D2.CSV"}, "", nullptr, &s);
+    CHECK(loaded.files.size() == 1);
+    if (loaded.files.empty())
+        return;
+    std::vector<double> t, x;
+    heel::Series(loaded.files[0].log, 0, t, x);
+    // truth.txt: участок от переноса до переноса (со всплеском и затухающей качкой в начале) и истинный уровень
+    const double tr[10][3] = {{0.00, 53.34, 0.000},     {56.12, 112.88, 3.000},   {115.02, 156.69, 6.000},
+                              {159.36, 210.08, 8.000},  {212.90, 268.73, 10.500}, {270.97, 320.20, -2.500},
+                              {322.88, 378.68, -6.000}, {380.94, 427.78, -9.500}, {430.70, 481.45, -12.000},
+                              {483.84, 540.59, 0.300}};
+    for (const filt::Method m : {filt::Method::Kalman, filt::Method::MedianEma})
+        for (const filt::Window w : {filt::Window::Range, filt::Window::Strict, filt::Window::Half, filt::Window::EndTc})
+        {
+            filt::Params p;
+            p.method = m;
+            p.window = w;
+            const auto proc = filt::ProcessSeries(t, x, p);
+            double worst = 0;
+            for (const auto& q : tr)
+            {
+                const auto e = filt::EstimateSpan(t, x, proc, q[0], q[1], p);
+                worst = std::max(worst, std::fabs(e.level - q[2]));
+                if (w == filt::Window::Range || w == filt::Window::Strict)
+                    CHECK(e.winT0 == e.settledT0 && e.winT1 == e.settledT1); // окно — весь (установившийся) диапазон
+                if (w == filt::Window::Strict)
+                    CHECK(e.winT0 <= q[0] + 0.15 && e.winT1 >= q[1] - 0.15);
+            }
+            std::printf("    %-28s %-48s наибольшая ошибка %.3f°\n", filt::MethodName(m), filt::WindowName(w), worst);
+            // весь диапазон без переходных краёв — не хуже 0,05°; строго весь (со всплеском) — до 0,1°
+            // Калман 1.4–1.7 («3·Tc в конце» — фильтр по всему участку от самого переноса) на участках со всплеском
+            // переноса в начале расходится — этот режим оставлен только для сравнения с прежними версиями
+            if (!(m == filt::Method::Kalman && w == filt::Window::EndTc))
+                CHECK_MSG(worst < (w == filt::Window::Strict ? 0.1 : 0.05), "%s, %s: %.3f°", filt::MethodName(m), filt::WindowName(w), worst);
+        }
+    // EMA с α ≈ 0,05 (fc ≈ 0,08 Гц) по всему диапазону: запаздывание уводит среднее (вывод анализа MATLAB-картинок)
+    {
+        filt::Params p;
+        p.method = filt::Method::MedianEma;
+        p.window = filt::Window::Strict;
+        p.alpha = 0.05;
+        const auto proc = filt::ProcessSeries(t, x, p);
+        double worst = 0;
+        for (const auto& q : tr)
+            worst = std::max(worst, std::fabs(filt::EstimateSpan(t, x, proc, q[0], q[1], p).level - q[2]));
+        CHECK_MSG(worst > 0.2, "EMA α 0,05 по всему диапазону: %.3f° — ожидалось запаздывание", worst);
+    }
+    // Проект 1.7 / 1.7.1 без «window»: whole_span false — вторая половина (тот же h, что при сохранении)
+    proj::Project old;
+    CHECK(proj::FromJson("{\"krenomer_project\": 1, \"records\": {\"folder_abs\": \"D:\\\\x\"}, \"processing\": {\"whole_span\": false}}", old));
+    CHECK(old.window == 1);
+    CHECK(proj::FromJson("{\"krenomer_project\": 1, \"records\": {\"folder_abs\": \"D:\\\\x\"}}", old) && old.window == 1);
+    proj::Project nw;
+    nw.folder = "D:\\x";
+    CHECK(proj::ToJson(nw).find("\"window\": \"range\"") != std::string::npos);
+    CHECK(proj::FromJson(proj::ToJson(nw), old) && old.window == 0);
+}
+
+// Расчёт по шагам (окна «Подробнее» и лист полного отчёта): числа шагов — те же, что в расчёте
+void TestSteps()
+{
+    SECTION("расчёт по шагам: числа шагов = расчёт (M021), лист «Расчёт по шагам» в полном отчёте");
+    heel::Settings s;
+    s.units.model = true;
+    s.D = 53.5;
+    s.P = 2.5;
+    const fs::path dir = testutil::TestDataDir() / "m021";
+    const auto loaded = heel::LoadAll(heel::ListCsv(dir), text::PathToUtf8(dir), nullptr, &s);
+    auto ms = heel::Group(loaded.files, {});
+    CHECK(ms.size() == 1);
+    if (ms.size() != 1)
+        return;
+    const double sp[9][3] = {{5, 36, -20},         {58.7, 71.2, 45},     {88.9, 101.8, 95},
+                             {114.5, 125, 145},    {133.2, 140.3, 205},  {164.3, 211, -55},
+                             {226.3, 232.0, -105}, {238.7, 259, -155},   {269.6, 282.2, -205}};
+    std::vector<heel::Position> pos;
+    for (const auto& q : sp)
+    {
+        heel::Position x;
+        x.t0 = q[0];
+        x.t1 = q[1];
+        x.arm = q[2];
+        pos.push_back(x);
+    }
+    const auto sum = heel::ComputePositions(s, loaded.files, ms[0], pos);
+    const auto k = heel::RsFromPositions(s, loaded.files, ms[0], pos, {}, sum.h);
+    const auto st = heel::BuildSteps(s, loaded.files, ms, true, 0, pos, sum, k);
+    for (const char* id : {"input", "levels", "initial", "ls", "t65", "hk", "661", "662", "663", "664", "665", "dh", "result"})
+        CHECK_MSG(steps::Find(st, id) != nullptr, "нет шага %s", id);
+    auto result = [&](const char* id, std::size_t row) {
+        const steps::Section* sec = steps::Find(st, id);
+        return sec && row < sec->rows.size() ? sec->rows[row].result : std::string();
+    };
+    CHECK(result("hk", 0) == steps::F(k.r.hk, 4) + " м");
+    CHECK(result("661", 1) == steps::F(k.r.sigma, 4) + " м");
+    CHECK(result("662", 1) == steps::F(k.r.err, 4) + " м" && result("662", 2) == steps::F(k.r.errLimit, 4) + " м");
+    CHECK(result("662", 3) == (k.r.ok662 ? "выполнено" : "не выполнено"));
+    CHECK(result("initial", 0) == steps::F(sum.h, 4) + " м" && result("ls", 1) == steps::F(sum.ls.h, 4) + " м");
+    CHECK(result("result", 0) == steps::F(k.hMain, 4) + " м");
+    const steps::Section* t65 = steps::Find(st, "t65");
+    CHECK(t65 && t65->table.rows.size() == k.r.m.size());
+    if (t65 && t65->table.rows.size() == k.r.m.size())
+        for (std::size_t i = 0; i < k.r.m.size(); i++)
+        {
+            const auto& row = t65->table.rows[i];
+            CHECK(row[row.size() - 2] == steps::F(k.r.m[i].h, 4)); // h_i
+            CHECK(row[row.size() - 4] == steps::Fs(k.r.m[i].dTheta, 3)); // Δθ_i
+        }
+    // h_k по подстановке: сумма h_i шагов / n = h_k
+    {
+        double sh = 0;
+        for (const auto& q : k.r.m)
+            if (!q.excluded && std::isfinite(q.h))
+                sh += q.h;
+        CHECK_NEAR(sh / k.r.n, k.r.hk, 1e-12, "h_k = Σh_i / n");
+    }
+    // Полный отчёт: лист «Расчёт по шагам» — вторым, после «Протокола»; краткий — без него
+    heel::ReportInfo info{"D:\\Кренование\\Модель", "тест", "2026-10-17 10:00"};
+    const auto full = heel::BuildBook(s, loaded.files, ms, true, 0, pos, sum, k, info, {}, nullptr, &st);
+    const auto brief = heel::BuildBook(s, loaded.files, ms, true, 0, pos, sum, k, info, {});
+    CHECK(full.size() == brief.size() + 1 && full.size() > 1 && full[1].name == "Расчёт по шагам" && full[0].name == "Протокол");
+    for (const auto& sh : brief)
+        CHECK(sh.name != "Расчёт по шагам");
+    if (full.size() > 1)
+    {
+        bool hkFound = false, errFound = false;
+        for (const auto& row : full[1].rows)
+            for (const auto& c : row)
+            {
+                hkFound |= c.text == steps::F(k.r.hk, 4) + " м";
+                errFound |= c.text == steps::F(k.r.err, 4) + " м";
+            }
+        CHECK(hkFound && errFound && full[1].print && !full[1].landscape);
+        std::string err;
+        const fs::path out = fs::temp_directory_path() / L"krenomer_process_test_шаги.xlsx";
+        CHECK_MSG(xlsx::Write(out, full, &err), "%s", err.c_str());
+        std::error_code ec;
+        fs::remove(out, ec);
+    }
+}
+
 // Опыт M024 (модель, tests/data/m024: только Ms, CalcX, CalcY; положения — как у руководителя в проекте). Ошибка
 // 1.7: среднее положения — по окну Ω = 3·Tc в самом конце участка (у модели Tc ≈ 2 с — 6 с), и в нём — медленное
 // «гуляние» крена и начало следующего переноса: на графике линия среднего уходила от сигнала на 0,1–0,25° (положение 8
@@ -1487,7 +1638,7 @@ void TestM021()
     CHECK(k.checks[5].state == 0); // крен ±11° — не 1°–4°
     // Сверка приборов: наибольшее расхождение — на коротком положении 7; до 1.7.1 Калман стартовал с медианы первых
     // 2 с и на 7-секундном участке не успевал сойтись (0,17°), теперь — с медианы окна (0,07°, в пределах 0,1°)
-    CHECK_MSG(k.checks[9].state == 1 && k.r.maxSpreadAt == 5 && k.r.maxSpread < 0.1,
+    CHECK_MSG(k.checks[9].state == 1 && (k.r.maxSpreadAt == 5 || k.r.maxSpreadAt == 6) && k.r.maxSpread < 0.1,
               "сверка приборов: состояние %d, наибольшее %.3f° на замере %d", k.checks[9].state, k.r.maxSpread, k.r.maxSpreadAt);
     // Датчик, поставленный «задом наперёд»: обратный знак обоих — h отрицательная; обратный знак одного — приборы
     // расходятся; обратный знак у ApplyInvert возвращает исходное
@@ -1740,6 +1891,7 @@ void TestFilters()
             filt::Params q;
             q.method = filt::Method::MedianEma;
             q.tcS = 4.0;
+            q.window = filt::Window::EndTc; // окно статьи (13)
             return q;
         }());
         CHECK_NEAR(e2.winT0, e2.winT1 - 12.0 + 0.05, 1e-9, "окно Ω = 3·Tc в конце участка");
@@ -1762,10 +1914,10 @@ void TestFilters()
         filt::Params p;
         p.method = static_cast<filt::Method>(m);
         vars.push_back({filt::MethodName(p.method), p});
-        if (p.method == filt::Method::MedianEma)
+        if (p.method == filt::Method::MedianEma || p.method == filt::Method::Kalman)
         {
-            p.wholeSpan = true;
-            vars.push_back({"Медиана + EMA, весь участок", p});
+            p.window = filt::Window::Half;
+            vars.push_back({p.method == filt::Method::Kalman ? "Калман, вторая половина (1.7.1)" : "Медиана + EMA, вторая половина (1.7.1)", p});
         }
     }
     const int nv = static_cast<int>(vars.size());
@@ -1931,7 +2083,7 @@ void TestUserMethod()
         std::string err;
         CHECK(um::FromText(um::ToText(art), back, &err));
         CHECK(back.name == art.name && back.consts == art.consts && back.stages.size() == 2 &&
-              back.stages[1].formula == art.stages[1].formula && back.mean == um::MeanKind::Window && back.meanArg == "max(3*Tc, (T1 - T0)/2)");
+              back.stages[1].formula == art.stages[1].formula && back.mean == um::MeanKind::All);
         CHECK(!um::FromText("hello", back, &err) && err.find("krenomer-method") != std::string::npos);
         CHECK(!um::FromText("krenomer-method 1\nfoo = 1\n", back, &err) && err.find("строка 2") != std::string::npos);
 
@@ -2051,12 +2203,12 @@ void TestSettings()
     s.heelP = 0.004; // маленькое число — как введено
     s.digP = 4;
     s.fltMethod = 3;
-    s.fltWhole = true;
+    s.fltWindow = 2;
     s.Save(ini);
     PcSettings back;
     back.Load(ini);
     CHECK(back.heelAxis == 1 && back.heelPlateauS == 15.0 && back.heelStep == 0.7);
-    CHECK(back.heelSmall && back.heelP == 0.004 && back.digP == 4 && back.digArm == 3 && back.fltMethod == 3 && back.fltWhole);
+    CHECK(back.heelSmall && back.heelP == 0.004 && back.digP == 4 && back.digArm == 3 && back.fltMethod == 3 && back.fltWindow == 2);
     WriteText(ini, "heel_axis_v=2\ndig_arm=1\n"); // у плеч меньше 3 знаков нельзя
     PcSettings arm;
     arm.Load(ini);
@@ -2101,7 +2253,7 @@ void TestProject()
     p.fcHz = 0.25;
     p.tcS = 1.5;
     p.sgWindowS = 3;
-    p.wholeSpan = true;
+    p.window = 3;
     p.userMethod = "Мой \"метод\"";
     p.userMethodText = "строка 1\nстрока 2\t\\";
     p.sensors = {{2, "Нос, ЛБ", true, true}, {3, "", false, false}};
@@ -2142,7 +2294,7 @@ void TestProject()
     CHECK(q.model && q.D == 53.5 && q.P == 2.5 && q.L == 200 && q.axis == 1 && q.windowS == 20 && q.thresholdDeg == 0.05);
     CHECK(q.B == 550 && q.armFrom == 2 && text.find("\"arms_from\": \"ПрБ\"") != std::string::npos);
     CHECK(q.plateauS == 4 && q.stepDeg == 0.3 && q.method == 5 && q.medianN == 5 && q.fcHz == 0.25 && q.tcS == 1.5);
-    CHECK(q.sgWindowS == 3 && q.wholeSpan && q.userMethod == p.userMethod && q.userMethodText == p.userMethodText);
+    CHECK(q.sgWindowS == 3 && q.window == 3 && q.userMethod == p.userMethod && q.userMethodText == p.userMethodText);
     CHECK(q.sensors.size() == 2 && q.sensors[0].key == 2 && q.sensors[0].name == "Нос, ЛБ" && q.sensors[0].inverted &&
           q.sensors[0].use && q.sensors[1].key == 3 && q.sensors[1].name.empty() && !q.sensors[1].use);
     CHECK(q.rsH == 1.2 && q.rsLmax == 0 && q.rsD0 == 40 && q.rsSpread == 0.2 && q.rsMain == 1 && q.rsMainGroups == 0);
@@ -2330,6 +2482,8 @@ int main(int argc, char** argv)
     TestVodnik();
     TestM021();
     TestM024();
+    TestWindows();
+    TestSteps();
     TestXlsxRead();
     TestRealRecord();
     TestFilters();

@@ -195,7 +195,7 @@ heel::Settings App::ProcSettings() const
     s.filter.fcHz = settings_.fltFc;
     s.filter.tcS = settings_.fltTc;
     s.filter.sgWindowS = settings_.fltSgWin;
-    s.filter.wholeSpan = settings_.fltWhole;
+    s.filter.window = static_cast<filt::Window>(std::clamp(settings_.fltWindow, 0, 3));
     s.rsH = settings_.rsH > 0 ? settings_.rsH : heel::kNaN;
     s.rsLmax = settings_.rsLmax > 0 ? settings_.rsLmax : heel::kNaN;
     s.rsD0 = settings_.rsD0 > 0 ? settings_.rsD0 : heel::kNaN;
@@ -780,6 +780,9 @@ void App::TickProcess()
         const int rec = proc_.rec;
         const auto s = ProcSettings();
         const fs::path dir = text::PathFromUtf8(proc_.outDir);
+        // Полный отчёт: лист «Расчёт по шагам» — из тех же чисел, что окна «Подробнее»
+        const bool full = settings_.reportFull;
+        const steps::Steps stepsAll = full ? ProcSteps() : steps::Steps{};
         proc_.save = std::async(std::launch::async, [=]() {
             std::vector<std::string> out;
             std::error_code ec;
@@ -847,7 +850,8 @@ void App::TickProcess()
                 picture(posFrames[post], filebusy::SuffixName(posName[post], n), "Положения крупно — пост «" + pn + "»",
                         false, false, "Положения");
             }
-            const auto sheets = heel::BuildBook(s, *files, meas, cont, rec, pos, sum, rsCase, info, images, &warn);
+            const auto sheets = heel::BuildBook(s, *files, meas, cont, rec, pos, sum, rsCase, info, images, &warn,
+                                                full ? &stepsAll : nullptr);
             const std::size_t at = n > 1 ? 1 : 0; // после строки «⚠ … сохранено как …»
             if (xlsx::Write(dir / text::PathFromUtf8(reportName), sheets, &err))
                 out.insert(out.begin() + static_cast<std::ptrdiff_t>(at), "✓ Отчёт сохранён: " + reportName);
@@ -2206,12 +2210,24 @@ void App::ProcFilterButton()
     }
     if (m == filt::Method::SavGol)
         num("Окно Савицкого–Голая, с", &settings_.fltSgWin, 0.5, "%.1f", 0.5, 30.0, "Полином 2-й степени по этому окну");
-    if (m == filt::Method::MedianEma || m == filt::Method::SavGol)
+    if (m == filt::Method::MedianEma || m == filt::Method::SavGol || m == filt::Method::Kalman)
     {
-        num("Период качки Tc, с (0 — по записи)", &settings_.fltTc, 1.0, "%.0f", 0.0, 120.0,
-            "Окно среднего Ω = 3·Tc в конце положения — формула (13) статьи");
-        if (ui::Checkbox("Среднее по всему положению, а не по окну Ω", &settings_.fltWhole))
+        // Окно среднего: по умолчанию — весь диапазон положения (Правила, прил. 3-10 и 3-13: ось колебаний — по всей
+        // записи перебежки); остальные — для сравнения с прежними версиями и статьёй
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted("Окно среднего");
+        Hint("«Весь диапазон» (по умолчанию с 1.8) — весь выделенный диапазон положения без переходных начала и конца "
+             "(крен ещё не успокоился после переноса или уже уходит к следующему; края на графике не закрашены). Так "
+             "обрабатывают инклинограмму Правила (Инструктивные указания по кренованию, прил. 3-10 и 3-13: ось колебаний "
+             "проводится через всю запись перебежки).\n«Вторая половина» — 1.7.1, «3·Tc в конце» — статья (13), версии "
+             "1.4–1.7, «Строго весь» — весь выделенный диапазон без исключения краёв. Сохраняется в проекте.");
+        static const char* wl[] = {"Весь диапазон", "Вторая половина", "3·Tc в конце", "Строго весь"};
+        static const int wv[] = {0, 1, 2, 3};
+        if (Segmented("fwin", &settings_.fltWindow, wl, wv, 4))
             changed = true;
+        if (m != filt::Method::Kalman && settings_.fltWindow != 0 && settings_.fltWindow != 3)
+            num("Период качки Tc, с (0 — по записи)", &settings_.fltTc, 1.0, "%.0f", 0.0, 120.0,
+                "Окно не короче 3·Tc — формула (13) статьи");
     }
     {
         FontScope f(fontSmall);

@@ -42,7 +42,8 @@ struct PcSettings
     std::string sensorNames;  // названия датчиков: «ключ=название;…» (ключ — heel::SensorKey)
     std::string sensorInvert; // датчики с обратным знаком (ось +X — к левому борту): «ключ,ключ,…»
     double fltFc = 0.5, fltTc = 0.0, fltSgWin = 4.0;
-    bool fltWhole = false;
+    int fltWindow = 0;        // окно среднего (filt::Window): 0 — весь диапазон положения (с 1.8), 1 — вторая половина
+                              // установившегося крена (1.7.1), 2 — 3·Tc в конце (статья), 3 — весь диапазон строго
     // Правила РС: h и l_max по Информации об остойчивости (плечевые единицы), Δ0 порожнем (единицы массы); 0 — не
     // задано. Порог сверки постов, °. Основной расчёт h: 0 — от начального + МНК, 1 — по приращениям (табл. 6.5).
     double rsH = 0.0, rsLmax = 0.0, rsD0 = 0.0;
@@ -53,6 +54,7 @@ struct PcSettings
     int uiDensity = 0;       // интерфейс: 0 — авто (компактный, если окно ниже 800 точек), 1 — обычный, 2 — компактный
     // Проект опыта (*.krenomer): автосохранение рядом с записями и недавние проекты (последний — первым)
     bool projectAutosave = true;
+    bool reportFull = false;  // «Сохранить отчёт»: полный (+ лист «Расчёт по шагам») или краткий
     // «Обработка»: плечи вводятся от ДП (0), от ЛБ (1) или от ПрБ (2); ширина судна / модели B (м или мм)
     int armFrom = 0;
     double heelB = 0.0;
@@ -164,7 +166,7 @@ struct PcSettings
         fltFc = real("flt_fc", fltFc, 0.001, 100.0);
         fltTc = real("flt_tc", fltTc, 0.0, 120.0);
         fltSgWin = real("flt_sg_win", fltSgWin, 0.2, 60.0);
-        fltWhole = flag("flt_whole", fltWhole);
+        fltWindow = num("flt_window", fltWindow, 0, 3); // flt_whole программ до 1.8 не берётся: по умолчанию — весь диапазон
         rsH = real("rs_h", rsH, 0.0, 1e6);
         rsLmax = real("rs_lmax", rsLmax, 0.0, 1e7);
         rsD0 = real("rs_d0", rsD0, 0.0, 1e9);
@@ -180,6 +182,7 @@ struct PcSettings
         if (kv.count("rs_groups"))
             rsGroups = kv["rs_groups"];
         projectAutosave = flag("project_autosave", projectAutosave);
+        reportFull = flag("report_full", reportFull);
         armFrom = num("arm_from", armFrom, 0, 2);
         heelB = real("heel_b", heelB, 0.0, 1e7);
         if (kv.count("recent_projects"))
@@ -246,12 +249,13 @@ struct PcSettings
                 << "\ndig_thr=" << digThr << "\ndig_step=" << digStep << "\n";
             out << "flt_v=2\nflt_user=" << fltUser << "\nsensor_names=" << sensorNames << "\nsensor_invert=" << sensorInvert << "\n";
             out << "flt_method=" << fltMethod << "\nflt_median=" << fltMedianN << "\nflt_fc=" << fltFc << "\nflt_tc=" << fltTc
-                << "\nflt_sg_win=" << fltSgWin << "\nflt_whole=" << (fltWhole ? 1 : 0) << "\n";
+                << "\nflt_sg_win=" << fltSgWin << "\nflt_window=" << fltWindow << "\n";
             out << "rs_h=" << rsH << "\nrs_lmax=" << rsLmax << "\nrs_d0=" << rsD0 << "\nrs_spread_step=" << rsSpread
                 << "\nrs_main=" << rsMain << "\nrs_main_groups=" << rsMainGroups << "\nproc_split=" << procSplit << "\nui_density=" << uiDensity << "\nrs_instrument=" << rsInstrument << "\nrs_dh=" << rsDh
                 << "\nrs_dworst=" << rsDworst << "\nrs_group_mode=" << (rsGroupMode ? 1 : 0) << "\nrs_groups=" << rsGroups
                 << "\n";
             out << "arm_from=" << armFrom << "\nheel_b=" << heelB << "\n";
+            out << "report_full=" << (reportFull ? 1 : 0) << "\n";
             out << "project_autosave=" << (projectAutosave ? 1 : 0) << "\nrecent_projects=";
             for (std::size_t i = 0; i < recentProjects.size(); i++)
                 out << (i ? "|" : "") << recentProjects[i];

@@ -10,12 +10,14 @@
 // переносом; числа — с фиксированными знаками (углы 0.000°, h 0.000 м, моменты 0.000); рамки таблиц, заливка шапок;
 // закреплённые строки; печать A4 по ширине страницы, повтор строк шапки.
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <string>
 #include <vector>
 
 #include "HeelReport.hpp"
 #include "HeelRs.hpp"
+#include "HeelSteps.hpp"
 #include "Xlsx.hpp"
 
 namespace heel
@@ -517,10 +519,93 @@ struct ProtoItem
 };
 
 // Книга отчёта целиком. cont — «весь опыт одной записью» (rec — запись в ms, pos — положения), иначе «файл = замер».
+// Лист «Расчёт по шагам» (полный отчёт): разделы шагов (HeelSteps.hpp) — заголовок, таблица значений, строки
+// «величина — формула — подстановка — результат — пункт Правил»; та же сетка и печать A4, что у «Протокола».
+inline xlsx::Sheet StepsSheet(const steps::Steps& st, int G)
+{
+    using namespace proto;
+    xlsx::Sheet sh("Расчёт по шагам");
+    Grid g(sh, G);
+    g.Title("Расчёт по шагам");
+    g.Note("Каждый шаг: формула, подстановка чисел и результат; пункты — Инструктивные указания по кренованию судов "
+           "(прил. 3 к разд. 2 Руководства по техническому наблюдению за постройкой судов) и Часть IV Правил РС.");
+    sh.print = true;
+    sh.landscape = false;
+    sh.freezeRows = 1;
+    // столбцы строки шага: величина 2, формула 3, результат 2, пункт 1, подстановка — остальное
+    const int wWhat = 2, wForm = 3, wRes = 2, wRef = 1;
+    const int wSub = std::max(1, G - wWhat - wForm - wRes - wRef);
+    int num = 0;
+    for (const steps::Section& sec : st)
+    {
+        g.Gap();
+        g.Title(std::to_string(++num) + ". " + sec.title + (sec.ref.empty() ? std::string() : " (" + sec.ref + ")"), 12);
+        if (!sec.table.head.empty() && !sec.table.rows.empty())
+        {
+            const int nc = static_cast<int>(sec.table.head.size());
+            // ширины: по одному столбцу сетки, остаток — сначала формулам («=»), потом ΔM, участкам, окнам, файлам
+            std::vector<int> span(static_cast<std::size_t>(nc), 1);
+            int left = G - nc;
+            auto give = [&](auto pred, int most) {
+                for (int c = 0; c < nc && left > 0; c++)
+                    if (pred(sec.table.head[static_cast<std::size_t>(c)]))
+                    {
+                        const int add = std::min(left, most);
+                        span[static_cast<std::size_t>(c)] += add;
+                        left -= add;
+                    }
+            };
+            give([](const std::string& h) { return h.find('=') != std::string::npos; }, 2);
+            give([](const std::string& h) { return h.find("ΔM") != std::string::npos; }, 2);
+            give([](const std::string& h) {
+                return h.find("Участок") != std::string::npos || h.find("Окно") != std::string::npos ||
+                       h.find("Файл") != std::string::npos || h.find("Примечание") != std::string::npos;
+            }, 1);
+            for (int c = nc > 1 ? 1 : 0; left > 0; c = c + 1 < nc ? c + 1 : (nc > 1 ? 1 : 0)) // «№» — узким
+            {
+                span[static_cast<std::size_t>(c)]++;
+                left--;
+            }
+            if (nc > G) // столбцов больше сетки — по одному, лишние склеиваются в последний
+                span.assign(static_cast<std::size_t>(nc), 1);
+            std::vector<Grid::Col> h;
+            for (int c = 0; c < nc && c < G; c++)
+                h.push_back(H(sec.table.head[static_cast<std::size_t>(c)], span[static_cast<std::size_t>(c)]));
+            g.Row(h, 30);
+            for (const auto& row : sec.table.rows)
+            {
+                std::vector<Grid::Col> cells;
+                for (int c = 0; c < nc && c < G; c++)
+                {
+                    const std::string v = c < static_cast<int>(row.size()) ? row[static_cast<std::size_t>(c)] : std::string();
+                    const bool numeric = !v.empty() && (std::isdigit(static_cast<unsigned char>(v[0])) || v[0] == '+' || v[0] == '-') &&
+                                         v.find(' ') == std::string::npos;
+                    cells.push_back(T(v, span[static_cast<std::size_t>(c)], numeric ? 3 : 1));
+                }
+                g.Row(cells);
+            }
+        }
+        if (!sec.rows.empty())
+        {
+            g.Row({H("Величина", wWhat), H("Формула", wForm), H("Подстановка", wSub), H("Результат", wRes), H("Пункт", wRef)}, 20);
+            for (const steps::Row& r : sec.rows)
+            {
+                Style res = TdText(3);
+                res.bold = true;
+                g.Row({T(r.what, wWhat), T(r.formula, wForm), T(r.subst, wSub), C(xlsx::Text(r.result), wRes, res), T(r.ref, wRef)});
+            }
+        }
+        if (!sec.note.empty())
+            g.Note(sec.note);
+    }
+    return sh;
+}
+
+// fullSteps — полный отчёт: лист «Расчёт по шагам» после «Протокола».
 inline std::vector<xlsx::Sheet> BuildBook(const Settings& s, const std::vector<File>& files, const std::vector<Measurement>& ms,
                                           bool cont, int rec, const std::vector<Position>& pos, const Summary& sum,
                                           const RsCase& k, const ReportInfo& info, const std::vector<ReportImage>& images,
-                                          std::string* warning = nullptr)
+                                          std::string* warning = nullptr, const steps::Steps* fullSteps = nullptr)
 {
     using namespace proto;
     std::vector<xlsx::Sheet> book;
@@ -764,6 +849,8 @@ inline std::vector<xlsx::Sheet> BuildBook(const Settings& s, const std::vector<F
             }
     }
     book.push_back(std::move(pr));
+    if (fullSteps && !fullSteps->empty())
+        book.push_back(StepsSheet(*fullSteps, std::max(G, 12))); // шире протокола: формулы с подстановкой
 
     // ---------------- Графики
     if (!images.empty())

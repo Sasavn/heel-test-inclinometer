@@ -1115,6 +1115,28 @@ int main(int argc, char** argv)
                 st.Run(100);
             }
             st.Shot("29_m021_positions", true);
+            // Окна «Подробнее» карточек-показателей и меню «Сохранить отчёт ▼»
+            for (int c = 0; c < 4; c++)
+            {
+                app.ProcessShowKpiDetail(c);
+                st.Run(300);
+                CHECK(app.ProcessKpiDetail() == c);
+                st.Shot(("37_kpi_detail_" + std::to_string(c)).c_str());
+            }
+            app.ProcessShowKpiDetail(-1);
+            st.Run(2100); // кадр — раз в секунду стенда
+            CHECK(app.ProcessKpiDetail() == -1);
+            {
+                const auto st2 = app.ProcessSteps();
+                const steps::Section* hk = steps::Find(st2, "hk");
+                CHECK_MSG(hk && !hk->rows.empty() && hk->rows[0].result == steps::F(app.ProcessRs().r.hk, 4) + " м",
+                          "окно: h_k шага = расчёт");
+            }
+            app.ProcessShowSaveMenu(1);
+            st.Run(100);
+            st.Shot("37_report_menu");
+            app.ProcessShowSaveMenu(-1);
+            st.Run(100);
             // Дашборд: тёмная тема, развёрнутая карточка записи (на всю область) и назад
             ui::ApplyTheme(true, 1.f);
             ImPlot::StyleColorsDark();
@@ -1146,6 +1168,19 @@ int main(int argc, char** argv)
                     fs::copy_file(md / f, fs::path(g_out) / (L"29_m021_" + std::wstring(f)),
                                   fs::copy_options::overwrite_existing, ec);
             CHECK_MSG(fs::file_size(md / L"Отчет_Кренование.xlsx", ec) > 10000, "нет отчёта M021");
+            // Полный отчёт: + лист «Расчёт по шагам» (больше краткого); копия — для превью в Excel
+            {
+                const auto brief = fs::file_size(md / L"Отчет_Кренование.xlsx", ec);
+                app.ProcessSetReportFull(true);
+                app.ProcessSaveReport();
+                st.Run(100);
+                wait();
+                app.ProcessSetReportFull(false);
+                CHECK_MSG(fs::file_size(md / L"Отчет_Кренование.xlsx", ec) > brief, "полный отчёт не больше краткого");
+                fs::copy_file(md / L"Отчет_Кренование.xlsx", fs::path(g_out) / L"37_m021_full_report.xlsx",
+                              fs::copy_options::overwrite_existing, ec);
+                st.Run(7000);
+            }
 #ifdef _WIN32
             // Отчёт открыт в Excel (файл держат без совместной записи и удаления): сохранение не молчит — весь
             // комплект под «(2)», в журнале и всплывающем сообщении «сохранено как …» с «Открыть папку»
