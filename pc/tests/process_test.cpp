@@ -34,6 +34,8 @@
 #include "core/Png.hpp"
 #include "core/TextUtil.hpp"
 #include "core/Xlsx.hpp"
+#include "ui/HelpDoc.hpp"
+#include "ui/HelpText.hpp"
 
 namespace fs = std::filesystem;
 
@@ -2417,6 +2419,106 @@ void TestProject()
     fs::remove_all(root, ec);
 }
 
+// Встроенная справка: разделы по заданию, таблица горячих клавиш, разбор разметки, поиск.
+void TestHelp()
+{
+    const auto doc = help::Parse(ui::kHelpText);
+    std::vector<std::string> titles;
+    for (const auto& s : doc)
+        titles.push_back(s.title);
+    for (const char* t : {"Назначение", "Подготовка к опыту", "Порядок опыта", "Обработка", "Отчёт и «Подробнее»", "Проект",
+                          "Судно и вид", "Частые ошибки и советы", "Горячие клавиши"})
+        CHECK(std::find(titles.begin(), titles.end(), std::string(t)) != titles.end());
+    std::string all;
+    for (const auto& s : doc)
+        for (const auto& b : s.blocks)
+        {
+            all += b.text + "\n";
+            for (const auto& r : b.rows)
+                for (const auto& c : r)
+                    all += c + "\n";
+        }
+    // Содержание по заданию: обнуление, запись, 20–30 с, без остановок, крен 1–4°, режимы, методы, окно, плечи, Δh,
+    // пункты Правил, отчёт, проект, малое судно, компактный режим, ошибки M021 / M024
+    for (const char* w : {"«Ноль»", "на карту", "на ПК", "20–30 с", "без остановок", "1°–4°", "Файл = замер",
+                          "Весь опыт одной записью", "Калман", "статьи", "свой метод", "Весь диапазон", "от ЛБ", "ПрБ",
+                          "ширину B", "Группы", "Δh", "6.5", "6.6.1", "6.6.2", "6.6.3", "6.6.4", "6.6.5", "краткий",
+                          "полный", "Подробнее", "*.krenomer", "Автосохранение", "Малое судно", "Компактный",
+                          "сворачивается", "M021", "M024", "Проверьте плечи"})
+        CHECK_MSG(all.find(w) != std::string::npos, "нет в справке: %s", w);
+    // Горячие клавиши — таблицей, все из задания
+    const help::Section* keys = nullptr;
+    for (const auto& s : doc)
+        if (s.title == "Горячие клавиши")
+            keys = &s;
+    CHECK(keys != nullptr);
+    if (keys)
+    {
+        const help::Block* table = nullptr;
+        for (const auto& b : keys->blocks)
+            if (b.kind == help::Kind::Table)
+                table = &b;
+        CHECK(table != nullptr);
+        if (table)
+        {
+            CHECK(table->rows.size() >= 14);
+            CHECK(table->rows.front().size() == 2 && table->rows.front()[0] == "Клавиши");
+            std::string k;
+            for (const auto& r : table->rows)
+            {
+                CHECK(r.size() == 2);
+                k += r[0] + " ";
+            }
+            for (const char* w : {"F1", "Ctrl+N", "Ctrl+O", "Ctrl+S", "Ctrl+Shift+S", "Ctrl+R", "Ctrl+Shift+R", "F5", "Ctrl+1",
+                                  "Ctrl+7", "Alt+←", "PgUp", "PgDn", "Ins", "Ctrl++", "Del", "Esc", "Ctrl+E", "Ctrl+B"})
+                CHECK_MSG(k.find(w) != std::string::npos, "нет клавиши: %s", w);
+        }
+    }
+    // Разметка: подзаголовки, шаги по номерам, совет, абзац из нескольких строк — одной строкой
+    {
+        const auto d = help::Parse("# А\nпервая\nвторая\n\n## Под\n1. шаг\n2. ещё\nпродолжение\n- пункт\n> совет\n| x | y |\n| 1 | 2 |\n# Б\nтекст");
+        CHECK(d.size() == 2);
+        if (d.size() == 2)
+        {
+            CHECK(d[0].blocks.size() == 7);
+            if (d[0].blocks.size() == 7)
+            {
+                CHECK(d[0].blocks[0].kind == help::Kind::Para && d[0].blocks[0].text == "первая вторая");
+                CHECK(d[0].blocks[1].kind == help::Kind::Sub && d[0].blocks[1].text == "Под");
+                CHECK(d[0].blocks[2].kind == help::Kind::Step && d[0].blocks[2].number == 1);
+                CHECK(d[0].blocks[3].number == 2 && d[0].blocks[3].text == "ещё продолжение");
+                CHECK(d[0].blocks[4].kind == help::Kind::Bullet);
+                CHECK(d[0].blocks[5].kind == help::Kind::Tip);
+                CHECK(d[0].blocks[6].kind == help::Kind::Table && d[0].blocks[6].rows.size() == 2);
+            }
+            CHECK(d[1].title == "Б" && d[1].blocks.size() == 1);
+        }
+        const auto t = help::Parse("# Т\n| a | b |\n| 1 | 2 |\n| 3 | 4 |");
+        CHECK(t.size() == 1 && t[0].blocks.size() == 1 && t[0].blocks[0].rows.size() == 3);
+    }
+    // Поиск: регистр не важен (кириллица), совпадения — блоки и строки таблиц
+    {
+        const std::string q = help::Query("  ПЛЕЧ ");
+        CHECK(q == "плеч");
+        int total = 0, sections = 0;
+        for (const auto& s : doc)
+        {
+            const int n = help::Matches(s, q);
+            total += n;
+            sections += n > 0;
+        }
+        CHECK(total >= 4 && sections >= 3);
+        int keysHits = 0;
+        for (const auto& s : doc)
+            keysHits += help::Matches(s, help::Query("ctrl+z"));
+        CHECK(keysHits >= 2); // таблица клавиш и «Весь опыт одной записью»
+        int none = 0;
+        for (const auto& s : doc)
+            none += help::Matches(s, help::Query("абракадабра"));
+        CHECK(none == 0);
+    }
+}
+
 void TestDeflate()
 {
     SECTION("deflate: распаковка тестовым inflate (текст, повторы, случайные байты, длиннее окна)");
@@ -2491,5 +2593,6 @@ int main(int argc, char** argv)
     TestSettings();
     TestProject();
     TestDeflate();
+    TestHelp();
     return TestSummary();
 }

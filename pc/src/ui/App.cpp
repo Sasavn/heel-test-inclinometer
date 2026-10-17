@@ -1,4 +1,4 @@
-// Каркас окна: шапка, меню, уведомления, «О программе», пульт демо-режима; логика Tick().
+// Каркас окна: шапка, меню, уведомления, «О программе», пульт демо-режима, горячие клавиши; логика Tick().
 #include "App.hpp"
 
 #include <algorithm>
@@ -17,7 +17,10 @@
 #ifdef KRENOMER_PROJECT_VERSION
 namespace
 {
-// kAppVersion («1.8.1») — начало версии из CMakeLists.txt (project VERSION 1.8.1): сведения о файле и окно — одно.
+// kAppVersion («1.8.2») — начало версии из CMakeLists.txt (project VERSION 1.8.2): сведения о файле и окно — одно.
+// 1.8.2: встроенная справка («? Справка» внизу левой панели, F1): оглавление, поиск, подготовка и порядок опыта,
+// обработка, Правила РС, отчёт, проект, частые ошибки; горячие клавиши (Ctrl+N/O/S/R, F5, Ctrl+1…7, PgUp/PgDn,
+// Ins/Del/Ctrl+Z, Ctrl+E, Ctrl+B, Esc) с подсказками на кнопках и в меню.
 // 1.8.1: значок программы (SVG руководителя) в шапке и в .ico; палитра #103269 / #F87128 / #B8E039 с проверкой
 // контрастов; в папке с проектом — вопрос «открыть / новый»; одна верхняя карточка «Обработки», «Параметры» —
 // лимонная и раскрыта; вкладки без «дёрганья»; левая панель сворачивается в любом режиме; кг·мм в шагах малого судна.
@@ -223,6 +226,7 @@ void App::Tick()
 void App::Render()
 {
     snap_ = link_->Snapshot();
+    HandleHotkeys();
     const ImGuiViewport* vp = ImGui::GetMainViewport();
     // Компактный режим: по настройке или (авто) если окно ниже 800 точек — экраны HD ready (1280×720, 1366×768)
     {
@@ -457,7 +461,7 @@ void App::RenderTopBar(float h)
 
 // Левая панель: тёмно-синяя, пункты — группами с заголовками капсом (раскрываются / сворачиваются): «Опыт
 // кренования» (Измерение, Обработка) — первой, «Устройство» (Настройки, Диагностика, Файлы, Прошивка, Терминал);
-// в демо-режиме — блок «Имитатор» (пульт); внизу — связь, часы, версия и «О программе».
+// в демо-режиме — блок «Имитатор» (пульт); внизу — «? Справка» отдельным блоком (там же «О программе»), связь, часы.
 void App::RenderSidebar(float w, float h)
 {
     ImGui::PushStyleColor(ImGuiCol_ChildBg, pal.nav);
@@ -601,12 +605,44 @@ void App::RenderSidebar(float w, float h)
     }
     ImGui::PopStyleVar();
 
-    // Внизу: связь, часы прибора и ПК, «О программе»
-    const float bh = ImGui::GetFrameHeight();
+    // Внизу: отдельным блоком «? Справка» (F1; «О программе» — на её странице), затем связь, часы прибора и ПК
     const float lineH = fontSmall->FontSize + S(3);
-    const float bottomH = bh + 3 * lineH + S(22);
+    // высота блока — измерена в прошлом кадре (первый кадр — оценка), снизу — поле панели
+    const float bottomH = (navBottomH_ > 0.f ? navBottomH_ : S(46) + 3 * lineH + S(30)) + S(10);
     if (ImGui::GetCursorPosY() < h - bottomH)
         ImGui::SetCursorPosY(h - bottomH);
+    const float bottomY0 = ImGui::GetCursorPosY();
+    {
+        const ImVec2 p0 = ImGui::GetCursorScreenPos();
+        dl->AddLine(ImVec2(p0.x, p0.y), ImVec2(p0.x + iw, p0.y), U32(pal.navLine));
+        ImGui::Dummy(ImVec2(0, S(6)));
+        const bool sel = page_ == Page::Help;
+        const ImVec2 p = ImGui::GetCursorScreenPos();
+        const float ih = S(36);
+        if (ImGui::InvisibleButton("##navhelp", ImVec2(iw, ih)))
+            ToggleHelp();
+        const bool hov = ImGui::IsItemHovered();
+        if (hov)
+            ImGui::SetTooltip("Справка: подготовка и порядок опыта, обработка, Правила РС, горячие клавиши (F1)");
+        if (sel || hov)
+            dl->AddRectFilled(p, ImVec2(p.x + iw, p.y + ih), U32(sel ? pal.navSel : pal.navHover), S(7));
+        if (sel)
+            dl->AddRectFilled(ImVec2(p.x, p.y + S(8)), ImVec2(p.x + S(3), p.y + ih - S(8)), U32(pal.orange), S(1.5f));
+        // значок «?» в кружке
+        const ImVec2 c(p.x + S(20), p.y + ih * 0.5f);
+        dl->AddCircle(c, S(9), U32(sel ? ImVec4(1, 1, 1, 1) : pal.navMuted), 0, S(1.5f));
+        {
+            const ImVec2 ts = fontBold->CalcTextSizeA(fontSmall->FontSize, FLT_MAX, 0.f, "?");
+            dl->AddText(fontBold, fontSmall->FontSize, ImVec2(c.x - ts.x * 0.5f, c.y - ts.y * 0.5f),
+                        U32(sel ? ImVec4(1, 1, 1, 1) : pal.navMuted), "?");
+        }
+        dl->AddText(sel ? fontBold : fontBody, fontBody->FontSize, ImVec2(p.x + S(42), p.y + (ih - fontBody->FontSize) * 0.5f),
+                    U32(sel ? ImVec4(1, 1, 1, 1) : pal.navText), "Справка");
+        const ImVec2 ks = fontSmall->CalcTextSizeA(fontSmall->FontSize, FLT_MAX, 0.f, "F1");
+        dl->AddText(fontSmall, fontSmall->FontSize, ImVec2(p.x + iw - ks.x - S(10), p.y + (ih - fontSmall->FontSize) * 0.5f),
+                    U32(pal.navMuted), "F1");
+        ImGui::Dummy(ImVec2(0, S(4)));
+    }
     {
         const ImVec2 p = ImGui::GetCursorScreenPos();
         dl->AddLine(ImVec2(p.x, p.y), ImVec2(p.x + iw, p.y), U32(pal.navLine));
@@ -627,22 +663,14 @@ void App::RenderSidebar(float w, float h)
         ImGui::SetCursorScreenPos(ImVec2(q.x + S(24), ImGui::GetCursorScreenPos().y));
         TextColored(pal.navMuted, "ПК        %s", pc.substr(11).c_str());
     }
-    ImGui::Dummy(ImVec2(0, S(4)));
-    ImGui::PushStyleColor(ImGuiCol_Button, pal.navFrame);
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, Alpha(pal.navText, 0.16f));
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive, Alpha(pal.navText, 0.24f));
-    ImGui::PushStyleColor(ImGuiCol_Text, pal.navText);
-    ImGui::PushStyleColor(ImGuiCol_Border, pal.navLine);
-    if (ImGui::Button("О программе", ImVec2(-1, 0)))
-        aboutOpen_ = true;
-    ImGui::PopStyleColor(5);
+    navBottomH_ = ImGui::GetCursorPosY() - bottomY0;
     ImGui::EndChild();
     ImGui::PopStyleVar();
     ImGui::PopStyleColor();
 }
 
 // Компактный режим: левая панель — столбец значков (подпись — в подсказке), сверху «☰» раскрывает панель целиком
-// (пульт имитатора и группы — там же); внизу — точка связи и «?» (о программе).
+// (пульт имитатора и группы — там же); внизу — точка связи и «?» (справка, F1).
 void App::RenderNavRail(float w, float h)
 {
     ImGui::PushStyleColor(ImGuiCol_ChildBg, pal.nav);
@@ -727,7 +755,7 @@ void App::RenderNavRail(float w, float h)
         }
     }
     ImGui::PopStyleVar();
-    // Внизу: связь и «О программе»
+    // Внизу: связь и «?» — справка
     const float bottom = ih + S(26);
     if (ImGui::GetCursorPosY() < h - bottom)
         ImGui::SetCursorPosY(h - bottom);
@@ -741,8 +769,8 @@ void App::RenderNavRail(float w, float h)
             ImGui::SetTooltip("%s\nЧасы ПК: %s", on ? (snap_.demo ? "Имитатор на связи" : "Прибор на связи") : "Прибор не подключён",
                               text::LocalTimeString(std::time(nullptr)).c_str());
     }
-    if (icon("##about", "?", false, "О программе", nullptr))
-        aboutOpen_ = true;
+    if (icon("##help", "?", page_ == Page::Help, "Справка (F1); «О программе» — на странице справки", nullptr))
+        ToggleHelp();
     ImGui::EndChild();
     ImGui::PopStyleVar();
     ImGui::PopStyleColor();
@@ -793,6 +821,7 @@ void App::RenderPage()
     case Page::Firmware: PageFirmware(); break;
     case Page::Terminal: PageTerminal(); break;
     case Page::Process: PageProcess(); break;
+    case Page::Help: PageHelp(); break;
     default: break;
     }
 }
@@ -907,9 +936,213 @@ void App::RenderAbout()
             }
         }
         ImGui::Spacing();
-        if (Button("Закрыть", BtnKind::Primary, ImVec2(S(120), 0)))
+        if (Button("Закрыть", BtnKind::Primary, ImVec2(S(120), 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape, false))
             ImGui::CloseCurrentPopup();
         ImGui::EndPopup();
+    }
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Горячие клавиши
+// ---------------------------------------------------------------------------------------------------------------
+
+void App::ToggleHelp()
+{
+    if (page_ == Page::Help)
+        page_ = helpBack_ == Page::Help ? Page::Measure : helpBack_;
+    else
+    {
+        helpBack_ = page_;
+        page_ = Page::Help;
+    }
+}
+
+// В начале кадра, до отрисовки. Открыто модальное окно или меню — только Esc (окна закрываются сами, меню —
+// здесь). Курсор в поле ввода (io.WantTextInput прошлого кадра) — только F1, Esc и Ctrl+S: остальное — набор текста.
+void App::HandleHotkeys()
+{
+    const ImGuiIO& io = ImGui::GetIO();
+    const bool ctrl = io.KeyCtrl, shift = io.KeyShift, alt = io.KeyAlt;
+    auto key = [](ImGuiKey k, bool repeat = false) { return ImGui::IsKeyPressed(k, repeat); };
+    auto done = [&](const char* name) { lastHotkey_ = name; };
+    const bool popup = ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel);
+
+    if (key(ImGuiKey_Escape) && !ctrl && !alt)
+    {
+        if (popup)
+        {
+            // меню «Проект ▼», «Отчёт ▼», «Записи ▼» (окна «Подробнее», «О программе», вопрос о проекте — сами)
+            proc_.projMenu = proc_.saveMenu = proc_.recMenu = -1;
+            done("Esc: меню");
+        }
+        else if (proc_.methodWin)
+        {
+            proc_.methodWin = false;
+            done("Esc: окно метода");
+        }
+        else if (page_ == Page::Process && proc_.expanded != 0)
+        {
+            proc_.expanded = 0;
+            done("Esc: карточка");
+        }
+        else if (page_ == Page::Help && !io.WantTextInput)
+        {
+            ToggleHelp();
+            done("Esc: справка");
+        }
+        return;
+    }
+    if (popup)
+        return;
+    if (key(ImGuiKey_F1) && !ctrl && !alt)
+    {
+        ToggleHelp();
+        done("F1");
+        return;
+    }
+    const bool canProject = proc_.files && !proc_.meas.empty() && !ProcessBusy();
+    if (ctrl && !alt && key(ImGuiKey_S))
+    {
+        if (shift)
+        {
+            if (opt_.useSettingsFile) // стенд и тесты: окно выбора файла не открывать
+                ProcSaveProjectAsDialog();
+            done("Ctrl+Shift+S");
+        }
+        else
+        {
+            if (canProject && !ProcProjectTarget().empty())
+                ProcessSaveProject();
+            else
+                Notify("Сохранять нечего: в «Обработке» нет прочитанных записей", 0, 3000);
+            done("Ctrl+S");
+        }
+        return;
+    }
+    if (io.WantTextInput)
+        return;
+
+    if (ctrl && !alt)
+    {
+        // Ctrl+1…7 — страницы по порядку левой панели; Ctrl+Shift+1…3 — подпункты «Обработки»
+        static const Page order[] = {Page::Measure, Page::Process, Page::Settings, Page::Diag,
+                                     Page::Files,   Page::Firmware, Page::Terminal};
+        static const char* names[] = {"Ctrl+1", "Ctrl+2", "Ctrl+3", "Ctrl+4", "Ctrl+5", "Ctrl+6", "Ctrl+7"};
+        static const char* subNames[] = {"Ctrl+Shift+1", "Ctrl+Shift+2", "Ctrl+Shift+3"};
+        for (int i = 0; i < 7; i++)
+            if (key(static_cast<ImGuiKey>(ImGuiKey_1 + i)) || key(static_cast<ImGuiKey>(ImGuiKey_Keypad1 + i)))
+            {
+                if (shift)
+                {
+                    if (i < 3)
+                    {
+                        page_ = Page::Process;
+                        proc_.view = i;
+                        proc_.expanded = 0;
+                        done(subNames[i]);
+                    }
+                }
+                else
+                {
+                    page_ = order[i];
+                    done(names[i]);
+                }
+                return;
+            }
+        if (key(ImGuiKey_N) && !shift)
+        {
+            page_ = Page::Process;
+            if (!ProcessBusy() && (proc_.dir[0] || !proc_.outDir.empty()))
+                ProcessNewProject();
+            done("Ctrl+N");
+            return;
+        }
+        if (key(ImGuiKey_O) && !shift)
+        {
+            page_ = Page::Process;
+            if (opt_.useSettingsFile)
+                ProcOpenProjectDialog();
+            done("Ctrl+O");
+            return;
+        }
+        if (key(ImGuiKey_R))
+        {
+            const bool cont = ProcCont();
+            const bool canReport = proc_.files && !proc_.meas.empty() && !ProcessBusy() && (!cont || !proc_.pos.empty());
+            if (canReport)
+            {
+                settings_.reportFull = shift;
+                SaveSettingsSoon();
+                ProcessSaveReport();
+            }
+            else
+                Notify("Отчёт сохранить нельзя: нет прочитанных записей или положений (или идёт чтение)", 0, 3000);
+            done(shift ? "Ctrl+Shift+R" : "Ctrl+R");
+            return;
+        }
+        if (key(ImGuiKey_B) && !shift)
+        {
+            settings_.navCollapsed = NavRail() ? 0 : 1;
+            SaveSettingsSoon();
+            done("Ctrl+B");
+            return;
+        }
+        if (key(ImGuiKey_F) && !shift && page_ == Page::Help)
+        {
+            help_.focusSearch = true;
+            done("Ctrl+F");
+            return;
+        }
+    }
+    if (key(ImGuiKey_F5) && !ctrl && !alt)
+    {
+        if (!proc_.load.valid() && (proc_.dir[0] || !proc_.picked.empty()))
+        {
+            page_ = Page::Process;
+            ProcLoad();
+        }
+        done("F5");
+        return;
+    }
+    if (page_ != Page::Process)
+        return;
+    // «Обработка»: положения груза, карточки
+    if (ctrl && !alt && !shift && key(ImGuiKey_E))
+    {
+        proc_.expanded = proc_.expanded != 0 ? 0 : proc_.hoverCard != 0 ? proc_.hoverCard : 3;
+        done("Ctrl+E");
+        return;
+    }
+    if (ctrl && !alt && !shift && key(ImGuiKey_Z))
+    {
+        ProcessUndoDelete();
+        done("Ctrl+Z");
+        return;
+    }
+    if ((!ctrl && !alt && key(ImGuiKey_PageUp, true)) || (alt && !ctrl && key(ImGuiKey_LeftArrow, true)))
+    {
+        ProcessSelectNext(-1);
+        done("PgUp");
+        return;
+    }
+    if ((!ctrl && !alt && key(ImGuiKey_PageDown, true)) || (alt && !ctrl && key(ImGuiKey_RightArrow, true)))
+    {
+        ProcessSelectNext(1);
+        done("PgDn");
+        return;
+    }
+    if ((!ctrl && !alt && key(ImGuiKey_Insert)) ||
+        (ctrl && !alt && (key(ImGuiKey_Equal) || key(ImGuiKey_KeypadAdd))))
+    {
+        ProcessAddPosition();
+        done("Ins");
+        return;
+    }
+    if (!ctrl && !alt && key(ImGuiKey_Delete))
+    {
+        ProcessDeleteSelected();
+        done("Del");
+        return;
     }
 }
 

@@ -84,6 +84,8 @@ float App::ProcCardTitle(const char* title, int card)
         ImGui::Dummy(ImVec2(0, ImGui::GetFrameHeight()));
         return ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x - S(4);
     }
+    if (ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows))
+        proc_.hoverCard = card; // Ctrl+E — развернуть карточку под указателем
     const ImVec2 start = ImGui::GetCursorScreenPos();
     const float right = ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x;
     const float bs = ImGui::GetFrameHeight();
@@ -159,7 +161,8 @@ void App::ProcHeader(float w)
                saving ? "Отчёт сохраняется" : cont ? "Нет положений" : "Нет замеров"))
         ProcessSaveReport();
     if (ImGui::IsItemHovered() && !saving && canSave)
-        ImGui::SetTooltip("В папку с файлами: %s (лист «Протокол» с графиками, «Графики», таблицы, «Проверки»%s),\n"
+        ImGui::SetTooltip("Сохранить отчёт (Ctrl+R; полный — Ctrl+Shift+R)\n"
+                          "В папку с файлами: %s (лист «Протокол» с графиками, «Графики», таблицы, «Проверки»%s),\n"
                           "картинки графиков — PNG рядом. Краткий / полный — стрелка рядом",
                           heel::kReportName, settings_.reportFull ? ", «Расчёт по шагам»" : "");
     ImGui::SameLine(0, S(2));
@@ -172,7 +175,7 @@ void App::ProcHeader(float w)
     ImGui::SetNextWindowPos(ImVec2(sm0.x + arrowW, ImGui::GetItemRectMax().y + S(4)), ImGuiCond_Appearing, ImVec2(1, 0));
     if (ImGui::BeginPopup("##repmenu_pop"))
     {
-        if (ImGui::MenuItem("Краткий отчёт", nullptr, !settings_.reportFull))
+        if (ImGui::MenuItem("Краткий отчёт", "Ctrl+R", !settings_.reportFull))
         {
             settings_.reportFull = false;
             SaveSettingsSoon();
@@ -180,7 +183,7 @@ void App::ProcHeader(float w)
         }
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("«Протокол», «Графики», «Проверки», таблицы, сырые данные");
-        if (ImGui::MenuItem("Полный отчёт (+ «Расчёт по шагам»)", nullptr, settings_.reportFull))
+        if (ImGui::MenuItem("Полный отчёт (+ «Расчёт по шагам»)", "Ctrl+Shift+R", settings_.reportFull))
         {
             settings_.reportFull = true;
             SaveSettingsSoon();
@@ -364,6 +367,8 @@ void App::ProcTabsCard(float w, float h)
         const bool cont = ProcCont();
         const char* labels[] = {cont ? "Положения груза" : "Замеры", "Правила РС", "Перемещения", "Журнал"};
         static const int values[] = {0, 1, 2, 3};
+        if (ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows))
+            proc_.hoverCard = 3;
         const float right = ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x;
         const ImVec2 start = ImGui::GetCursorScreenPos();
         const float bs = ImGui::GetFrameHeight();
@@ -424,6 +429,8 @@ void App::ProcGraphsCard(float w, float h)
         const bool cont = ProcCont();
         const char* labels[] = {cont ? "Запись с положениями" : "Графики крена", "Контроль M – tg θ"};
         static const int values[] = {0, 1};
+        if (ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows))
+            proc_.hoverCard = proc_.gtab == 0 ? 1 : 2;
         const float right = ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x;
         const ImVec2 start = ImGui::GetCursorScreenPos();
         const float bs = ImGui::GetFrameHeight();
@@ -449,6 +456,7 @@ void App::ProcGraphsCard(float w, float h)
 // Страница «Обработка».
 void App::PageProcess()
 {
+    proc_.hoverCard = 0; // карточки этого кадра отметят себя (Ctrl+E — в следующем)
     ProcMethodWindow(); // окно своих методов — поверх страницы
     ProcKpiDetail();    // окно «Подробнее» карточки-показателя
     ProcAskProjectDialog(); // в папке есть проект — открыть его или начать новый

@@ -406,6 +406,7 @@ void App::ProcFindPositions(bool restore)
     proc_.pos.clear();
     proc_.sel = -1;
     proc_.posEdited = false;
+    proc_.undoValid = false;
     proc_.rsManual.clear();
     proc_.editsSaveAt = 0;
     if (!ProcCont() || !proc_.files)
@@ -982,7 +983,7 @@ void App::ProcParams(float w)
             if (ImGui::IsItemHovered())
                 ImGui::SetTooltip("Отдельные файлы (Ctrl / Shift — несколько)");
             ImGui::Separator();
-            if (ImGui::MenuItem("Перечитать"))
+            if (ImGui::MenuItem("Перечитать", "F5"))
                 ProcLoad();
             if (proc_.recMenu < 0)
                 ImGui::CloseCurrentPopup();
@@ -1578,6 +1579,107 @@ void App::ProcPanes(int post, float w, float h, bool stacked, bool forExport)
 // Одна запись — весь опыт: положения груза
 // ---------------------------------------------------------------------------------------------------------------
 
+// Самый длинный свободный участок записи (между положениями, с краями записи); true — не короче 4 с.
+bool App::ProcFreeGap(double& gapA, double& gapB) const
+{
+    gapA = gapB = 0;
+    if (!ProcCont() || !proc_.files)
+        return false;
+    const auto& m = proc_.meas[static_cast<std::size_t>(proc_.rec)];
+    const auto* files = proc_.files.get();
+    const int mp = heel::MainPost(m);
+    const heel::File* mainFile = mp >= 0 ? &(*files)[static_cast<std::size_t>(m.post[mp].file)] : nullptr;
+    if (!mainFile || mainFile->log.rows.empty())
+        return false;
+    const double tBeg = mainFile->log.rows.front().t, tEnd = mainFile->log.rows.back().t;
+    std::vector<std::pair<double, double>> sp;
+    for (const auto& p : proc_.pos)
+        sp.push_back({std::min(p.t0, p.t1), std::max(p.t0, p.t1)});
+    std::sort(sp.begin(), sp.end());
+    double prev = tBeg;
+    sp.push_back({tEnd, tEnd});
+    for (const auto& [a, b] : sp)
+    {
+        if (a - prev > gapB - gapA)
+        {
+            gapA = prev;
+            gapB = a;
+        }
+        prev = std::max(prev, b);
+    }
+    return gapB - gapA >= 4.0;
+}
+
+bool App::ProcessAddPosition()
+{
+    double gapA = 0, gapB = 0;
+    if (!ProcFreeGap(gapA, gapB))
+        return false;
+    heel::Position p;
+    p.t0 = gapA + std::min(1.0, 0.25 * (gapB - gapA));
+    p.t1 = gapB - std::min(1.0, 0.25 * (gapB - gapA));
+    proc_.pos.push_back(p);
+    ProcSortPositions();
+    for (std::size_t i = 0; i < proc_.pos.size(); i++)
+        if (proc_.pos[i].t0 == p.t0)
+            proc_.sel = static_cast<int>(i);
+    proc_.posEdited = true;
+    proc_.dirty = true;
+    return true;
+}
+
+void App::ProcDeletePosition(int index)
+{
+    if (index < 0 || index >= static_cast<int>(proc_.pos.size()))
+        return;
+    proc_.undoValid = true;
+    proc_.undoIndex = index;
+    proc_.undoPos = proc_.pos[static_cast<std::size_t>(index)];
+    proc_.pos.erase(proc_.pos.begin() + index);
+    ProcSortPositions();
+    proc_.sel = -1;
+    proc_.posEdited = true;
+    proc_.dirty = true;
+}
+
+bool App::ProcessDeleteSelected()
+{
+    if (!ProcCont() || proc_.sel < 0 || proc_.sel >= static_cast<int>(proc_.pos.size()))
+        return false;
+    ProcDeletePosition(proc_.sel);
+    ProcLog("Положение удалено (Del) — вернуть: Ctrl+Z");
+    return true;
+}
+
+bool App::ProcessUndoDelete()
+{
+    if (!proc_.undoValid || !ProcCont())
+        return false;
+    proc_.undoValid = false;
+    const heel::Position p = proc_.undoPos;
+    proc_.pos.push_back(p);
+    ProcSortPositions();
+    for (std::size_t i = 0; i < proc_.pos.size(); i++)
+        if (proc_.pos[i].t0 == p.t0 && proc_.pos[i].t1 == p.t1)
+            proc_.sel = static_cast<int>(i);
+    proc_.posEdited = true;
+    proc_.dirty = true;
+    ProcLog("Удалённое положение возвращено (Ctrl+Z)");
+    return true;
+}
+
+bool App::ProcessSelectNext(int step)
+{
+    const int n = ProcCont() ? static_cast<int>(proc_.pos.size()) : 0;
+    if (n == 0)
+        return false;
+    if (proc_.sel < 0 || proc_.sel >= n)
+        proc_.sel = step > 0 ? 0 : n - 1;
+    else
+        proc_.sel = std::clamp(proc_.sel + step, 0, n - 1);
+    return true;
+}
+
 void App::ProcPositions(float w, float h)
 {
     if (BeginCard("##proc_pos", ImVec2(w, h)))
@@ -1592,24 +1694,7 @@ void App::ProcPositions(float w, float h)
 
         // Свободный участок записи для «+ Положение»: самый длинный промежуток между положениями
         double gapA = 0, gapB = 0;
-        {
-            std::vector<std::pair<double, double>> sp;
-            for (const auto& p : proc_.pos)
-                sp.push_back({std::min(p.t0, p.t1), std::max(p.t0, p.t1)});
-            std::sort(sp.begin(), sp.end());
-            double prev = tBeg;
-            sp.push_back({tEnd, tEnd});
-            for (const auto& [a, b] : sp)
-            {
-                if (a - prev > gapB - gapA)
-                {
-                    gapA = prev;
-                    gapB = a;
-                }
-                prev = std::max(prev, b);
-            }
-        }
-        const bool canAdd = gapB - gapA >= 4.0;
+        const bool canAdd = ProcFreeGap(gapA, gapB);
 
         // Заголовок: число положений, запись; справа — «+ Положение», «Найти заново»
         ImGui::AlignTextToFramePadding();
@@ -1638,20 +1723,9 @@ void App::ProcPositions(float w, float h)
         }
         ImGui::SameLine(btnX - ImGui::GetWindowPos().x);
         if (Button("+ Положение", BtnKind::Normal, ImVec2(bw1, 0), !canAdd, "Нет свободного участка записи"))
-        {
-            heel::Position p;
-            p.t0 = gapA + std::min(1.0, 0.25 * (gapB - gapA));
-            p.t1 = gapB - std::min(1.0, 0.25 * (gapB - gapA));
-            proc_.pos.push_back(p);
-            ProcSortPositions();
-            for (std::size_t i = 0; i < proc_.pos.size(); i++)
-                if (proc_.pos[i].t0 == p.t0)
-                    proc_.sel = static_cast<int>(i);
-            proc_.posEdited = true;
-            proc_.dirty = true;
-        }
+            ProcessAddPosition();
         if (ImGui::IsItemHovered() && canAdd)
-            ImGui::SetTooltip("Новое положение на самом длинном свободном участке записи (%.1f…%.1f с);\n"
+            ImGui::SetTooltip("+ Положение (Ins): новое положение на самом длинном свободном участке записи (%.1f…%.1f с);\n"
                               "границы — в таблице или перетаскиванием на графике.",
                               gapA, gapB);
         ImGui::SameLine(0, S(8));
@@ -1903,7 +1977,7 @@ void App::ProcPositions(float w, float h)
                         actionAt = static_cast<int>(i);
                     }
                     if (ImGui::IsItemHovered())
-                        ImGui::SetTooltip("Удалить положение");
+                        ImGui::SetTooltip("Удалить положение (Del; отмена — Ctrl+Z)");
                     ImGui::PopStyleVar();
                     ImGui::PopID();
                 }
@@ -1930,7 +2004,12 @@ void App::ProcPositions(float w, float h)
                         proc_.pos.erase(proc_.pos.begin() + static_cast<std::ptrdiff_t>(at) + 1);
                     }
                     else if (action == 3)
+                    {
+                        proc_.undoValid = true;
+                        proc_.undoIndex = actionAt;
+                        proc_.undoPos = proc_.pos[at];
                         proc_.pos.erase(proc_.pos.begin() + static_cast<std::ptrdiff_t>(at));
+                    }
                     ProcSortPositions();
                     proc_.sel = action == 3 ? -1 : actionAt;
                     proc_.posEdited = true;

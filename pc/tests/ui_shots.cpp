@@ -1183,6 +1183,170 @@ int main(int argc, char** argv)
             st.Shot("40_project_menu");
             app.ProcessShowProjectMenu(-1);
             st.Run(1100);
+            // Горячие клавиши (1.8.2): нажатия — через очередь ввода ImGui, как от клавиатуры
+            {
+                enum
+                {
+                    kCtrl = 1,
+                    kShift = 2,
+                    kAlt = 4
+                };
+                auto press = [&](ImGuiKey k, int mods = 0) {
+                    ImGuiIO& io = ImGui::GetIO();
+                    io.AddKeyEvent(ImGuiMod_Ctrl, (mods & kCtrl) != 0);
+                    io.AddKeyEvent(ImGuiMod_Shift, (mods & kShift) != 0);
+                    io.AddKeyEvent(ImGuiMod_Alt, (mods & kAlt) != 0);
+                    st.Frame();
+                    io.AddKeyEvent(k, true);
+                    st.Frame();
+                    io.AddKeyEvent(k, false);
+                    io.AddKeyEvent(ImGuiMod_Ctrl, false);
+                    io.AddKeyEvent(ImGuiMod_Shift, false);
+                    io.AddKeyEvent(ImGuiMod_Alt, false);
+                    st.Frame();
+                };
+                CHECK(app.GetPage() == ui::Page::Process);
+                press(ImGuiKey_F1);
+                CHECK_MSG(app.GetPage() == ui::Page::Help, "F1 — не справка");
+                press(ImGuiKey_F1);
+                CHECK_MSG(app.GetPage() == ui::Page::Process, "F1 ещё раз — не назад");
+                press(ImGuiKey_1, kCtrl);
+                CHECK_MSG(app.GetPage() == ui::Page::Measure, "Ctrl+1 — не «Измерение»");
+                press(ImGuiKey_7, kCtrl);
+                CHECK_MSG(app.GetPage() == ui::Page::Terminal, "Ctrl+7 — не «Терминал»");
+                press(ImGuiKey_3, kCtrl);
+                CHECK_MSG(app.GetPage() == ui::Page::Settings, "Ctrl+3 — не «Настройки»");
+                press(ImGuiKey_2, kCtrl);
+                CHECK_MSG(app.GetPage() == ui::Page::Process, "Ctrl+2 — не «Обработка»");
+                press(ImGuiKey_3, kCtrl | kShift);
+                CHECK_MSG(app.ProcessSubView() == 2, "Ctrl+Shift+3 — не «Графики»");
+                press(ImGuiKey_2, kCtrl | kShift);
+                CHECK_MSG(app.ProcessSubView() == 1, "Ctrl+Shift+2 — не «Положения и расчёт»");
+                // Положения: следующее / предыдущее, удалить и вернуть, добавить
+                const int n = static_cast<int>(app.ProcessPositions().size());
+                app.ProcessSelectPosition(-1);
+                press(ImGuiKey_PageDown);
+                CHECK_MSG(app.ProcessSelected() == 0, "PgDn: выбрано %d", app.ProcessSelected());
+                press(ImGuiKey_PageDown);
+                CHECK(app.ProcessSelected() == 1);
+                press(ImGuiKey_RightArrow, kAlt);
+                CHECK(app.ProcessSelected() == 2);
+                press(ImGuiKey_PageUp);
+                press(ImGuiKey_LeftArrow, kAlt);
+                CHECK_MSG(app.ProcessSelected() == 0, "PgUp, Alt+←: выбрано %d", app.ProcessSelected());
+                press(ImGuiKey_PageUp);
+                CHECK(app.ProcessSelected() == 0); // у первого — остаётся
+                press(ImGuiKey_PageDown);
+                const auto delPos = app.ProcessPositions()[1];
+                press(ImGuiKey_Delete);
+                CHECK_MSG(static_cast<int>(app.ProcessPositions().size()) == n - 1 && app.ProcessSelected() == -1,
+                          "Del: положений %d (было %d)", static_cast<int>(app.ProcessPositions().size()), n);
+                press(ImGuiKey_Z, kCtrl);
+                CHECK_MSG(static_cast<int>(app.ProcessPositions().size()) == n, "Ctrl+Z не вернул положение");
+                CHECK(app.ProcessSelected() == 1 && app.ProcessPositions()[1].t0 == delPos.t0 &&
+                      app.ProcessPositions()[1].t1 == delPos.t1);
+                press(ImGuiKey_Z, kCtrl); // второй раз — нечего возвращать
+                CHECK(static_cast<int>(app.ProcessPositions().size()) == n);
+                press(ImGuiKey_Insert);
+                CHECK(app.LastHotkey() == "Ins");
+                if (static_cast<int>(app.ProcessPositions().size()) == n + 1)
+                {
+                    press(ImGuiKey_Delete); // новое выбрано — оно и удаляется
+                    CHECK(static_cast<int>(app.ProcessPositions().size()) == n);
+                }
+                st.Run(1100);
+                CHECK_NEAR(app.ProcessRs().r.hk, 0.0531, 0.001, "M021: h_k после клавиш положений");
+                // Ctrl+E — карточка развёрнута, Esc — назад; Ctrl+B — панель значками и обратно
+                press(ImGuiKey_E, kCtrl);
+                CHECK_MSG(app.ProcessExpanded() != 0, "Ctrl+E не развернул карточку");
+                press(ImGuiKey_Escape);
+                CHECK_MSG(app.ProcessExpanded() == 0, "Esc не свернул карточку");
+                const bool rail = app.NavCollapsedNow();
+                press(ImGuiKey_B, kCtrl);
+                CHECK_MSG(app.NavCollapsedNow() != rail, "Ctrl+B не переключил панель");
+                press(ImGuiKey_B, kCtrl);
+                CHECK(app.NavCollapsedNow() == rail);
+                app.SetNavCollapsed(-1);
+                // Меню: Esc закрывает
+                app.ProcessShowSaveMenu(1);
+                st.Frame();
+                st.Frame();
+                CHECK(ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel));
+                press(ImGuiKey_1, kCtrl); // при открытом меню страницы не переключаются
+                CHECK(app.GetPage() == ui::Page::Process);
+                press(ImGuiKey_Escape);
+                st.Frame();
+                CHECK_MSG(!ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel),
+                          "Esc не закрыл меню отчёта");
+                // Ctrl+O в стенде — без окна выбора файла; страница — «Обработка»
+                press(ImGuiKey_O, kCtrl);
+                CHECK(app.LastHotkey() == "Ctrl+O" && app.GetPage() == ui::Page::Process);
+                // В поле ввода клавиши — тексту (кроме F1, Esc, Ctrl+S): поиск справки, Ctrl+F
+                press(ImGuiKey_F1);
+                press(ImGuiKey_F, kCtrl);
+                st.Frame();
+                CHECK_MSG(ImGui::GetIO().WantTextInput, "Ctrl+F: поле поиска справки не в фокусе");
+                ImGui::GetIO().AddInputCharactersUTF8("плеч");
+                st.Frame();
+                st.Frame();
+                CHECK_MSG(app.HelpFound() >= 4, "поиск «плеч»: найдено %d", app.HelpFound());
+                press(ImGuiKey_1, kCtrl);
+                CHECK_MSG(app.GetPage() == ui::Page::Help, "Ctrl+1 в поле поиска переключил страницу");
+                press(ImGuiKey_Delete);
+                CHECK(static_cast<int>(app.ProcessPositions().size()) == n);
+                press(ImGuiKey_S, kCtrl);
+                CHECK_MSG(app.LastHotkey() == "Ctrl+S", "Ctrl+S в поле ввода не сработал");
+                press(ImGuiKey_F1);
+                CHECK_MSG(app.GetPage() == ui::Page::Process, "F1 в поле поиска не вернул назад");
+                app.HelpSetSearch("");
+                app.ProcessSelectPosition(-1);
+                app.ProcessSetSubView(-1);
+                st.Run(1100);
+            }
+            // Справка: страница, поиск, горячие клавиши; светлая / тёмная, 1280 × 800 и 1280 × 720
+            {
+                st.Run(6000); // сообщение «Проект сохранён» (Ctrl+S выше) гаснет
+                app.SetPage(ui::Page::Help);
+                st.Run(1100);
+                st.Shot("41_help", true);
+                CHECK(app.HelpSection() == 0);
+                app.HelpGoTo(8);
+                st.Run(1100);
+                st.Shot("41_help_keys", true);
+                CHECK_MSG(app.HelpSection() == 8, "оглавление: раздел %d вместо 8", app.HelpSection());
+                app.HelpGoTo(3);
+                st.Run(1100);
+                st.Shot("41_help_processing", true);
+                app.HelpSetSearch("плеч");
+                st.Run(1100);
+                st.Shot("41_help_search", true);
+                CHECK(app.HelpFound() >= 4);
+                app.HelpSetSearch("абракадабра");
+                st.Run(1100);
+                CHECK(app.HelpFound() == 0);
+                app.HelpSetSearch("");
+                app.HelpGoTo(0);
+                ui::ApplyTheme(true, 1.f);
+                ImPlot::StyleColorsDark();
+                st.Run(1100);
+                st.Shot("41_help_dark", true);
+                st.size = ImVec2(1280, 720);
+                st.Run(1100);
+                st.Shot("41_help_1280x720_dark", true);
+                ui::ApplyTheme(false, 1.f);
+                ImPlot::StyleColorsLight();
+                st.Shot("41_help_1280x720", true);
+                app.HelpGoTo(1);
+                st.Run(1100);
+                st.Shot("41_help_1280x720_prep", true);
+                st.size = ImVec2(1024, 700);
+                app.HelpGoTo(0);
+                st.Run(1100);
+                st.Shot("41_help_1024x700", true);
+                st.size = ImVec2(1280, 800);
+                app.SetPage(ui::Page::Process);
+                st.Run(1100);
+            }
             // Дашборд: тёмная тема, развёрнутая карточка записи (на всю область) и назад
             ui::ApplyTheme(true, 1.f);
             ImPlot::StyleColorsDark();

@@ -32,7 +32,7 @@ struct ImVec4;
 namespace ui
 {
 
-inline constexpr const char* kAppVersion = "1.8.1";
+inline constexpr const char* kAppVersion = "1.8.2";
 
 enum class Page
 {
@@ -43,6 +43,7 @@ enum class Page
     Firmware,
     Terminal,
     Process, // «Обработка» (опыт кренования по файлам)
+    Help,    // «Справка» (F1)
     Count
 };
 
@@ -237,6 +238,21 @@ public:
     void ProcessShowSaveMenu(int m) { proc_.saveMenu = m; }
     steps::Steps ProcessSteps() const { return ProcSteps(); }
     void ProcessShowProjectMenu(int menu) { proc_.projMenu = menu; } // стенд: 1 — «Открыть проект», 2 — «Сохранить ▾», -1 — закрыть
+    int ProcessSelected() const { return proc_.sel; }
+    int ProcessExpanded() const { return proc_.expanded; }
+    bool ProcessAddPosition();      // «+ Положение» (Ins): на самом длинном свободном участке записи
+    bool ProcessDeleteSelected();   // удалить выбранное положение (Del); отмена — ProcessUndoDelete (Ctrl+Z)
+    bool ProcessUndoDelete();
+    bool ProcessSelectNext(int step); // предыдущее / следующее положение (PgUp / PgDn, Alt+← / →)
+    // Справка (AppHelp.cpp): строка поиска, раздел оглавления (прокрутить к нему)
+    void HelpSetSearch(const std::string& q);
+    void HelpGoTo(int section) { help_.goTo = section; }
+    int HelpSection() const { return help_.current; }
+    int HelpFound() const { return help_.found; }
+    bool NavCollapsedNow() const { return NavRail(); }
+    // Горячие клавиши (App::HandleHotkeys, в начале Render): стенд их тоже «нажимает» через io.AddKeyEvent.
+    // Последнее сработавшее сочетание — для проверки
+    const std::string& LastHotkey() const { return lastHotkey_; }
 
 private:
     // Каркас
@@ -246,6 +262,13 @@ private:
     void RenderPage();
     void RenderToasts();
     void RenderAbout();
+    void HandleHotkeys();          // горячие клавиши (App.cpp)
+    void ToggleHelp();             // F1: справка / назад
+    void PageHelp();               // «Справка» (AppHelp.cpp)
+    void ProcOpenProjectDialog();  // Ctrl+O: окно выбора файла проекта
+    void ProcSaveProjectAsDialog(); // Ctrl+Shift+S
+    bool ProcFreeGap(double& a, double& b) const; // самый длинный свободный участок записи (для «+ Положение»)
+    void ProcDeletePosition(int index); // удалить положение, запомнив для отмены
     void RenderDemoPanel();
     void NotConnectedPanel(const char* what);
     void Notify(const std::string& text, int kind = 0, int ms = 4000, const std::string& folder = {});
@@ -391,10 +414,23 @@ private:
     std::vector<Toast> toasts_;
     bool themeChanged_ = false;
     bool aboutOpen_ = false;
+    Page helpBack_ = Page::Measure; // F1 ещё раз — сюда
+    std::string lastHotkey_;
+    // Справка
+    struct
+    {
+        char search[128] = {};
+        int goTo = -1;     // прокрутить к разделу (оглавление)
+        int current = 0;   // раздел вверху видимой части
+        int found = -1;    // найдено по поиску (-1 — поиска нет)
+        bool focusSearch = false;
+        std::string lastQuery; // поиск сменился — текст к началу
+    } help_;
     bool demoPanel_ = true;
     int portIndex_ = 0;
     std::uint64_t lastConnectSeq_ = 0;
     float bottomH_ = 0.f; // «Файлы»: высота нижней панели (прошлый кадр)
+    float navBottomH_ = 0.f; // левая панель: высота нижнего блока (справка, связь, часы; прошлый кадр)
 
     // Измерение
     struct
@@ -574,6 +610,10 @@ private:
         int gtab = 0;                     // компактный режим: вкладка карточки графиков (0 — запись, 1 — контроль)
         int view = -1;                    // подпункт: -1 — сам, 0 — обзор, 1 — положения и расчёт, 2 — графики
         int kpiDetail = -1;               // открыто окно «Подробнее» карточки-показателя (номер) или -1
+        int hoverCard = 0;                // карточка под указателем (прошлый кадр): 1 — запись, 2 — контроль, 3 — вкладки
+        bool undoValid = false;           // удалённое положение (Del) — для отмены Ctrl+Z
+        int undoIndex = -1;
+        heel::Position undoPos;
         float tabsMin = 0.f;              // карточка вкладок: наибольшая высота среди вкладок (не «дёргается»)
         std::uint64_t tabsKey = 0;        // её опыт (строк, режим): сменился — наибольшая заново
         // В папке есть проект: спросить — открыть его или начать новый (каждый раз, кроме «Открыть проект»)

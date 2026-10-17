@@ -631,23 +631,39 @@ void App::ProcAskProjectDialog()
 // Кнопки и меню
 // ---------------------------------------------------------------------------------------------------------------
 
+// Окна выбора файла проекта (меню «Проект ▼», Ctrl+O, Ctrl+Shift+S). В стенде и тестах не вызываются.
+void App::ProcOpenProjectDialog()
+{
+    if (ProcessBusy())
+        return;
+    std::string path = proc_.projectPath.empty() ? std::string() : proc_.projectPath;
+    if (dialogs::PickFile(path, kProjectFilter, L"Открыть проект опыта"))
+        ProcessOpenProject(path);
+}
+
+void App::ProcSaveProjectAsDialog()
+{
+    if (!proc_.files || proc_.meas.empty() || ProcessBusy())
+        return;
+    const std::string target = ProcProjectTarget();
+    std::string path = target.empty() ? std::string("Опыт.krenomer") : target;
+    if (dialogs::SaveFile(path, kProjectFilter, L"Сохранить проект опыта", L"krenomer"))
+        ProcessSaveProject(path);
+}
+
 void App::ProcProjectMenus(bool open, bool save)
 {
     const bool busy = ProcessBusy();
     const bool canSave = proc_.files && !proc_.meas.empty() && !busy;
     if (open)
     {
-        if (ImGui::MenuItem("Новый проект кренования", nullptr, false, !busy && (proc_.dir[0] || !proc_.outDir.empty())))
+        if (ImGui::MenuItem("Новый проект кренования", "Ctrl+N", false, !busy && (proc_.dir[0] || !proc_.outDir.empty())))
             ProcessNewProject();
         if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
             ImGui::SetTooltip("Записи этой папки заново — с чистыми плечами и без прежних правок положений\n"
                               "(сохранённый проект не трогается)");
-        if (ImGui::MenuItem("Открыть файл проекта…", nullptr, false, !busy))
-        {
-            std::string path = proc_.projectPath.empty() ? std::string() : proc_.projectPath;
-            if (dialogs::PickFile(path, kProjectFilter, L"Открыть проект опыта"))
-                ProcessOpenProject(path);
-        }
+        if (ImGui::MenuItem("Открыть файл проекта…", "Ctrl+O", false, !busy))
+            ProcOpenProjectDialog();
         if (!settings_.recentProjects.empty())
         {
             ImGui::Separator();
@@ -675,16 +691,12 @@ void App::ProcProjectMenus(bool open, bool save)
     if (save)
     {
         const std::string target = ProcProjectTarget();
-        if (ImGui::MenuItem("Сохранить проект", nullptr, false, canSave && !target.empty()))
+        if (ImGui::MenuItem("Сохранить проект", "Ctrl+S", false, canSave && !target.empty()))
             ProcessSaveProject();
         if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled) && !target.empty())
             ImGui::SetTooltip("%s", Shown(target).c_str());
-        if (ImGui::MenuItem("Сохранить проект как…", nullptr, false, canSave))
-        {
-            std::string path = target.empty() ? std::string("Опыт.krenomer") : target;
-            if (dialogs::SaveFile(path, kProjectFilter, L"Сохранить проект опыта", L"krenomer"))
-                ProcessSaveProject(path);
-        }
+        if (ImGui::MenuItem("Сохранить проект как…", "Ctrl+Shift+S", false, canSave))
+            ProcSaveProjectAsDialog();
         const std::string folder = proc_.outDir.empty() ? std::string(proc_.dir) : proc_.outDir;
         if (ImGui::MenuItem("Открыть папку проекта", nullptr, false, !folder.empty()))
             dialogs::OpenFolder(folder);
@@ -736,6 +748,9 @@ float App::ProcProjectButtons(float x, bool narrow, bool measure)
             ImGui::OpenPopup("##proj_all");
             proc_.projMenu = 0;
         }
+        if (ImGui::IsItemHovered() && !ImGui::IsPopupOpen("##proj_all"))
+            ImGui::SetTooltip("Проект опыта (*.krenomer): новый (Ctrl+N), открыть (Ctrl+O), сохранить (Ctrl+S),\n"
+                              "сохранить как (Ctrl+Shift+S), недавние, автосохранение");
         popupAt("##proj_all");
         if (ImGui::BeginPopup("##proj_all"))
         {
@@ -769,7 +784,7 @@ float App::ProcProjectButtons(float x, bool narrow, bool measure)
                busy ? "Идёт чтение или сохранение" : "Нет прочитанных записей"))
         ProcessSaveProject();
     if (ImGui::IsItemHovered() && canSave && !target.empty())
-        ImGui::SetTooltip("Сохранить проект опыта: %s", Shown(target).c_str());
+        ImGui::SetTooltip("Сохранить проект опыта (Ctrl+S): %s", Shown(target).c_str());
     ImGui::SameLine(0, S(2));
     const ImVec2 saveMin = ImGui::GetItemRectMin();
     if (Button("▼##projsave", BtnKind::Normal, ImVec2(arrowW, 0)) || proc_.projMenu == 2)
