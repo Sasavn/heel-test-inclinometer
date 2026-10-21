@@ -30,6 +30,19 @@ __pycache__/
 # Журналы (в т.ч. flash.log, usb_flash.log, usb_diag.log скриптов tools/flash)
 *.log
 
+# Local ESP-IDF checkout, downloaded official toolchains and resolved components
+.tools/
+tab5/managed_components/
+tab5/sdkconfig
+tab5/sdkconfig.old
+tab5/tests/output_ui/
+tab5/tests/output_services/
+tab5/tests/*.exe
+tab5/tests/test-sd/
+tab5/tests/test-usb/
+tab5/test-sd/
+tab5/test-usb/
+
 # ---------------------------------------------------------------------------
 # Eclipse / STM32CubeIDE / STM32CubeMX: рабочее пространство и личные настройки
 # ---------------------------------------------------------------------------
