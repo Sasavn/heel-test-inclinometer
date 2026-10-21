@@ -1,5 +1,5 @@
 #pragma code_page(65001)
-// Значок и сведения о файле krenomer.exe (Свойства → Подробно). Пути и версию подставляет CMake (configure_file);
+// Значок и сведения о файле krenomer-esp32.exe (Свойства → Подробно). Пути и версию подставляет CMake (configure_file);
 // версия — project(VERSION) в CMakeLists.txt, она же kAppVersion (App.hpp, проверяется при сборке).
 #include <winres.h>
 
@@ -23,7 +23,7 @@ BEGIN
             VALUE "FileVersion", "@KRENOMER_VERSION_DOTS@"
             VALUE "InternalName", "krenomer"
             VALUE "LegalCopyright", "© 2026, авторы проекта «Регистратор крена»"
-            VALUE "OriginalFilename", "krenomer.exe"
+            VALUE "OriginalFilename", "krenomer-esp32.exe"
             VALUE "ProductName", "Регистратор крена"
             VALUE "ProductVersion", "@KRENOMER_VERSION_DOTS@"
         END

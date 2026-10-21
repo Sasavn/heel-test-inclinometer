@@ -473,6 +473,17 @@ int main(int argc, char** argv)
         st.size = ImVec2(1280, 800);
     }
 
+    SECTION("Tab5 virtual firmware and recording controls (offscreen)");
+    {
+        ui::App app(ui::AppOptions{false,true,false,1791400000,7});
+        app.Sim()->SetFwVersion("1.5.0-esp32");
+        Stand st{&app};st.Run(1500);
+        CHECK(app.Link().Snapshot().ver.IsTab5());
+        app.SetPage(ui::Page::Firmware);st.Shot("tab5_firmware");
+        app.SetFactoryPage(true);st.Shot("tab5_factory");
+        app.SetPage(ui::Page::Measure);st.Shot("tab5_measure");
+    }
+
     // 2. Демо-режим
     const std::time_t simStart = std::time(nullptr);
     ui::App app(ui::AppOptions{false, true, false, simStart, 7});

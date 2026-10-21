@@ -912,7 +912,7 @@ private:
         }
         if (cmd == "ver")
         {
-            Out("BWM427 inclinometer firmware v" + fwVersion_ + ", build Oct  7 2026 21:05:00");
+            Out("BWM427 inclinometer firmware v" + fwVersion_ + (fwVersion_.find("-esp32")!=std::string::npos ? " board=tab5 chip=esp32p4 proto=2" : ", build Oct  7 2026 21:05:00"));
             Out("HAL 1.8.1, SYSCLK 96 MHz, UID 0034003A3133510B37363834");
             return Out("OK");
         }

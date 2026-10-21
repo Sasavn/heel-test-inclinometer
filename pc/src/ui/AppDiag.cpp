@@ -209,7 +209,7 @@ void App::PageDiag()
         {
             if (have)
             {
-                KV("Частота: задана / факт.", Fmt("%d Гц / %.1f Гц", s.freq, s.rate));
+                KV("Частота: задана / факт.", Fmt("%d Гц / ",s.freq)+(std::isfinite(s.rate)?Fmt("%.1f Гц",s.rate):"—"));
                 KV("Предел по шине", s.maxRate > 0 ? Fmt("%.1f Гц", s.maxRate) : "—", nullptr,
                    "1 / среднее время цикла: быстрее шина не успевает опросить оба датчика");
                 KV("Время цикла, мс", AvgRange(s.busCyc), nullptr, "Среднее (мин.…макс.): паузы и обмен с обоими датчиками");
@@ -219,7 +219,7 @@ void App::PageDiag()
                 KV("Простой до цикла, мс", AvgRange(s.busIdle), nullptr,
                    "Задержка старта цикла сверх паузы — суперцикл прибора был занят");
                 const ImVec4 fb = s.fallbacks ? pal.warn : pal.text;
-                KV("Резервный таймер", Num(s.fallbacks) + " срабатываний", &fb, "Должно быть 0 (таймер TIM5 исправен)");
+                KV("Резервный таймер", s.haveFallbacks?Num(s.fallbacks) + " срабатываний":"—", &fb, "Должно быть 0 (таймер TIM5 исправен)");
             }
             EndKV();
         }
@@ -237,9 +237,9 @@ void App::PageDiag()
                 if (snap_.haveVer && !snap_.ver.build.empty())
                     KV("Сборка", snap_.ver.build);
                 KV("Время работы", text::Duration(s.upS));
-                KV("Загрузка процессора", Fmt("%d %%", s.cpu));
-                KV("Проходов суперцикла", Num(s.loops) + " в секунду");
-                KV("Самый долгий проход", Fmt("%llu мс", static_cast<unsigned long long>(s.loopMax)));
+                KV("Загрузка процессора",s.cpu>=0?Fmt("%d %%",s.cpu):"—");
+                KV("Проходов суперцикла",s.haveLoopCounters?Num(s.loops) + " в секунду":"—");
+                KV("Самый долгий проход",s.haveLoopCounters?Fmt("%llu мс", static_cast<unsigned long long>(s.loopMax)):"—");
                 KV("Настройки во флеше", s.savePending ? "ждут сохранения" : "сохранены");
             }
             EndKV();

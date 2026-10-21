@@ -7,6 +7,7 @@
 
 #include <imgui.h>
 
+#include "../comm/TcpConnection.hpp"
 #include "../comm/NullConnection.hpp"
 #include "../comm/SerialConnection.hpp"
 #include "../comm/SimConnection.hpp"
@@ -71,6 +72,8 @@ App::~App()
     StopPcRecording(); // дописать файлы записи на ПК (и .xlsx — деструктор Recorder дождётся)
     SaveSettingsNow();
     updater_.Cancel();
+    ota_.Cancel();
+    recovery_.Shutdown();
     link_.reset();
 }
 
@@ -129,6 +132,8 @@ void App::SaveSettingsSoon()
 
 void App::MakeLink(bool demo)
 {
+    ota_.Cancel();
+    recovery_.Shutdown();
     link_.reset(); // сначала закрыть прежний порт / имитатор
     if (demo)
     {
@@ -143,6 +148,10 @@ void App::MakeLink(bool demo)
         dfuDemo_.reset();
         if (opt_.noHardware)
             link_ = std::make_unique<DeviceLink>(std::make_unique<NullConnection>(), opt_.threaded);
+#ifdef _WIN32
+        else if (tcpMode_)
+            link_ = std::make_unique<DeviceLink>(std::make_unique<TcpConnection>(tcpHost_, tcpPort_, tcpToken_), opt_.threaded);
+#endif
         else
         {
             auto conn = std::make_unique<SerialConnection>();
@@ -168,7 +177,7 @@ void App::MakeLink(bool demo)
 
 void App::StartDemo(bool on)
 {
-    if (updater_.Busy() || dl_.running)
+    if ((updater_.Busy() || ota_.Busy() || recovery_.Busy()) || dl_.running)
     {
         Notify("Дождитесь окончания скачивания / перепрошивки", 2);
         return;
@@ -208,6 +217,8 @@ void App::Tick()
         files_.listed = false;
     }
     updater_.Tick(now);
+    ota_.Tick(now);
+    recovery_.Tick();
     TickFiles();
     TickSettings();
     TickDiag();
@@ -331,7 +342,7 @@ void App::RenderTopBar(float h)
     ImGui::SetCursorPosY((h - fh) * 0.5f);
     std::string chip, chipShort;
     ImVec4 fg = pal.navText, bg = pal.navFrame;
-    if (updater_.Busy())
+    if ((updater_.Busy() || ota_.Busy() || recovery_.Busy()))
     {
         chip = "Обновление прошивки…";
         chipShort = "Прошивка…";
@@ -382,7 +393,7 @@ void App::RenderTopBar(float h)
         ImGui::SetTooltip("%s", snap_.problem.c_str());
 
     const bool off = snap_.state == LinkState::Off;
-    const bool busy = updater_.Busy() || dl_.running || PcRecording();
+    const bool busy = (updater_.Busy() || ota_.Busy() || recovery_.Busy()) || dl_.running || PcRecording();
     const char* busyWhy = PcRecording() ? "Идёт запись на ПК — сначала остановите её" : "Идёт скачивание или перепрошивка";
     ImGui::SetCursorPos(ImVec2(rightX, (h - fh) * 0.5f));
     if (snap_.demo)
@@ -416,14 +427,16 @@ void App::RenderTopBar(float h)
     }
     else
     {
-        std::string preview = settings_.port.empty() ? (narrow ? "Порт: авто" : "Порт: автоматически")
+        std::string preview = tcpMode_ ? std::string("TCP ")+tcpHost_+":"+std::to_string(tcpPort_) : settings_.port.empty() ? (narrow ? "Порт: авто" : "Порт: автоматически")
                                                      : "Порт: " + settings_.port;
         const bool open = ImGui::BeginCombo("##port", preview.c_str());
         ImGui::PopStyleColor(7);
         if (open)
         {
-            if (ImGui::Selectable("Автоматически (VID:PID 0483:5740)", settings_.port.empty()))
+            if (ImGui::Selectable("TCP Tab5 (manual host/port/token)", tcpMode_)) tcpDialog_=true;
+            if (ImGui::Selectable("Автоматически STM32 (0483:5740); Tab5 USB — вручную", settings_.port.empty() && !tcpMode_))
             {
+                if(tcpMode_) {tcpMode_=false;MakeLink(false);}
                 settings_.port.clear();
                 link_->SetPortChoice("");
             }
@@ -433,13 +446,25 @@ void App::RenderTopBar(float h)
                                           (p.ours ? "  ✓ регистратор?" : "");
                 if (ImGui::Selectable(label.c_str(), settings_.port == p.name))
                 {
-                    settings_.port = p.name;
-                    link_->SetPortChoice(p.name);
+                    const auto selected=p.name;
+                    settings_.port=selected;
+                    if(tcpMode_) {tcpMode_=false;MakeLink(false);}
+                    link_->SetPortChoice(selected);
+                    break;
                 }
             }
             if (snap_.ports.empty())
                 Muted("COM-портов нет");
             ImGui::EndCombo();
+        }
+        if(tcpDialog_) {ImGui::OpenPopup("Tab5 TCP");tcpDialog_=false;}
+        if(ImGui::BeginPopupModal("Tab5 TCP",nullptr,ImGuiWindowFlags_AlwaysAutoResize)) {
+            ImGui::InputText("IPv4",tcpHost_,sizeof(tcpHost_));
+            ImGui::InputInt("Port",&tcpPort_);
+            ImGui::InputText("Token",tcpToken_,sizeof(tcpToken_),ImGuiInputTextFlags_Password);
+            if(ImGui::Button("Connect TCP") && !busy && tcpPort_>0 && tcpPort_<=65535) {tcpMode_=true;MakeLink(false);ImGui::CloseCurrentPopup();}
+            ImGui::SameLine();if(ImGui::Button("Cancel"))ImGui::CloseCurrentPopup();
+            ImGui::EndPopup();
         }
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("Обычно — «автоматически»: программа сама находит прибор (ST Virtual COM Port 0483:5740).\n"
@@ -551,7 +576,7 @@ void App::RenderSidebar(float w, float h)
             ImVec4 bc = pal.orange;
             if (it.page == Page::Files && dl_.running)
                 badge = "⇩";
-            if (it.page == Page::Firmware && updater_.Busy())
+            if (it.page == Page::Firmware && (updater_.Busy() || ota_.Busy() || recovery_.Busy()))
                 badge = "●";
             if (it.page == Page::Measure && (Recording() || PcRecording()))
             {
@@ -725,7 +750,7 @@ void App::RenderNavRail(float w, float h)
         const ImVec4* badge = nullptr;
         if (it.page == Page::Measure && (Recording() || PcRecording()))
             badge = &red;
-        if ((it.page == Page::Files && dl_.running) || (it.page == Page::Firmware && updater_.Busy()))
+        if ((it.page == Page::Files && dl_.running) || (it.page == Page::Firmware && (updater_.Busy() || ota_.Busy() || recovery_.Busy())))
             badge = &pal.orange;
         ImGui::PushID(i);
         if (icon("##it", it.icon, page_ == it.page, it.label, badge))

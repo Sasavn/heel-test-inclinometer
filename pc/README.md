@@ -1,3 +1,14 @@
+> Tab5 ESP32 fork: see [TAB5.md](TAB5.md) for TCP, explicit USB CDC, OTA and native ROM recovery. Outputs: `krenomer-esp32.exe`.
+
+Native USB runtime and ROM recovery need no Python or esptool runtime, but
+both require a working USB Serial/JTAG **COM driver**. Espressif documents manual
+driver installation for Windows 7/8; see the [official driver guide](https://docs.espressif.com/projects/esp-iot-solution/en/latest/usb/usb_overview/usb_serial_jtag.html).
+The serial interface uses usbser / USB Serial (CDC); JTAG is a separate interface.
+No drivers were downloaded or installed for this work. Actual Windows 7 with
+this driver and a physical Tab5 remains untested. ROM checks chip/revision/security
+and the vetted Tab5 manifest; it cannot establish the physical board model.
+The user must choose the physical Tab5 and its COM port explicitly.
+
 # Регистратор крена — программа для ПК (`krenomer.exe`)
 
 Программа для Windows к [регистратору крена](../README.md) (STM32F411 + два

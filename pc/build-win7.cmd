@@ -1,8 +1,8 @@
 @echo off
 chcp 65001 >nul
-rem Сборка krenomer.exe (программа для ПК к регистратору крена) для Windows 7+:
+rem Сборка krenomer-esp32.exe (программа для ПК к регистратору крена) для Windows 7+:
 rem тулсет v143 (MSVC 14.44), статический один .exe, проверка импортов после сборки.
-rem Результат: build-win7\krenomer.exe (64 бита); build-win7-x86.cmd — 32-битный build-win7-x86\krenomer.exe.
+rem Результат: build-win7\krenomer-esp32.exe (64 бита); build-win7-x86.cmd — 32-битный build-win7-x86\krenomer-esp32.exe.
 rem Параметры передаются в configure, например:
 rem   build-win7.cmd -DKRENOMER_BUILD_TESTS=ON      юнит-тесты и снимки экрана (tests\)
 rem (Скрипт по образцу ShagomerPCModule\build-win7.cmd.)
@@ -42,5 +42,5 @@ if errorlevel 1 exit /b 1
 cmake --build --preset %PRESET%
 if errorlevel 1 exit /b 1
 echo.
-echo Готово: %~dp0%OUTDIR%\krenomer.exe
+echo Готово: %~dp0%OUTDIR%\krenomer-esp32.exe
 endlocal

@@ -38,6 +38,14 @@ bool App::StartFirmwareUpdate(bool force)
 
 void App::PageFirmware()
 {
+    const bool tab5Device=snap_.ver.board=="tab5" || snap_.ver.chip=="esp32p4";
+    if(tab5Device)espFirmware_=true;
+    if (espFirmware_ || tcpMode_ || tab5Device || ota_.Busy() || recovery_.Busy()) {
+        ImGui::BeginDisabled(updater_.Busy() || ota_.Busy() || recovery_.Busy());
+        if(!tab5Device && !tcpMode_ && ImGui::SmallButton("STM32 DFU"))espFirmware_=false;
+        ImGui::EndDisabled();
+        PageEspFirmware();return;
+    }
     const std::int64_t now = link_->NowMs();
     fw::IDfuBackend* backend = snap_.demo ? dfuDemo_.get() : dfuReal_.get();
     if (!backend)
@@ -82,7 +90,10 @@ void App::PageFirmware()
     // Текущая прошивка
     if (BeginCard("##fw_cur", ImVec2(colW, 0)))
     {
-        CardTitle("Прошивка прибора сейчас");
+        {FontScope f(fontH2);ImGui::TextUnformatted("Прошивка прибора сейчас");}
+        ImGui::SameLine(0,S(8));
+        if(ImGui::SmallButton("ESP32..."))espFirmware_=true;
+        ImGui::Spacing();
         if (BeginKV("##kvcur", S(110)))
         {
             if (Connected() && snap_.haveVer)
@@ -324,6 +335,56 @@ void App::PageFirmware()
     }
     EndCard();
     ImGui::EndGroup();
+}
+
+
+void App::PageEspFirmware()
+{
+    ImGui::BeginDisabled(ota_.Busy() || recovery_.Busy());
+    if(ImGui::RadioButton("OTA application",!factoryMode_))factoryMode_=false;
+    ImGui::SameLine();if(ImGui::RadioButton("Factory / ROM recovery",factoryMode_))factoryMode_=true;
+    ImGui::EndDisabled();
+    if(factoryMode_ || recovery_.Busy()){PageEspRecovery();return;}
+    CardTitle("Tab5 · ESP32-P4 OTA", "Application .bin only; USB CDC manual selection or authenticated TCP :5000");
+    ImGui::Text("Board: %s   Chip: %s   Protocol: %d",snap_.ver.board.c_str(),snap_.ver.chip.c_str(),snap_.ver.protocol);
+    ImGui::Text("Running: %s",snap_.ver.version.c_str());
+    ImGui::BeginDisabled(ota_.Busy());
+    PathInput("OTA application",fw_.path,sizeof(fw_.path));
+    if(ImGui::Button("Select ESP application .bin")) {std::string path=fw_.path;if(dialogs::PickFile(path,L"Application (*.bin)\0*.bin\0",L"Tab5 OTA application"))SetFirmwarePath(path);}
+    const bool enabled=Connected() && snap_.ver.IsTab5() && !recovery_.Busy() && !PcRecording() && !dl_.running && !snap_.status.recMask;
+    ImGui::BeginDisabled(!enabled);
+    if(ImGui::Button("Validate and upload Tab5 firmware")) {settings_.firmwarePath=fw_.path;ota_.Start(link_.get(),fw_.path,link_->NowMs());}
+    ImGui::EndDisabled();ImGui::EndDisabled();
+    if(ota_.Busy()){Progress(static_cast<float>(ota_.Progress()),"OTA");if(ImGui::Button("Cancel OTA"))ota_.Cancel();}
+    ImGui::TextWrapped("%s",ota_.Message().c_str());
+    ImGui::TextWrapped("Checks: board/chip/protocol, app descriptor, segment checksum, appended SHA256, full transfer SHA256. Reconnect must report expected version. Disconnect aborts upload; retry starts from zero. Factory/full-flash and C6 images are rejected. Boot rollback/self-test is handled by firmware.");
+}
+
+
+void App::PageEspRecovery()
+{
+    CardTitle("Tab5 · Factory / ROM recovery", "Native Win7-compatible ROM protocol; explicit COM only; no Python/esptool runtime");
+    ImGui::TextWrapped("Factory mode writes bootloader, partition table, application and initialized OTA metadata. Settings in NVS are preserved. OTA mode above accepts application .bin only. Hardware flashing has not been validated.");
+    ImGui::BeginDisabled(recovery_.Busy());
+    PathInput("Factory manifest .json",factoryManifest_,sizeof(factoryManifest_));
+    if(ImGui::Button("Select factory manifest")){std::string path=factoryManifest_;if(dialogs::PickFile(path,L"Factory manifest (*.json)\0*.json\0",L"Tab5 factory_parts manifest"))std::snprintf(factoryManifest_,sizeof(factoryManifest_),"%s",path.c_str());}
+    ImGui::InputText("Explicit ROM COM port",recoveryPort_,sizeof(recoveryPort_));
+    ImGui::Checkbox("Already in ROM bootloader (manual BOOT/reset)",&manualRom_);
+    ImGui::TextWrapped("You must select the physical Tab5 yourself. ROM proves chip/revision/security, not the board model; it has no Tab5 board-ID fuse. The package supplies the Tab5 layout.");
+    ImGui::TextWrapped("Select the P4 native USB Serial/JTAG CDC port manually (VID 303a). No automatic ESP probing. With manual mode checked, enter ROM bootloader before starting. Uncheck only to request native USB DTR/RTS bootloader reset.");
+    const bool ready=!PcRecording() && !dl_.running && !ota_.Busy() && !opt_.noHardware && !snap_.demo && !(Connected() && snap_.status.Recording());
+    ImGui::BeginDisabled(!ready);
+    if(ImGui::Button("Validate factory package and recover"))ImGui::OpenPopup("Write Tab5 factory parts?");
+    ImGui::EndDisabled();
+    if(ImGui::BeginPopupModal("Write Tab5 factory parts?",nullptr,ImGuiWindowFlags_AlwaysAutoResize)){
+        ImGui::Text("Explicit port: %s",recoveryPort_);
+        ImGui::TextWrapped("Runtime link closes first. Four validated parts are written and verified. OTA metadata is reset to select ota_0; NVS is preserved. After interruption, retry the complete factory plan. First flash and recovery are untested on physical hardware.");
+        if(ImGui::Button("Write and verify")){recovery_.Start(link_.get(),factoryManifest_,recoveryPort_,manualRom_);ImGui::CloseCurrentPopup();}
+        ImGui::SameLine();if(ImGui::Button("Cancel"))ImGui::CloseCurrentPopup();ImGui::EndPopup();
+    }
+    ImGui::EndDisabled();
+    if(recovery_.Busy()){Progress(recovery_.Progress(),"ROM write / verify");if(ImGui::Button("Cancel recovery"))recovery_.Cancel();}
+    ImGui::TextWrapped("%s",recovery_.Message().c_str());
 }
 
 } // namespace ui

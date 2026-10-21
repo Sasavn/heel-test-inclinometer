@@ -26,6 +26,8 @@
 #include "../core/HeelSteps.hpp"
 #include "../core/Project.hpp"
 #include "../fw/Firmware.hpp"
+#include "../fw/EspOta.hpp"
+#include "../fw/RomRecovery.hpp"
 
 struct ImVec4;
 
@@ -90,6 +92,7 @@ public:
     void SetShownPaths(std::vector<std::pair<std::string, std::string>> map) { shownPaths_ = std::move(map); }
     std::string Shown(const std::string& s) const;
     void SetPage(Page p) { page_ = p; }
+    void SetFactoryPage(bool on) {espFirmware_=true;factoryMode_=on;}
     Page GetPage() const { return page_; }
     DeviceLink& Link() { return *link_; }
     SimDevice* Sim() { return sim_.get(); }
@@ -407,6 +410,15 @@ private:
     std::unique_ptr<DeviceLink> link_;
     std::unique_ptr<fw::IDfuBackend> dfuReal_, dfuDemo_;
     fw::Updater updater_;
+    fw::EspOta ota_;
+    fw::RomRecovery recovery_;
+    bool espFirmware_ = false, factoryMode_ = false, manualRom_ = true;
+    char factoryManifest_[1024] = {}, recoveryPort_[16] = {};
+    void PageEspRecovery();
+    char tcpHost_[64] = "192.168.4.1", tcpToken_[129] = {};
+    int tcpPort_ = 5000;
+    bool tcpMode_ = false, tcpDialog_ = false;
+    void PageEspFirmware();
     LinkSnapshot snap_;
     Page page_ = Page::Measure;
     bool navOpen_[3] = {true, true, true}; // группы левой панели: опыт, устройство, имитатор

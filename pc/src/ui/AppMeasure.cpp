@@ -33,6 +33,13 @@ struct SensorView
 
 void App::PageMeasure()
 {
+    if(snap_.ver.IsTab5()) {
+        ImGui::BeginDisabled(!Connected() || ota_.Busy() || recovery_.Busy() || dl_.running || !HaveStatus());
+        if(Button(snap_.status.Recording()?"Остановить запись Tab5":"Начать запись Tab5",BtnKind::Primary)) {
+            link_->Send(snap_.status.Recording()?"rec off":"rec on");link_->FastPoll(link_->NowMs()+3000);
+        }
+        ImGui::EndDisabled();
+    }
     const float W = ImGui::GetContentRegionAvail().x;
     const bool tall = ImGui::GetContentRegionAvail().y >= S(680); // «Запись на ПК» — в две строки
     const float gap = S(12);
@@ -313,7 +320,7 @@ void App::MeasureTiles(float w, float h)
         {
             if (!s.batPresent)
             {
-                v = "от USB (АКБ нет)";
+                v = snap_.ver.IsTab5() ? "внешнее питание (АКБ нет)" : "от USB (АКБ нет)";
                 c = pal.text;
             }
             else
@@ -327,7 +334,7 @@ void App::MeasureTiles(float w, float h)
                 tip = Fmt("Тревога ниже %.1f В", s.batAlarm);
             }
         }
-        else if (smp && std::isfinite(smp->batV))
+        else if (smp && !snap_.ver.IsTab5() && std::isfinite(smp->batV))
         {
             v = Fmt("АКБ %.2f В", smp->batV);
             c = pal.text;
@@ -343,7 +350,9 @@ void App::MeasureTiles(float w, float h)
         std::string tip;
         if (have)
         {
-            v = Fmt(compact ? "%.1f/%d Гц · ЦП %d %%" : "%.1f Гц из %d · ЦП %d %%", s.rate, s.freq, s.cpu);
+            const std::string rate=std::isfinite(s.rate)?Fmt("%.1f",s.rate):"—";
+            const std::string cpu=s.cpu>=0?Fmt("%d %%",s.cpu):"—";
+            v=rate+Fmt("/%d Гц · ЦП ",s.freq)+cpu;
             c = (s.freq > 0 && s.rate < 0.9 * s.freq) ? pal.warn : pal.text;
             tip = "Фактическая частота опроса датчиков (заданная — в «Настройках»). Если шина не успевает — ниже "
                   "заданной.";
