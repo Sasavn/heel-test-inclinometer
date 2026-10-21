@@ -10,6 +10,7 @@
 #include "../core/TextUtil.hpp"
 #include "Dialogs.hpp"
 #include "Widgets.hpp"
+#include "Tab5Text.hpp"
 
 namespace ui
 {
@@ -341,50 +342,98 @@ void App::PageFirmware()
 void App::PageEspFirmware()
 {
     ImGui::BeginDisabled(ota_.Busy() || recovery_.Busy());
-    if(ImGui::RadioButton("OTA application",!factoryMode_))factoryMode_=false;
-    ImGui::SameLine();if(ImGui::RadioButton("Factory / ROM recovery",factoryMode_))factoryMode_=true;
+    if (ImGui::RadioButton("Обновление (OTA)", !factoryMode_)) factoryMode_ = false;
+    ImGui::SameLine();
+    if (ImGui::RadioButton("Первая прошивка / восстановление", factoryMode_)) factoryMode_ = true;
     ImGui::EndDisabled();
-    if(factoryMode_ || recovery_.Busy()){PageEspRecovery();return;}
-    CardTitle("Tab5 · ESP32-P4 OTA", "Application .bin only; USB CDC manual selection or authenticated TCP :5000");
-    ImGui::Text("Board: %s   Chip: %s   Protocol: %d",snap_.ver.board.c_str(),snap_.ver.chip.c_str(),snap_.ver.protocol);
-    ImGui::Text("Running: %s",snap_.ver.version.c_str());
+    if (factoryMode_ || recovery_.Busy()) { PageEspRecovery(); return; }
+    CardTitle("Tab5 · Обновление прошивки", "Файл приложения .bin; подключение по USB или по сети");
+    ImGui::Text("Плата: %s · Кристалл: %s · Протокол: %d", snap_.ver.board.c_str(), snap_.ver.chip.c_str(), snap_.ver.protocol);
+    ImGui::Text("Текущая версия: %s", snap_.ver.version.c_str());
     ImGui::BeginDisabled(ota_.Busy());
-    PathInput("OTA application",fw_.path,sizeof(fw_.path));
-    if(ImGui::Button("Select ESP application .bin")) {std::string path=fw_.path;if(dialogs::PickFile(path,L"Application (*.bin)\0*.bin\0",L"Tab5 OTA application"))SetFirmwarePath(path);}
-    const bool enabled=Connected() && snap_.ver.IsTab5() && !recovery_.Busy() && !PcRecording() && !dl_.running && !snap_.status.recMask;
+    ImGui::SetNextItemWidth(std::max(S(180), ImGui::GetContentRegionAvail().x - S(160)));
+    PathInput("Файл прошивки", fw_.path, sizeof(fw_.path));
+    if (ImGui::Button("Выбрать прошивку…"))
+    {
+        std::string path = fw_.path;
+        if (dialogs::PickFile(path, L"Прошивка Tab5 (*.bin)\0*.bin\0", L"Обновление прошивки Tab5")) SetFirmwarePath(path);
+    }
+    Hint("Для обновления нужен только файл приложения ESP32-P4, а не комплект первой прошивки.\nПроверяются плата, кристалл, протокол, версия, структура образа и SHA256.\nОбразы STM32, C6 и полного содержимого памяти не принимаются.");
+    const bool enabled = Connected() && snap_.ver.IsTab5() && !recovery_.Busy() && !PcRecording() && !dl_.running && !snap_.status.recMask;
     ImGui::BeginDisabled(!enabled);
-    if(ImGui::Button("Validate and upload Tab5 firmware")) {settings_.firmwarePath=fw_.path;ota_.Start(link_.get(),fw_.path,link_->NowMs());}
-    ImGui::EndDisabled();ImGui::EndDisabled();
-    if(ota_.Busy()){Progress(static_cast<float>(ota_.Progress()),"OTA");if(ImGui::Button("Cancel OTA"))ota_.Cancel();}
-    ImGui::TextWrapped("%s",ota_.Message().c_str());
-    ImGui::TextWrapped("Checks: board/chip/protocol, app descriptor, segment checksum, appended SHA256, full transfer SHA256. Reconnect must report expected version. Disconnect aborts upload; retry starts from zero. Factory/full-flash and C6 images are rejected. Boot rollback/self-test is handled by firmware.");
+    if (ImGui::Button("Проверить и обновить"))
+    {
+        settings_.firmwarePath = fw_.path;
+        ota_.Start(link_.get(), fw_.path, link_->NowMs());
+    }
+    ImGui::EndDisabled();
+    ImGui::EndDisabled();
+    if (ota_.Busy())
+    {
+        Progress(static_cast<float>(ota_.Progress()), "Обновление");
+        if (ImGui::Button("Отменить обновление")) ota_.Cancel();
+    }
+    if (!ota_.Message().empty())
+    {
+        ImGui::TextWrapped("%s", Tab5Text(ota_.Message()).c_str());
+        Hint(Tab5TechnicalDetails(ota_.Message()).c_str());
+    }
+    Muted("После записи прибор перезапустится и подтвердит самопроверку.");
+    Hint("Успех требует нового подключения с ожидаемой версией и подтверждённой самопроверкой.\nПри разрыве связи передача прерывается; повтор начинается сначала.\nСохранение старой версии и откат обеспечивает прошивка прибора.\nПроверка на физическом Tab5 ещё не выполнена.");
 }
-
 
 void App::PageEspRecovery()
 {
-    CardTitle("Tab5 · Factory / ROM recovery", "Native Win7-compatible ROM protocol; explicit COM only; no Python/esptool runtime");
-    ImGui::TextWrapped("Factory mode writes bootloader, partition table, application and initialized OTA metadata. Settings in NVS are preserved. OTA mode above accepts application .bin only. Hardware flashing has not been validated.");
+    CardTitle("Tab5 · Первая прошивка / восстановление", "Комплект прошивки и COM-порт выбираются вручную");
+    ImGui::TextWrapped("Выберите комплект для ревизии вашего Tab5. Настройки прибора сохранятся.");
+    Hint("Комплект содержит загрузчик, таблицу разделов, приложение и начальные данные выбора прошивки.\nВсе четыре части проверяются до открытия COM-порта. Запись и проверка выполняются через ROM-загрузчик.\nPython и esptool для работы программы не нужны; нужен работающий COM-драйвер.\nЗапись и работа с драйвером на реальном Windows 7 ещё не проверены.");
     ImGui::BeginDisabled(recovery_.Busy());
-    PathInput("Factory manifest .json",factoryManifest_,sizeof(factoryManifest_));
-    if(ImGui::Button("Select factory manifest")){std::string path=factoryManifest_;if(dialogs::PickFile(path,L"Factory manifest (*.json)\0*.json\0",L"Tab5 factory_parts manifest"))std::snprintf(factoryManifest_,sizeof(factoryManifest_),"%s",path.c_str());}
-    ImGui::InputText("Explicit ROM COM port",recoveryPort_,sizeof(recoveryPort_));
-    ImGui::Checkbox("Already in ROM bootloader (manual BOOT/reset)",&manualRom_);
-    ImGui::TextWrapped("You must select the physical Tab5 yourself. ROM proves chip/revision/security, not the board model; it has no Tab5 board-ID fuse. The package supplies the Tab5 layout.");
-    ImGui::TextWrapped("Select the P4 native USB Serial/JTAG CDC port manually (VID 303a). No automatic ESP probing. With manual mode checked, enter ROM bootloader before starting. Uncheck only to request native USB DTR/RTS bootloader reset.");
-    const bool ready=!PcRecording() && !dl_.running && !ota_.Busy() && !opt_.noHardware && !snap_.demo && !(Connected() && snap_.status.Recording());
+    ImGui::SetNextItemWidth(std::max(S(180), ImGui::GetContentRegionAvail().x - S(160)));
+    PathInput("Комплект (.json)", factoryManifest_, sizeof(factoryManifest_));
+    if (ImGui::Button("Выбрать комплект…"))
+    {
+        std::string path = factoryManifest_;
+        if (dialogs::PickFile(path, L"Комплект Tab5 (*.json)\0*.json\0", L"Комплект первой прошивки Tab5"))
+            std::snprintf(factoryManifest_, sizeof(factoryManifest_), "%s", path.c_str());
+    }
+    ImGui::SetNextItemWidth(S(140));
+    ImGui::InputText("COM-порт Tab5", recoveryPort_, sizeof(recoveryPort_));
+    Hint("Укажите порт физического Tab5, например COM5. USB Serial/JTAG ESP32-P4 имеет VID 303a.\nАвтоматического поиска ESP-плат нет. ROM подтверждает кристалл, ревизию и настройки защиты,\nно не модель платы: идентификатора Tab5 в eFuse нет. Прибор выбирает пользователь.");
+    ImGui::Checkbox("Режим загрузчика уже включён", &manualRom_);
+    Hint("Если флажок установлен, заранее включите загрузчик вручную кнопками BOOT и сброса.\nЕсли снят — программа запросит переход в загрузчик линиями DTR/RTS через USB Serial/JTAG.\nФизическая проверка этого перехода ещё не выполнена.");
+    const bool ready = !PcRecording() && !dl_.running && !ota_.Busy() && !opt_.noHardware && !snap_.demo && !(Connected() && snap_.status.Recording());
     ImGui::BeginDisabled(!ready);
-    if(ImGui::Button("Validate factory package and recover"))ImGui::OpenPopup("Write Tab5 factory parts?");
+    if (ImGui::Button("Проверить и записать")) ImGui::OpenPopup("Записать комплект Tab5?");
     ImGui::EndDisabled();
-    if(ImGui::BeginPopupModal("Write Tab5 factory parts?",nullptr,ImGuiWindowFlags_AlwaysAutoResize)){
-        ImGui::Text("Explicit port: %s",recoveryPort_);
-        ImGui::TextWrapped("Runtime link closes first. Four validated parts are written and verified. OTA metadata is reset to select ota_0; NVS is preserved. After interruption, retry the complete factory plan. First flash and recovery are untested on physical hardware.");
-        if(ImGui::Button("Write and verify")){recovery_.Start(link_.get(),factoryManifest_,recoveryPort_,manualRom_);ImGui::CloseCurrentPopup();}
-        ImGui::SameLine();if(ImGui::Button("Cancel"))ImGui::CloseCurrentPopup();ImGui::EndPopup();
+    if (ImGui::BeginPopupModal("Записать комплект Tab5?", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+    {
+        ImGui::Text("COM-порт Tab5: %s", recoveryPort_);
+        ImGui::PushTextWrapPos(S(460));
+        ImGui::TextWrapped("Рабочее соединение закроется. Программа проверит и запишет четыре части комплекта, сохранив настройки прибора.");
+        ImGui::TextWrapped("После обрыва повторите запись комплекта целиком. Физическая проверка первой прошивки и восстановления ещё не выполнена.");
+        ImGui::PopTextWrapPos();
+        if (ImGui::Button("Записать и проверить"))
+        {
+            recovery_.Start(link_.get(), factoryManifest_, recoveryPort_, manualRom_);
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Отмена")) ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
     }
     ImGui::EndDisabled();
-    if(recovery_.Busy()){Progress(recovery_.Progress(),"ROM write / verify");if(ImGui::Button("Cancel recovery"))recovery_.Cancel();}
-    ImGui::TextWrapped("%s",recovery_.Message().c_str());
+    if (recovery_.Busy())
+    {
+        Progress(recovery_.Progress(), "Запись и проверка");
+        if (ImGui::Button("Отменить запись")) recovery_.Cancel();
+    }
+    if (!recovery_.Message().empty())
+    {
+        ImGui::TextWrapped("%s", Tab5Text(recovery_.Message()).c_str());
+        Hint(Tab5TechnicalDetails(recovery_.Message()).c_str());
+    }
+    Muted("Проверка модели прибора и выбор COM-порта — за пользователем.");
+    Hint("ROM проверяет кристалл и ревизию по заголовкам обоих образов, а не доказывает модель Tab5.\nДанные выбора прошивки записываются последними, после проверки приложения; NVS сохраняется.\nПри ошибке команда запуска приложения не отправляется. На реальном приборе это ещё не проверено.");
 }
 
 } // namespace ui

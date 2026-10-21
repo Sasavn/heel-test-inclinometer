@@ -31,6 +31,7 @@
 #include "core/TextUtil.hpp"
 #include "fw/Firmware.hpp"
 #include "ui/App.hpp"
+#include "ui/Tab5Text.hpp"
 #include "ui/Fonts.hpp"
 #include "ui/Theme.hpp"
 
@@ -473,14 +474,32 @@ int main(int argc, char** argv)
         st.size = ImVec2(1280, 800);
     }
 
+    SECTION("Русские сообщения Tab5 без изменения протокола");
+    CHECK(ui::Tab5Text("TCP connecting") == "Подключение к Tab5 по TCP…");
+    CHECK(ui::Tab5Text("TCP authentication failed") == "Ключ доступа не принят прибором");
+    CHECK(ui::Tab5Text("Image incompatible with device chip revision") == "Прошивка не подходит для ревизии кристалла этого прибора");
+    CHECK(ui::Tab5Text("OTA failed: ERR ota owner") == "Ошибка обновления. Ответ прибора: ERR ota owner");
+    const std::string romReason = "ROM rejected command; status=1 reason=7 address=0x5012D04C";
+    CHECK(ui::Tab5TechnicalDetails(romReason) == "Техническая причина (без изменений):\n" + romReason);
+    CHECK(ui::Tab5Text(romReason) == "Не удалось выполнить операцию. Проверьте комплект, подключение и режим загрузчика");
+
     SECTION("Tab5 virtual firmware and recording controls (offscreen)");
     {
         ui::App app(ui::AppOptions{false,true,false,1791400000,7});
         app.Sim()->SetFwVersion("1.5.0-esp32");
         Stand st{&app};st.Run(1500);
         CHECK(app.Link().Snapshot().ver.IsTab5());
-        app.SetPage(ui::Page::Firmware);st.Shot("tab5_firmware");
-        app.SetFactoryPage(true);st.Shot("tab5_factory");
+        app.SetPage(ui::Page::Firmware);
+        app.SetFactoryPage(false);
+        st.Shot("tab5_firmware", true); // 1280x800: обе прокрутки запрещены
+        app.SetFactoryPage(true);
+        st.Shot("tab5_factory", true);
+        st.size = ImVec2(1024, 700);
+        app.SetFactoryPage(false);
+        st.Shot("tab5_firmware_1024x700", true);
+        app.SetFactoryPage(true);
+        st.Shot("tab5_factory_1024x700", true);
+        st.size = ImVec2(1280, 800);
         app.SetPage(ui::Page::Measure);st.Shot("tab5_measure");
     }
 

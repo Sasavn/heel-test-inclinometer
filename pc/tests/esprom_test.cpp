@@ -10,6 +10,7 @@
 #include <iterator>
 #include <cstdlib>
 #include <set>
+#include <map>
 using namespace fw::esprom;
 static void set32(Bytes& b,std::size_t p,std::uint32_t n){for(unsigned i=0;i<4;i++)b.at(p+i)=std::uint8_t(n>>(8*i));}
 static void set16(Bytes& b,std::size_t p,unsigned n){b.at(p)=std::uint8_t(n);b.at(p+1)=std::uint8_t(n>>8);}
@@ -34,7 +35,36 @@ static std::uint32_t otaCrc(std::uint32_t seq){
     for(unsigned i=0;i<4;i++){crc^=(seq>>(8*i))&255;for(unsigned bit=0;bit<8;bit++)crc=(crc>>1)^((crc&1)?0xedb88320u:0u);}
     return ~crc;
 }
+struct Event {
+    char kind;std::uint32_t address,value;
+    Event(char k,std::uint32_t a,std::uint32_t v):kind(k),address(a),value(v){}
+    bool operator==(const Event& e)const{return kind==e.kind && address==e.address && value==e.value;}
+};
+static bool powerRegister(std::uint32_t a){return a==0x5011010c || a==0x501151bc || a==0x501151b8 || a==0x501153fc || a==0x5012d034;}
 struct Mock: ITransport {
+    std::vector<Event> timeline,powerEvents,setupEvents;
+    std::map<std::uint32_t,std::uint32_t> registers;
+    unsigned powerStep=0,failPowerStep=0,cancelPowerStep=0,efuseWrites=0;
+    unsigned setupStep=0,failSetupStep=0,cancelSetupStep=0;
+    // faultMode: 0 transport exception; 1 ROM status failure; 2 lost reply.
+    unsigned faultMode=0;
+    bool cancellation=false,xpdOn=false;
+    bool powerEvent(const Event& e){
+        timeline.push_back(e);powerEvents.push_back(e);powerStep++;
+        if(powerStep==cancelPowerStep)cancellation=true;
+        if(powerStep==failPowerStep){if(faultMode==0 || e.kind=='D')throw std::runtime_error("Injected power operation failure");return false;}
+        return true;
+    }
+    bool setupEvent(const Event& e){
+        timeline.push_back(e);setupEvents.push_back(e);setupStep++;
+        if(setupStep==cancelSetupStep)cancellation=true;
+        if(setupStep==failSetupStep){if(faultMode==0)throw std::runtime_error("Injected identity/WDT operation failure");return false;}
+        return true;
+    }
+    void delayMicroseconds(unsigned us) override {
+        // Never sleep in tests. Every requested delay is audited and injectable.
+        powerEvent(Event('D',0,us));
+    }
     Bytes flash=Bytes(16*1024*1024,0xa5),packet;
     std::deque<std::uint8_t> rx;
     std::vector<unsigned> ops,sequences;std::vector<std::uint32_t> begins;
@@ -44,7 +74,12 @@ struct Mock: ITransport {
     bool silent=false,badHeader=false,stub=false,shortSecurity=false;
     std::size_t writeChunk=99999,readChunk=99999;
     std::uint32_t base=0,blocks=0,next=0;unsigned lastEnd=99;
-    Mock(){ // A valid-looking old boot selection for ota_1; sector kept unless reset.
+    Mock(){
+        registers[0x5011010c]=0x2468ace0;
+        registers[0x501151bc]=0x12345678;
+        registers[0x501151b8]=0xd5a53c25;
+        registers[0x501153fc]=0xa5a500a7;
+        // A valid-looking old boot selection for ota_1; sector kept unless reset.
         std::fill(flash.begin()+0xf000,flash.begin()+0x11000,0xff);set32(flash,0xf000,2);set32(flash,0xf018,2);set32(flash,0xf01c,otaCrc(2));
     }
     unsigned bootSelected()const{
@@ -72,14 +107,32 @@ struct Mock: ITransport {
         if(op==8){assert(d.size()==36 && d[0]==7 && d[3]==0x20 && d[35]==0x55);for(unsigned i=0;i<8;i++)reply(op,Bytes(),stub?0:0x20120707);return;}
         if(op==0x14){Bytes s(20,0);set32(s,0,flags);s[4]=std::uint8_t(crypt);set32(s,12,chip);set32(s,16,999);if(shortSecurity)s.resize(12);reply(op,s);return;}
         if(op==0x0a){unsigned address=detail::u32(d,0);
-            if(address==0x4ff3fec8 || address==0x4ffbfec8){reply(op,Bytes(),uart);return;}
-            if(address==0x5011601c){reply(op,Bytes(),0x123);return;}
-            assert(address==0x5012d04c);unsigned major=revision/100,minor=revision%100;reply(op,Bytes(),((major&3)<<4)|((major>>2)<<23)|minor);return;}
-        if(op==9){assert(chip==18 && flags==0 && crypt==0 && uart==6 && d.size()==16);unsigned address=detail::u32(d,0);assert(address==0x50116018||address==0x50116000||address==0x50116020||address==0x5011601c);registerWrites++;reply(op);return;}
+            if(powerRegister(address)){
+                std::uint32_t value=address==0x5012d034?(xpdOn?0x00a10055u:0x00a00055u):registers.at(address);
+                if(!powerEvent(Event('R',address,value))){if(faultMode==1)reply(op,Bytes(),0,1,6);return;}
+                reply(op,Bytes(),value);return;
+            }
+            if(address==0x4ff3fec8 || address==0x4ffbfec8){if(!setupEvent(Event('R',address,uart))){if(faultMode==1)reply(op,Bytes(),0,1,6);return;}reply(op,Bytes(),uart);return;}
+            if(address==0x5011601c){if(!setupEvent(Event('R',address,0x123))){if(faultMode==1)reply(op,Bytes(),0,1,6);return;}reply(op,Bytes(),0x123);return;}
+            assert(address==0x5012d04c);unsigned major=revision/100,minor=revision%100;
+            std::uint32_t value=((major&3)<<4)|((major>>2)<<23)|minor;if(!setupEvent(Event('R',address,value))){if(faultMode==1)reply(op,Bytes(),0,1,6);return;}reply(op,Bytes(),value);return;}
+        if(op==9){
+            assert(chip==18 && flags==0 && crypt==0 && d.size()==16);
+            unsigned address=detail::u32(d,0),value=detail::u32(d,4);
+            if(address>=0x5012d000 && address<0x5012e000){efuseWrites++;assert(false && "eFuse writes forbidden");}
+            assert(detail::u32(d,8)==0xffffffffu && detail::u32(d,12)==0);
+            if(powerRegister(address)){
+                assert(address!=0x5012d034);
+                if(!powerEvent(Event('W',address,value))){if(faultMode==1)reply(op,Bytes(),0,1,6);return;}
+                registers[address]=value;
+            }else{
+                assert(uart==6 && (address==0x50116018||address==0x50116000||address==0x50116020||address==0x5011601c));if(!setupEvent(Event('W',address,value))){if(faultMode==1)reply(op,Bytes(),0,1,6);return;}
+            }
+            registerWrites++;reply(op);return;}
         assert(chip==18 && flags==0 && crypt==0);
-        if(op==0x0d){assert(d==Bytes(8,0));reply(op);return;}
+        if(op==0x0d){timeline.push_back(Event('A',0,0));assert(d==Bytes(8,0));reply(op);return;}
         if(op==0x0b){assert(d.size()==24 && detail::u32(d,4)==flash.size() && detail::u32(d,12)==4096);reply(op);return;}
-        if(op==2){assert(d.size()==20 && detail::u32(d,8)==1024 && detail::u32(d,16)==0);base=detail::u32(d,12);blocks=detail::u32(d,4);next=0;begins.push_back(base);
+        if(op==2){timeline.push_back(Event('E',0,0));assert(d.size()==20 && detail::u32(d,8)==1024 && detail::u32(d,16)==0);base=detail::u32(d,12);blocks=detail::u32(d,4);next=0;begins.push_back(base);
             unsigned size=detail::u32(d,0);assert(base+size<=flash.size());assert(base+size<=0x9000 || base>=0xf000);std::fill(flash.begin()+base,flash.begin()+base+size,0xff);if(disconnectBegin && begins.size()==disconnectBegin)throw std::runtime_error("Power lost after erase");reply(op);return;}
         if(op==3){assert(d.size()==1040 && detail::u32(d,0)==1024 && detail::u32(d,8)==0 && detail::u32(d,12)==0);unsigned seq=detail::u32(d,4);sequences.push_back(seq);dataCount++;
             unsigned checksum=0xef;for(std::size_t i=16;i<d.size();i++)checksum^=d[i];assert(detail::u32(b,4)==checksum);
@@ -146,7 +199,6 @@ static void identity(){
     {Mock m;m.stub=true;check(Run(m,p).error==Error::Security && m.ops.size()==1);}
     {Mock m;m.shortSecurity=true;check(Run(m,p).error==Error::BrokenFrame && !m.ends);}
     {Mock m;m.badHeader=true;check(Run(m,p).error==Error::BrokenFrame && !m.ends);}
-    {auto q=p;revisionRange(q,300,399);Mock m;m.revision=301;auto r=Run(m,q);check(r.error==Error::UnsupportedRevision && m.begins.empty() && !m.registerWrites);}
     {Mock m;m.silent=true;check(Run(m,p).error==Error::Timeout && !m.ends);}
 }
 static void success(){
@@ -187,13 +239,100 @@ static void faults(){
     }
     {Mock m;bool cancel=false;auto r=Run(m,p,Options(),[&](const Progress& v){if(v.verified)cancel=true;},[&]{return cancel;});check(r.error==Error::Cancelled && !m.ends && m.bootSelected()==1);}
 }
+static std::vector<Event> expectedPower(unsigned revision,bool xpdOn,std::uint32_t date=0xa5a500a7){
+    std::vector<Event> e;
+    if(revision==302)e.push_back(Event('R',0x5012d034,xpdOn?0x00a10055u:0x00a00055u));
+    if(revision==302 && xpdOn){
+        e.push_back(Event('R',0x501153fc,date));
+        if((date&3)==3)e.push_back(Event('W',0x501153fc,date&~3u));
+        return e;
+    }
+    const Event full[]={
+        Event('W',0x5011010c,1),Event('D',0,10000),
+        Event('R',0x501151bc,0x12345678),Event('W',0x501151bc,0x1a345678),
+        Event('R',0x501151b8,0xd5a53c25),Event('W',0x501151b8,0xd5a53ca5),
+        Event('R',0x501153fc,date),Event('W',0x501153fc,date|3u),Event('D',0,50),
+        Event('R',0x501151bc,0x1a345678),Event('W',0x501151bc,0x12345678),
+        Event('R',0x501151b8,0xd5a53ca5),Event('W',0x501151b8,0x80253ca5),
+        Event('R',0x501151b8,0x80253ca5),Event('W',0x501151b8,0x80253ca5),
+        Event('R',0x501151b8,0x80253ca5),Event('W',0x501151b8,0x80253c25),Event('D',0,1800)};
+    e.insert(e.end(),full,full+sizeof(full)/sizeof(full[0]));return e;
+}
+static void noFlashAfterPowerFailure(const Mock& m,const Result& r){
+    check(!r.ok() && !r.writesStarted && !r.ended && !r.verified && m.begins.empty() && m.dataCount==0 && m.ends==0);
+    check(std::find(m.ops.begin(),m.ops.end(),0x0d)==m.ops.end() && std::find(m.ops.begin(),m.ops.end(),0x0b)==m.ops.end() && m.efuseWrites==0);
+    check(m.bootSelected()==1 && std::all_of(m.flash.begin()+0x9000,m.flash.begin()+0xf000,[](std::uint8_t v){return v==0xa5;}));
+}
+static void powerSequences(){
+    auto p=plan();revisionRange(p,300,399);
+    // Exercise every DATE low-bit state, including the branch which must NOT
+    // write DATE. Unrelated upper bits must survive exactly (master ROM fix).
+    for(unsigned branch=0;branch<6;branch++){
+        unsigned revision=branch==0?301:302;bool xpdOn=branch>=2;
+        std::uint32_t date=branch>=2?0xa5a500a4u+(branch-2):0xa5a500a7u;
+        auto expected=expectedPower(revision,xpdOn,date);
+        Mock m;m.revision=revision;m.xpdOn=xpdOn;m.uart=6;m.registers[0x501153fc]=date;
+        unsigned verified=0;auto r=Run(m,p,Options(),[&](const Progress& v){if(v.verified)verified++;});
+        check(r.ok() && r.verified && r.ended && verified==4 && m.md5Count==4 && m.ends==1 && m.bootSelected()==0);
+        check(m.powerEvents==expected && m.efuseWrites==0);
+        const Event watchdog[]={Event('R',0x5012d04c,revision==301?0x31:0x32),Event('R',0x4ffbfec8,6),
+            Event('W',0x50116018,0x50d83aa1),Event('W',0x50116000,0),Event('W',0x50116018,0),
+            Event('W',0x50116020,0x50d83aa1),Event('R',0x5011601c,0x123),Event('W',0x5011601c,0x40123),Event('W',0x50116020,0)};
+        std::vector<Event> full(watchdog,watchdog+sizeof(watchdog)/sizeof(watchdog[0]));full.insert(full.end(),expected.begin(),expected.end());full.push_back(Event('A',0,0));
+        for(unsigned i=0;i<4;i++)full.push_back(Event('E',0,0));
+        check(m.timeline==full); // exact WDT -> power reads/writes/delays -> attach -> erase
+        check(m.registers[0x501153fc]==(xpdOn?((date&3)==3?date&~3u:date):date|3u));
+        check(std::all_of(m.flash.begin()+0x9000,m.flash.begin()+0xf000,[](std::uint8_t v){return v==0xa5;}));
+        for(unsigned corrupt=1;corrupt<=4;corrupt++){
+            Mock bad;bad.revision=revision;bad.xpdOn=xpdOn;bad.registers[0x501153fc]=date;bad.corruptMd5At=corrupt;
+            auto fail=Run(bad,p);check(fail.error==Error::Verify && !fail.ended && !bad.ends && bad.efuseWrites==0 && bad.md5Count==corrupt);
+            check(bad.powerEvents==expected);
+        }
+        // Every read, write AND delay: transport exceptions, cancellation;
+        // every command additionally gets ROM-status and timeout injection.
+        for(unsigned at=1;at<=expected.size();at++){
+            for(unsigned mode=0;mode<3;mode++){
+                if(mode && expected[at-1].kind=='D')continue;
+                Mock bad;bad.revision=revision;bad.xpdOn=xpdOn;bad.registers[0x501153fc]=date;bad.failPowerStep=at;bad.faultMode=mode;
+                auto fail=Run(bad,p);noFlashAfterPowerFailure(bad,fail);
+                check(fail.error==(mode==0?Error::Transport:mode==1?Error::RomStatus:Error::Timeout));
+                check(bad.powerEvents==std::vector<Event>(expected.begin(),expected.begin()+at));
+            }
+            Mock cancelled;cancelled.revision=revision;cancelled.xpdOn=xpdOn;cancelled.registers[0x501153fc]=date;cancelled.cancelPowerStep=at;
+            auto fail=Run(cancelled,p,Options(),ProgressFn(),[&]{return cancelled.cancellation;});noFlashAfterPowerFailure(cancelled,fail);
+            check(fail.error==Error::Cancelled && cancelled.powerEvents==std::vector<Event>(expected.begin(),expected.begin()+at));
+        }
+    }
+    // Include every pre-power silicon/console/WDT operation in the same
+    // no-attach/no-erase failure contract, not merely the new PMU operations.
+    for(unsigned at=1;at<=9;at++){
+        for(unsigned mode=0;mode<3;mode++){
+            Mock m;m.revision=302;m.uart=6;m.failSetupStep=at;m.faultMode=mode;
+            auto r=Run(m,p);noFlashAfterPowerFailure(m,r);
+            check(r.error==(mode==0?Error::Transport:mode==1?Error::RomStatus:Error::Timeout));
+            check(m.setupStep==at && m.powerEvents.empty());
+        }
+        Mock m;m.revision=302;m.uart=6;m.cancelSetupStep=at;
+        auto r=Run(m,p,Options(),ProgressFn(),[&]{return m.cancellation;});noFlashAfterPowerFailure(m,r);
+        check(r.error==Error::Cancelled && m.setupStep==at && m.powerEvents.empty());
+    }
+    // All identity/security/image guards must precede the first power write.
+    for(unsigned guard=0;guard<5;guard++){
+        auto q=p;Mock m;m.revision=302;
+        if(guard==0)m.chip=13;else if(guard==1)m.flags=1;else if(guard==2)m.crypt=1;
+        else if(guard==3)revisionRange(q,100,199);
+        else {q[3].data.back()^=1;}
+        auto r=Run(m,q);check(!r.ok() && m.powerEvents.empty() && !m.registerWrites && m.efuseWrites==0 && m.begins.empty() && !m.ends);
+    }
+    {auto q=plan();revisionRange(q,300,399);Mock m;m.revision=300;auto r=Run(m,q);check(r.ok() && m.powerEvents.empty() && m.efuseWrites==0);}
+}
 static Bytes loadActual(const std::string& path){
     std::ifstream in(path.c_str(),std::ios::binary|std::ios::ate);
     if(!in)throw std::runtime_error("Cannot open package file: "+path);
     auto size=in.tellg();if(size<=0 || size>16*1024*1024)throw std::runtime_error("Invalid package file size: "+path);
     Bytes b(static_cast<std::size_t>(size));in.seekg(0);if(!in.read(reinterpret_cast<char*>(b.data()),static_cast<std::streamsize>(b.size())))throw std::runtime_error("Cannot read package file: "+path);return b;
 }
-static int actualPackage(const std::string& root,unsigned deviceRevision){
+static int actualPackage(const std::string& root,unsigned deviceRevision,bool xpdOn=false){
     std::vector<Part> p={part(PartKind::Bootloader,0x2000,loadActual(root+"/bootloader.bin")),
         part(PartKind::Partitions,0x8000,loadActual(root+"/partition-table.bin")),
         part(PartKind::OtaData,0xf000,loadActual(root+"/ota_data_initial.bin")),
@@ -205,7 +344,7 @@ static int actualPackage(const std::string& root,unsigned deviceRevision){
         std::cout<<(v.kind==PartKind::Bootloader?"bootloader":"application")<<" bytes="<<v.data.size()<<" min="<<lo<<" max="<<hi<<"\n";
         compatible=compatible && deviceRevision>=lo && (!hi || deviceRevision<=hi);
     }
-    Mock m;m.revision=deviceRevision;Bytes nvs(m.flash.begin()+0x9000,m.flash.begin()+0xf000);
+    Mock m;m.revision=deviceRevision;m.xpdOn=xpdOn;Bytes nvs(m.flash.begin()+0x9000,m.flash.begin()+0xf000);
     std::uint64_t verified=0;auto r=Run(m,p,Options(),[&](const Progress& v){if(v.verified)verified++;});
     check(std::equal(nvs.begin(),nvs.end(),m.flash.begin()+0x9000));
     if(compatible){
@@ -224,12 +363,13 @@ static int actualPackage(const std::string& root,unsigned deviceRevision){
 }
 int main(int argc,char** argv){
     try{
-        if(argc==4 && std::string(argv[1])=="--package"){
+        if((argc==4 || argc==5) && std::string(argv[1])=="--package"){
+            if(argc==5 && std::string(argv[4])!="--xpd-on")throw std::runtime_error("Unknown package flag");
             char* end=nullptr;unsigned long revision=std::strtoul(argv[3],&end,10);
             if(!argv[3][0] || *end || revision>715 || revision%100>15)throw std::runtime_error("Invalid silicon revision (major*100+minor, minor 0..15)");
-            return actualPackage(argv[2],static_cast<unsigned>(revision));
+            return actualPackage(argv[2],static_cast<unsigned>(revision),argc==5);
         }
-        if(argc!=1)throw std::runtime_error("Usage: esprom_test [--package ACTUAL_FOLDER DEVICE_REVISION]");
-        crypto();preflight();identity();success();faults();std::cout<<"ESP32-P4 ROM mock tests: PASS ("<<tests<<" checks)\n";
+        if(argc!=1)throw std::runtime_error("Usage: esprom_test [--package ACTUAL_FOLDER DEVICE_REVISION [--xpd-on]]");
+        crypto();preflight();identity();success();faults();powerSequences();std::cout<<"ESP32-P4 ROM mock tests: PASS ("<<tests<<" checks)\n";
     }catch(const std::exception& e){std::cerr<<e.what()<<"\n";return 1;}return 0;
 }

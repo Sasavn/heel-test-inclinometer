@@ -1,5 +1,5 @@
 #pragma once
-// Native C++11 ESP32-P4 ROM recovery; no OS calls, port discovery, Python or stub.
+// Native C++11 ESP32-P4 ROM recovery; no port discovery, Python or stub.
 // Protocol checked against bundled official esptool loader.py and esp32p4.py.
 #include <algorithm>
 #include <array>
@@ -9,6 +9,7 @@
 #include <functional>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <vector>
 namespace fw { namespace esprom {
 using Bytes=std::vector<std::uint8_t>;
@@ -21,6 +22,8 @@ struct ITransport {
     virtual std::size_t write(const std::uint8_t*,std::size_t,unsigned timeoutMs)=0;
     virtual std::size_t read(std::uint8_t*,std::size_t,unsigned timeoutMs)=0;
     virtual bool reset(ResetMode,unsigned timeoutMs)=0;
+    // Minimum settling time; virtual so the ROM model can check exact ordering.
+    virtual void delayMicroseconds(unsigned us){std::this_thread::sleep_for(std::chrono::microseconds(us));}
 };
 enum class PartKind { Bootloader, Partitions, Application, OtaData };
 struct Part { PartKind kind=PartKind::Application;std::uint32_t offset=0;Bytes data;std::string name; };
@@ -172,6 +175,32 @@ class Engine {
     }
     void drain(){std::uint8_t b[256];for(unsigned i=0;i<64;i++){auto n=io.read(b,sizeof(b),1);require(n<=sizeof(b),Error::Transport,"Invalid drain count");if(!n)return;}throw Failure(Error::BrokenFrame,"Cannot drain ROM transport");}
     Bytes words(std::initializer_list<std::uint32_t> values){Bytes b;for(auto v:values)put(b,v);return b;}
+    std::uint32_t readRegister(std::uint32_t address){Reply r=command(0x0a,words({address}));status(r,0);return r.value;}
+    void writeRegister(std::uint32_t address,std::uint32_t value){status(command(9,words({address,value,0xffffffffu,0})),0);}
+    void settling(unsigned us){cancelled();io.delayMicroseconds(us);cancelled();}
+    void powerFlash(unsigned revision){
+        // Register protocol/settling specification: official Espressif esptool,
+        // esp32p4.py power_on_flash(), commit 93477aceb5bc28971db26223a60339bb53e9390a.
+        // Only volatile LP/PMU registers are written. The voltage comes from the
+        // board's existing eFuse configuration; this never programs an eFuse.
+        if(revision!=301 && revision!=302)return;
+        const std::uint32_t pad=0x5011010c,analog=0x501151bc,ldo=0x501151b8,date=0x501153fc;
+        if(revision==302 && (readRegister(0x5012d034)&(1u<<16))){
+            // ROM already powers flash. Release only both force-on bits when
+            // asserted; preserve every unrelated DATE bit, including on retry.
+            std::uint32_t value=readRegister(date);
+            if((value&3u)==3u)writeRegister(date,value&~3u);
+            return;
+        }
+        writeRegister(pad,1);settling(10000);
+        writeRegister(analog,readRegister(analog)|(1u<<27));
+        writeRegister(ldo,readRegister(ldo)|(1u<<7));
+        writeRegister(date,readRegister(date)|3u);settling(50);
+        writeRegister(analog,readRegister(analog)&~(1u<<27));
+        writeRegister(ldo,readRegister(ldo)&~(0xffu<<23));
+        writeRegister(ldo,readRegister(ldo)|0x80u);
+        writeRegister(ldo,readRegister(ldo)&~(1u<<7));settling(1800);
+    }
 public:
     Engine(ITransport& t,const Options& o,ProgressFn p,CancelFn c):io(t),options(o),progress(p),cancel(c){}
     void execute(const std::vector<Part>& parts,Result& result){
@@ -189,7 +218,6 @@ public:
         result.revision=unsigned((((v>>23)&1)<<2)|((v>>4)&3))*100+unsigned(v&15);
         require(result.revision>=options.minRevision && result.revision<=options.maxRevision,Error::WrongRevision,"Silicon outside caller revision interval");
         for(const auto& p:parts)if(p.kind==PartKind::Bootloader || p.kind==PartKind::Application)checkImage(p.data,p.kind==PartKind::Application,result.revision);
-        require(result.revision!=301 && result.revision!=302,Error::UnsupportedRevision,"P4 ECO6/ECO7 flash power sequencing not implemented; no writes performed");
         // Native USB Serial/JTAG ROM leaves RTC watchdogs active. Read console
         // selector only AFTER chip+revision+security checks, then use the P4
         // watchdog sequence from the target specification (no eFuse writes).
@@ -201,6 +229,7 @@ public:
             Reply swd=command(0x0a,words({0x5011601c}));status(swd,0);
             wr(0x5011601c,swd.value|(1u<<18));wr(0x50116020,0);
         }
+        powerFlash(result.revision);
         status(command(0x0d,words({0,0})),0);
         status(command(0x0b,words({0,options.capacity,65536,4096,256,0xffff})),0);
         // Application verified before any boot-selection reset. Never erase NVS,

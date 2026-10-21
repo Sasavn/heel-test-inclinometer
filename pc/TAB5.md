@@ -3,6 +3,18 @@
 Output is `krenomer-esp32.exe`; the PC application version remains 1.8.2. Device
 firmware is independently versioned, starting at 1.5.0-esp32.
 
+## Подписи русской программы
+
+Для первой установки: «Прошивка» → Tab5 → «Первая прошивка / восстановление».
+Нажмите «Выбрать комплект…», выберите `krenomer-esp32.json` из папки нужной
+ревизии, укажите «COM-порт Tab5» и режим входа в загрузчик. Кнопка
+«Проверить и записать» открывает итоговое подтверждение. Все четыре файла
+комплекта должны лежать рядом с JSON. Для обновления уже работающего прибора
+выберите «Обновление (OTA)», файл приложения `.bin`, затем «Проверить и обновить».
+Сетевое подключение — пункт «Tab5 по сети (TCP)…» в выборе порта: IP-адрес,
+порт 5000 и ключ доступа (пароль AP). Технические причины ошибок доступны
+при наведении. Подписи переведены; команды протокола остаются неизменными.
+
 ## Connections
 
 The connection dropdown offers authenticated TCP. Enter a numeric IPv4 address,
@@ -71,8 +83,9 @@ default; automatic native USB DTR/RTS is explicit. Cancel/failure does not reque
 application launch. Recovery retries the complete vetted plan. ROM checks both
 image revision ranges before erase. The normal SDK profile targets silicon
 revision100..199; the separate `tab5/build-rev3` SDK profile targets300..399.
-Use a package built for the actual silicon; image headers are never patched. Known P4 revisions301/302 needing additional flash-power
-sequencing are refused. This is not a blanket max-revision300 assumption.
+Use a package built for the actual silicon; image headers are never patched.
+Revisions301/302 use the official flash-power sequence, including the ECO7
+already-powered branch, without eFuse writes. See [ROM_POWER_SEQUENCE.md](ROM_POWER_SEQUENCE.md).
 
 ## Build and verification
 

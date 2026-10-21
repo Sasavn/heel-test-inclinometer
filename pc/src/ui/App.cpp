@@ -14,6 +14,7 @@
 #include "../core/TextUtil.hpp"
 #include "Dialogs.hpp"
 #include "Widgets.hpp"
+#include "Tab5Text.hpp"
 
 #ifdef KRENOMER_PROJECT_VERSION
 namespace
@@ -390,7 +391,7 @@ void App::RenderTopBar(float h)
         chip = chipShort;
     Chip(chip.c_str(), fg, bg);
     if (ImGui::IsItemHovered() && snap_.state != LinkState::Connected && !snap_.problem.empty())
-        ImGui::SetTooltip("%s", snap_.problem.c_str());
+        ImGui::SetTooltip("%s", (tcpMode_ ? Tab5Text(snap_.problem) : snap_.problem).c_str());
 
     const bool off = snap_.state == LinkState::Off;
     const bool busy = (updater_.Busy() || ota_.Busy() || recovery_.Busy()) || dl_.running || PcRecording();
@@ -433,7 +434,7 @@ void App::RenderTopBar(float h)
         ImGui::PopStyleColor(7);
         if (open)
         {
-            if (ImGui::Selectable("TCP Tab5 (manual host/port/token)", tcpMode_)) tcpDialog_=true;
+            if (ImGui::Selectable("Tab5 по сети (TCP)…", tcpMode_)) tcpDialog_=true;
             if (ImGui::Selectable("Автоматически STM32 (0483:5740); Tab5 USB — вручную", settings_.port.empty() && !tcpMode_))
             {
                 if(tcpMode_) {tcpMode_=false;MakeLink(false);}
@@ -457,13 +458,17 @@ void App::RenderTopBar(float h)
                 Muted("COM-портов нет");
             ImGui::EndCombo();
         }
-        if(tcpDialog_) {ImGui::OpenPopup("Tab5 TCP");tcpDialog_=false;}
-        if(ImGui::BeginPopupModal("Tab5 TCP",nullptr,ImGuiWindowFlags_AlwaysAutoResize)) {
-            ImGui::InputText("IPv4",tcpHost_,sizeof(tcpHost_));
-            ImGui::InputInt("Port",&tcpPort_);
-            ImGui::InputText("Token",tcpToken_,sizeof(tcpToken_),ImGuiInputTextFlags_Password);
-            if(ImGui::Button("Connect TCP") && !busy && tcpPort_>0 && tcpPort_<=65535) {tcpMode_=true;MakeLink(false);ImGui::CloseCurrentPopup();}
-            ImGui::SameLine();if(ImGui::Button("Cancel"))ImGui::CloseCurrentPopup();
+        if(tcpDialog_) {ImGui::OpenPopup("Подключение Tab5 по сети");tcpDialog_=false;}
+        if(ImGui::BeginPopupModal("Подключение Tab5 по сети",nullptr,ImGuiWindowFlags_AlwaysAutoResize)) {
+            ImGui::SetNextItemWidth(S(230));
+            ImGui::InputText("IP-адрес (IPv4)",tcpHost_,sizeof(tcpHost_));
+            ImGui::SetNextItemWidth(S(110));
+            ImGui::InputInt("Порт",&tcpPort_);
+            ImGui::SetNextItemWidth(S(230));
+            ImGui::InputText("Ключ доступа",tcpToken_,sizeof(tcpToken_),ImGuiInputTextFlags_Password);
+            Hint("Введите ключ, показанный на экране Tab5: он совпадает с паролем точки доступа.\nПорт по умолчанию — 5000. Адрес задаётся вручную; поиска приборов в сети нет.\nКлюч не сохраняется и не попадает в журнал команд.");
+            if(ImGui::Button("Подключить") && !busy && tcpPort_>0 && tcpPort_<=65535) {tcpMode_=true;MakeLink(false);ImGui::CloseCurrentPopup();}
+            ImGui::SameLine();if(ImGui::Button("Отмена"))ImGui::CloseCurrentPopup();
             ImGui::EndPopup();
         }
         if (ImGui::IsItemHovered())
@@ -867,7 +872,7 @@ void App::NotConnectedPanel(const char* what)
         if (!snap_.problem.empty() && !snap_.demo)
         {
             ImGui::Spacing();
-            Muted("Сейчас: %s", snap_.problem.c_str());
+            Muted("Сейчас: %s", (tcpMode_ ? Tab5Text(snap_.problem) : snap_.problem).c_str());
         }
         ImGui::Spacing();
         SmallMuted("Windows 7: для COM-порта нужен драйвер «STM32 Virtual COM Port» (STSW-STM32102), в Windows 10 и новее "
