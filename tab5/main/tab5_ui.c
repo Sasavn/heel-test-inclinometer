@@ -2,7 +2,12 @@
  * Fixed 1280x720 geometry. Main owns hardware, validation and persistence. */
 #include "tab5_ui.h"
 #include "tab5_ui_graph.h"
+#include "tab5_plot.h"
+#include "tab5_level.h"
 #include "tab5_time.h"
+#ifdef ESP_PLATFORM
+#include "esp_heap_caps.h"
+#endif
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -34,9 +39,11 @@ static struct {
     lv_obj_t *rec_chip,*capacity_text[2],*capacity_bar[2],*media_chip[2],*media_detail[2],*history,*history_note,*history_rows[5][6];
     lv_obj_t *chart,*chart_touch,*legend[4],*ranges[3],*stats[4],*stats_mm[4],*ylabel[9],*xlabel[7],*cursor_label;
     lv_chart_series_t *series[4];int32_t plotted[4][1200];bool visible[4];unsigned range;
+    lv_obj_t *plot_image_obj;uint16_t *plot_pixels;lv_image_dsc_t plot_image;
+    lv_obj_t *level_image_obj[2];uint16_t *level_pixels[2];lv_image_dsc_t level_image[2];
     int32_t ymin,ymax;tab5_ui_graph_t graph;
     int32_t chart_scratch[1200],chart_latest[4];unsigned chart_count,chart_range;
-    bool chart_cached,chart_light,chart_visible[4];
+    bool chart_cached,chart_light,chart_visible[4],chart_live_unfiltered;
     lv_obj_t *set_apply,*set_cancel,*changed,*step_value[7],*theme_btn[2],*clock_text,*panel_text,*fw_text;
     double draft[7];bool dirty,pending,settings_failed,settings_ack;tab5_measure_config_t sent;
     lv_obj_t *net_apply,*reveal,*net_fields[4],*net_switch[2],*net_address[2],*net_chip[2],*net_hint,*tcp_chip,*tcp_address;
@@ -46,7 +53,7 @@ static struct {
     char num[24];unsigned edit_index;bool numeric_valid;int modal_kind,confirm_action,pending_page;unsigned page;
     bool zero_seen,zero_time_known;float zero[4];char zero_time[16];
     lv_timer_t *repeat;int repeat_id;bool repeated;
-    uint64_t render_us;bool rendered;
+    uint64_t render_us,chart_plot_us;bool rendered;
     tab5_measure_sensor_t level_state[2];bool level_seen[2],level_light[2];
     tab5_ui_state_t state;tab5_ui_action_cb_t cb;void *user;
 } u;
@@ -162,15 +169,16 @@ static void hero_draw(lv_event_t *e){
 }
 static void level_draw(lv_event_t *e){
     unsigned i=(intptr_t)lv_event_get_user_data(e);lv_obj_t *o=lv_event_get_target(e);lv_area_t a;lv_obj_get_coords(o,&a);lv_layer_t *l=lv_event_get_layer(e);int x=a.x1+100,y=a.y1+100;
+    if(u.level_pixels[i])return;
     circle(l,x,y,96,u.alt,1,true,255);circle(l,x,y,96,u.border,1,false,255);
     int radii[]={90,36,18};for(int k=0;k<3;k++)circle(l,x,y,radii[k],u.border,1,false,255);
     draw_line(l,x-94,y,x+94,y,u.border,1,0);draw_line(l,x,y-94,x,y+94,u.border,1,0);
     const tab5_measure_sensor_t *m=&u.state.measurement.sensor[i];if(!m->valid || !isfinite(m->x)||!isfinite(m->y))return;
     float vx=m->x,vy=m->y,r=hypotf(vx,vy);bool out=r>5;if(out){vx*=5/r;vy*=5/r;}
-    int px=x+lroundf(vx*18),py=y-lroundf(vy*18);float rx=fminf(90,fmaxf(4,m->roll_x*18)),ry=fminf(90,fmaxf(4,m->roll_y*18));
-    /* Ellipse is clipped by the gauge object's bounds. */
-    for(int dy=-(int)ry;dy<=(int)ry;dy+=2){float dx=rx*sqrtf(fmaxf(0,1-dy*dy/(ry*ry)));lv_draw_line_dsc_t d;lv_draw_line_dsc_init(&d);d.p1=(lv_point_precise_t){px-dx,py+dy};d.p2=(lv_point_precise_t){px+dx,py+dy};d.width=2;d.color=lv_color_hex(u.sensor[i]);d.opa=46;lv_draw_line(l,&d);}
-    draw_line(l,x,y,px,py,u.sensor[i],1,4);circle(l,px,py,9,u.sensor[i],3,!out,255);
+    int px=x+lroundf(vx*18),py=y-lroundf(vy*18);
+    /* Opaque marker only: no per-scanline translucent roll ellipse. Roll
+     * remains visible in its numeric cards; acquisition is unchanged. */
+    draw_line(l,x,y,px,py,u.sensor[i],1,0);circle(l,px,py,7,u.sensor[i],2,true,255);
 }
 static void config_values(const tab5_measure_config_t *c,double v[7]){v[0]=c->frequency_hz;v[1]=c->gap_ms;v[2]=c->alpha;v[3]=c->roll_window_s;v[4]=c->roll_calm_deg;v[5]=c->roll_rate_hz;v[6]=c->roll_hysteresis_deg;}
 static tab5_measure_config_t draft_config(void){return (tab5_measure_config_t){.frequency_hz=(uint16_t)u.draft[0],.gap_ms=(uint16_t)u.draft[1],.alpha=u.draft[2],.roll_window_s=(uint8_t)u.draft[3],.roll_calm_deg=u.draft[4],.roll_rate_hz=(uint8_t)u.draft[5],.roll_hysteresis_deg=u.draft[6]};}
@@ -271,17 +279,17 @@ static void refresh_network(void){
     u.net_dirty=!net_equal(&u.net_draft,&u.state.network)||u.network_failed;enabled(u.net_apply,u.net_dirty&&!u.net_pending);caption(u.reveal,u.unmasked?"Скрыть пароли":"Показать пароли");
 }
 static void switch_changed(lv_event_t *e){(void)e;u.net_draft.ap_enabled=lv_obj_has_state(u.net_switch[0],LV_STATE_CHECKED);u.net_draft.sta_enabled=lv_obj_has_state(u.net_switch[1],LV_STATE_CHECKED);refresh_network();}
-static void chart_refresh(void);
+static void chart_refresh(bool force);
 static void event(lv_event_t *e){
     int id=(intptr_t)lv_event_get_user_data(e);
-    if(id>=100&&id<105){ask_navigation(id-100);if(u.page==GRAPH)chart_refresh();return;}
+    if(id>=100&&id<105){ask_navigation(id-100);if(u.page==GRAPH)chart_refresh(true);return;}
     if(id>=200&&id<214){if(!u.repeated)step_change(id);u.repeated=false;return;}
     if(id>=300&&id<307){open_number(id-300);return;}
     if(id>=400&&id<415){int k=id-400;size_t n=strlen(u.num);const char *digits[]={"7","8","9","","4","5","6","","1","2","3","","0",".",""};
         if(k==3){if(n)u.num[n-1]=0;}else if(k==11)u.num[0]=0;else if(k==14)snprintf(u.num,sizeof(u.num),"%.2f",u.draft[u.edit_index]);else if(n+1<sizeof(u.num)){if(k!=13||!strchr(u.num,'.'))strcat(u.num,digits[k]);}number_refresh();return;}
     if(id>=500&&id<504){open_text(id-500);return;}
-    if(id>=600&&id<604){unsigned i=id-600;u.visible[i]=!u.visible[i];style_num(u.legend[i],LV_STYLE_OPA,u.visible[i]?255:115,0);chart_refresh();return;}
-    if(id>=610&&id<613){u.range=(unsigned)(id-610);chart_refresh();return;}
+    if(id>=600&&id<604){unsigned i=id-600;u.visible[i]=!u.visible[i];style_num(u.legend[i],LV_STYLE_OPA,u.visible[i]?255:115,0);chart_refresh(true);return;}
+    if(id>=610&&id<613){u.range=(unsigned)(id-610);chart_refresh(true);return;}
     switch(id){
     case A_NOTICE_CLOSE:if(u.notice)lv_obj_delete(u.notice);u.notice=u.notice_text=NULL;break;
     case A_START:dispatch(u.state.recording?TAB5_UI_STOP:TAB5_UI_START);break;
@@ -302,21 +310,33 @@ static void event(lv_event_t *e){
     case A_TIME_OK:{tab5_ui_datetime_t t;if(date_valid(&t)){tab5_ui_action_t a={.kind=TAB5_UI_TIME,.datetime=t};if(u.cb)u.cb(&a,u.user);close_modal();}break;}
     }
 }
-static void chart_draw_task(lv_event_t *e){lv_draw_task_t *t=lv_event_get_draw_task(e);lv_draw_line_dsc_t *d=lv_draw_task_get_line_dsc(t);if(d&&d->base.part==LV_PART_ITEMS&&(d->base.id1%2)){d->dash_width=6;d->dash_gap=5;}}
 static void chart_touch(lv_event_t *e){
     lv_indev_t *dev=lv_indev_active();if(!dev)return;lv_point_t p;lv_indev_get_point(dev,&p);lv_area_t a;lv_obj_get_coords(u.chart,&a);int x=p.x-a.x1;if(x<0)x=0;if(x>1039)x=1039;unsigned n=u.range==0?300:u.range==1?240:1200,idx=(unsigned)(x*(n-1)/1039);char s[180];size_t used=0;
+    if(u.state.live_unfiltered)used+=snprintf(s+used,sizeof(s)-used,"Угол без сглаживания · ");
     used+=snprintf(s+used,sizeof(s)-used,"−%u с",(unsigned)((n-1-idx)*(u.range?500:100)/1000));for(unsigned i=0;i<4;i++){int32_t v=u.plotted[i][idx];if(u.visible[i]&&v!=LV_CHART_POINT_NONE)used+=snprintf(s+used,sizeof(s)-used,"  Д%u %c %+.2f°",i/2+2,i%2?'Y':'X',v/100.0);if(used>=sizeof(s)-1)break;}text(u.cursor_label,s);
     (void)e;
 }
-static void chart_refresh(void){
+static void chart_refresh(bool force){
+    if(!u.chart_cached||u.chart_live_unfiltered!=u.state.live_unfiltered){
+        text(u.cursor_label,u.state.live_unfiltered?"Угол без сглаживания · Коснитесь графика для отсчёта":"Коснитесь графика для отсчёта");
+        u.chart_live_unfiltered=u.state.live_unfiltered;
+    }
+    /* Current numeric cards remain 10Hz even when a plot pass is deferred. */
+    for(unsigned k=0;k<4;k++){
+        const tab5_measure_sensor_t *m=&u.state.measurement.sensor[k/2];
+        float value=k%2?m->y:m->x;
+        int32_t latest=m->valid&&m->good&&m->timestamp_us&&isfinite(value)&&fabsf(value)<=327.66f?(int32_t)lroundf(value*100):LV_CHART_POINT_NONE;
+        u.chart_latest[k]=latest;
+        char b[48];if(!u.visible[k])snprintf(b,sizeof(b),"скрыт");else if(latest==LV_CHART_POINT_NONE)snprintf(b,sizeof(b),"—");else snprintf(b,sizeof(b),"%s%.2f°",latest<0?"−":"+",fabs(latest/100.0));text(u.stats[k],b);
+    }
+    uint64_t now=u.state.now_known?u.state.now_us:(uint64_t)lv_tick_get()*1000;
+    bool controls=!u.chart_cached||u.chart_light!=u.light||u.chart_range!=u.range||memcmp(u.chart_visible,u.visible,sizeof(u.visible));
+    if(!force&&!controls&&now>=u.chart_plot_us&&now-u.chart_plot_us<200000)return;
+    u.chart_plot_us=now;
     unsigned seconds=u.range==0?30:u.range==1?120:600;int32_t min=0,max=0;bool any=false;unsigned n=0;
     bool changed=!u.chart_cached||u.chart_light!=u.light||u.chart_range!=u.range||memcmp(u.chart_visible,u.visible,sizeof(u.visible));
     /* Read one series at a time into persistent storage: LVGL task stack is small. */
     for(unsigned k=0;k<4;k++){
-        const tab5_measure_sensor_t *current=&u.state.measurement.sensor[k/2];
-        float value=k%2?current->y:current->x;
-        int32_t latest=current->valid&&current->good&&current->timestamp_us&&isfinite(value)&&fabsf(value)<=327.66f?(int32_t)lroundf(value*100):LV_CHART_POINT_NONE;
-        if(!u.chart_cached||u.chart_latest[k]!=latest){u.chart_latest[k]=latest;changed=true;}
         n=tab5_ui_graph_read_render(&u.graph,seconds,k,u.chart_scratch);
         size_t bytes=n*sizeof(u.chart_scratch[0]);
         if(!u.chart_cached||u.chart_count!=n||memcmp(u.plotted[k],u.chart_scratch,bytes)){
@@ -333,8 +353,10 @@ static void chart_refresh(void){
     if(ticks<3){u.ymin-=tick;u.ymax+=tick;ticks+=2;}
     lv_chart_set_point_count(u.chart,n);lv_chart_set_axis_range(u.chart,LV_CHART_AXIS_PRIMARY_Y,u.ymin,u.ymax);lv_chart_set_div_line_count(u.chart,ticks,0);
     for(unsigned k=0;k<4;k++){
-        for(uint32_t c=1;c<lv_obj_get_child_count(u.legend[k]);c++)style_color(lv_obj_get_child(u.legend[k],c),LV_STYLE_BG_COLOR,lv_color_hex(u.sensor[k/2]),0);
-        style_color(lv_obj_get_child(lv_obj_get_parent(u.stats[k]),0),LV_STYLE_BG_COLOR,lv_color_hex(u.sensor[k/2]),0);lv_chart_set_series_ext_y_array(u.chart,u.series[k],u.plotted[k]);lv_chart_set_series_color(u.chart,u.series[k],lv_color_hex(u.sensor[k/2]));lv_chart_hide_series(u.chart,u.series[k],!u.visible[k]);
+        lv_color_t series_color=lv_color_hex(u.sensor[k/2]);
+        if(k%2)series_color=lv_color_mix(lv_color_hex(u.light?0x000000:0xFFFFFF),series_color,64);
+        for(uint32_t c=1;c<lv_obj_get_child_count(u.legend[k]);c++)style_color(lv_obj_get_child(u.legend[k],c),LV_STYLE_BG_COLOR,series_color,0);
+        style_color(lv_obj_get_child(lv_obj_get_parent(u.stats[k]),0),LV_STYLE_BG_COLOR,series_color,0);lv_chart_set_series_ext_y_array(u.chart,u.series[k],u.plotted[k]);lv_chart_set_series_color(u.chart,u.series[k],series_color);lv_chart_hide_series(u.chart,u.series[k],!u.visible[k]);
         int32_t mn=0,mx=0,last=LV_CHART_POINT_NONE;bool found=false;
         for(unsigned i=0;i<n;i++)if(u.plotted[k][i]!=LV_CHART_POINT_NONE){int32_t v=u.plotted[k][i];if(!found)mn=mx=v;found=true;if(v<mn)mn=v;if(v>mx)mx=v;}
         /* The last 100ms cell can be empty between healthy 5Hz samples.
@@ -346,7 +368,18 @@ static void chart_refresh(void){
     for(unsigned i=0;i<9;i++){hide(u.ylabel[i],i>=ticks);if(i>=ticks)continue;double v=(u.ymax-(int)i*tick)/100.;char s[32];snprintf(s,sizeof(s),"%+.1f°",v);text(u.ylabel[i],s);lv_obj_set_y(u.ylabel[i],14+(int)(364*i/(ticks-1)));}
     for(unsigned i=0;i<7;i++){char s[24];snprintf(s,sizeof(s),i==6?"0 с":"−%u с",seconds-seconds*i/6);text(u.xlabel[i],s);}
     for(unsigned i=0;i<3;i++)role(u.ranges[i],i==u.range?PRIMARY:FRAME);
-    style_color(u.chart,LV_STYLE_LINE_COLOR,lv_color_hex(u.border),LV_PART_MAIN);lv_chart_refresh(u.chart);
+    style_color(u.chart,LV_STYLE_LINE_COLOR,lv_color_hex(u.border),LV_PART_MAIN);
+    if(u.plot_pixels){
+        tab5_plot_t plot={.y_min=u.ymin,.y_max=u.ymax,.none=LV_CHART_POINT_NONE,.ticks=ticks,.n=n,
+            .background=lv_color_to_u16(lv_color_hex(u.card)),.grid=lv_color_to_u16(lv_color_hex(u.border))};
+        for(unsigned k=0;k<4;k++){
+            lv_color_t color=lv_color_hex(u.sensor[k/2]);
+            if(k%2)color=lv_color_mix(lv_color_hex(u.light?0x000000:0xFFFFFF),color,64);
+            plot.colors[k]=lv_color_to_u16(color);plot.series[k]=u.plotted[k];plot.visible[k]=u.visible[k];
+        }
+        tab5_plot_draw(u.plot_pixels,TAB5_PLOT_WIDTH,&plot);
+        lv_image_cache_drop(&u.plot_image);lv_obj_invalidate(u.plot_image_obj);
+    }else lv_chart_refresh(u.chart);
 }
 
 static void build_measure(void){
@@ -366,6 +399,21 @@ static void build_measure(void){
         label(c,"X",20,100,30,36,F24,MUTED);label(c,"Y",20,192,30,36,F24,MUTED);
         for(int a=0;a<2;a++)u.angle[i][a]=label(c,"—",48,66+a*92,294,84,F64,TEXT);
         u.level[i]=box(c,344,58,200,200,TEXT);lv_obj_add_event_cb(u.level[i],level_draw,LV_EVENT_DRAW_MAIN,(void*)(intptr_t)i);
+        size_t level_bytes=TAB5_LEVEL_WIDTH*TAB5_LEVEL_HEIGHT*sizeof(uint16_t);
+#ifdef ESP_PLATFORM
+        u.level_pixels[i]=heap_caps_aligned_alloc(64,level_bytes,MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+#else
+        u.level_pixels[i]=malloc(level_bytes);
+#endif
+        if(u.level_pixels[i]){
+            tab5_level_t blank={.card_bg=lv_color_to_u16(lv_color_hex(u.card)),.alt_circle_bg=lv_color_to_u16(lv_color_hex(u.alt)),.border=lv_color_to_u16(lv_color_hex(u.border))};
+            tab5_level_draw(u.level_pixels[i],TAB5_LEVEL_WIDTH,&blank);
+            u.level_image[i]=(lv_image_dsc_t){.header={.magic=LV_IMAGE_HEADER_MAGIC,.cf=LV_COLOR_FORMAT_RGB565,
+                .w=TAB5_LEVEL_WIDTH,.h=TAB5_LEVEL_HEIGHT,.stride=TAB5_LEVEL_WIDTH*2},.data_size=level_bytes,.data=(const uint8_t*)u.level_pixels[i]};
+            u.level_image_obj[i]=lv_image_create(u.level[i]);lv_obj_remove_style_all(u.level_image_obj[i]);
+            lv_image_set_src(u.level_image_obj[i],&u.level_image[i]);lv_obj_set_pos(u.level_image_obj[i],0,0);
+            lv_obj_remove_flag(u.level_image_obj[i],LV_OBJ_FLAG_CLICKABLE|LV_OBJ_FLAG_SCROLLABLE);
+        }
         label(u.level[i],"Y",106,4,20,20,F16,MUTED);label(u.level[i],"X",182,80,18,20,F16,MUTED);
         label(u.level[i],"5°",168,20,28,20,F16,MUTED);label(u.level[i],"2°",128,50,28,20,F16,MUTED);label(u.level[i],"1°",114,68,28,20,F16,MUTED);
         u.level_nodata[i]=label(u.level[i],"нет данных",18,86,164,28,F20,MUTED);lv_obj_set_style_text_align(u.level_nodata[i],LV_TEXT_ALIGN_CENTER,0);
@@ -390,13 +438,32 @@ static void build_measure(void){
 }
 static void build_graph(void){
     lv_obj_t *p=u.pages[GRAPH];page_title(p,"График");
-    const char *names[]={"Д2 · X","Д2 · Y","Д3 · X","Д3 · Y"};for(int i=0;i<4;i++){u.legend[i]=button(p,names[i],154+i*114,8,104,56,NEUTRAL,600+i);style_font(lv_obj_get_child(u.legend[i],0),F16M,0);lv_obj_set_style_radius(u.legend[i],28,0);u.visible[i]=true;for(int k=0;k<(i%2?2:1);k++){lv_obj_t *swatch=box(u.legend[i],12+k*12,27,i%2?8:20,3,ORANGE);style_color(swatch,LV_STYLE_BG_COLOR,lv_color_hex(u.sensor[i/2]),0);}lv_obj_t *ll=lv_obj_get_child(u.legend[i],0);lv_obj_set_align(ll,LV_ALIGN_TOP_LEFT);lv_obj_set_pos(ll,38,18);lv_obj_set_width(ll,62);lv_obj_set_style_text_align(ll,LV_TEXT_ALIGN_LEFT,0);}
+    const char *names[]={"Д2 · X","Д2 · Y","Д3 · X","Д3 · Y"};for(int i=0;i<4;i++){u.legend[i]=button(p,names[i],154+i*114,8,104,56,NEUTRAL,600+i);style_font(lv_obj_get_child(u.legend[i],0),F16M,0);lv_obj_set_style_radius(u.legend[i],28,0);u.visible[i]=true;for(int k=0;k<1;k++){lv_obj_t *swatch=box(u.legend[i],12+k*12,27,20,3,ORANGE);style_color(swatch,LV_STYLE_BG_COLOR,lv_color_hex(u.sensor[i/2]),0);}lv_obj_t *ll=lv_obj_get_child(u.legend[i],0);lv_obj_set_align(ll,LV_ALIGN_TOP_LEFT);lv_obj_set_pos(ll,38,18);lv_obj_set_width(ll,62);lv_obj_set_style_text_align(ll,LV_TEXT_ALIGN_LEFT,0);}
     const char *ranges[]={"30 с","2 мин","10 мин"};for(int i=0;i<3;i++){u.ranges[i]=button(p,ranges[i],878+i*88,8,88,56,FRAME,610+i);style_font(lv_obj_get_child(u.ranges[i],0),F20,0);}
     u.range=1;lv_obj_t *card=box(p,0,88,1144,440,CARD);
     u.chart=lv_chart_create(card);lv_obj_remove_style_all(u.chart);lv_obj_set_pos(u.chart,76,24);lv_obj_set_size(u.chart,1040,364);lv_obj_set_style_line_width(u.chart,1,LV_PART_MAIN);style_color(u.chart,LV_STYLE_LINE_COLOR,lv_color_hex(u.border),LV_PART_MAIN);lv_obj_set_style_line_width(u.chart,2,LV_PART_ITEMS);lv_obj_set_style_size(u.chart,0,0,LV_PART_INDICATOR);lv_obj_set_style_pad_all(u.chart,0,0);lv_obj_remove_flag(u.chart,LV_OBJ_FLAG_SCROLLABLE);
     lv_chart_set_type(u.chart,LV_CHART_TYPE_LINE);lv_chart_set_point_count(u.chart,240);
     for(unsigned i=0;i<4;i++){u.series[i]=lv_chart_add_series(u.chart,lv_color_hex(u.sensor[i/2]),LV_CHART_AXIS_PRIMARY_Y);for(unsigned j=0;j<1200;j++)u.plotted[i][j]=LV_CHART_POINT_NONE;}
-    lv_obj_add_flag(u.chart,LV_OBJ_FLAG_SEND_DRAW_TASK_EVENTS);lv_obj_add_event_cb(u.chart,chart_draw_task,LV_EVENT_DRAW_TASK_ADDED,NULL);
+    /* One opaque RGB565 blit replaces thousands of antialiased LVGL line
+     * tasks. Keep chart series as the cursor/test data model and fallback.
+     * The buffer belongs in PSRAM, never in scarce internal SRAM. */
+    size_t plot_bytes=TAB5_PLOT_WIDTH*TAB5_PLOT_HEIGHT*sizeof(uint16_t);
+#ifdef ESP_PLATFORM
+    u.plot_pixels=heap_caps_aligned_alloc(64,plot_bytes,MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+#else
+    u.plot_pixels=malloc(plot_bytes);
+#endif
+    if(u.plot_pixels){
+        tab5_plot_t blank={.y_min=-100,.y_max=100,.none=LV_CHART_POINT_NONE,.background=lv_color_to_u16(lv_color_hex(u.card))};
+        tab5_plot_draw(u.plot_pixels,TAB5_PLOT_WIDTH,&blank);
+        u.plot_image=(lv_image_dsc_t){.header={.magic=LV_IMAGE_HEADER_MAGIC,.cf=LV_COLOR_FORMAT_RGB565,
+            .w=TAB5_PLOT_WIDTH,.h=TAB5_PLOT_HEIGHT,.stride=TAB5_PLOT_WIDTH*2},
+            .data_size=plot_bytes,.data=(const uint8_t*)u.plot_pixels};
+        u.plot_image_obj=lv_image_create(u.chart);lv_obj_remove_style_all(u.plot_image_obj);
+        lv_image_set_src(u.plot_image_obj,&u.plot_image);lv_obj_set_pos(u.plot_image_obj,0,0);
+        lv_obj_remove_flag(u.plot_image_obj,LV_OBJ_FLAG_CLICKABLE|LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_style_line_opa(u.chart,0,LV_PART_MAIN);lv_obj_set_style_line_opa(u.chart,0,LV_PART_ITEMS);
+    }
     lv_obj_add_flag(u.chart,LV_OBJ_FLAG_CLICKABLE);lv_obj_add_event_cb(u.chart,chart_touch,LV_EVENT_PRESSED,NULL);lv_obj_add_event_cb(u.chart,chart_touch,LV_EVENT_PRESSING,NULL);
     for(int i=0;i<9;i++)u.ylabel[i]=label(card,"",8,14+i*45,58,22,F16,MUTED);
     for(int i=0;i<7;i++){u.xlabel[i]=label(card,"",36+i*173,400,80,24,F16,MUTED);lv_obj_set_style_text_align(u.xlabel[i],LV_TEXT_ALIGN_CENTER,0);}
@@ -498,8 +565,8 @@ static void update_measure(void){
     if(u.page==MEASURE){
     text(u.hero_date,s->clock.known&&s->clock.time_valid?s->clock.datetime:"Установите часы");
     if(!any){text(u.hero_title,"Нет датчиков");text(u.hero_sub,"проверьте питание и RS485");}
-    else if(s->recording){elapsed(d,sizeof(d),duration());snprintf(b,sizeof(b),"Запись · %s",s->rec_known?d:"—");text(u.hero_title,b);snprintf(b,sizeof(b),"%s · %" PRIu64 " строк · %s",s->rec_known?s->rec_file:"файл —",s->sd.recording?s->sd.written:s->usb.written,s->sd.recording&&s->usb.recording?"SD и USB":s->sd.recording?"SD":s->usb.recording?"USB":"носители —");text(u.hero_sub,b);}
-    else {text(u.hero_title,s->measurement.stable?"Покой":fill<s->measurement.config.roll_window_s?"Накопление":"Качка");snprintf(b,sizeof(b),"%s · размах %.2f° · порог %.2f° · окно %u/%u с",s->measurement.stable?"можно снимать отсчёт":"дождитесь покоя",(double)roll,(double)s->measurement.config.roll_calm_deg,fill,s->measurement.config.roll_window_s);text(u.hero_sub,b);}
+    else if(s->recording){elapsed(d,sizeof(d),duration());snprintf(b,sizeof(b),"Запись · %s",s->rec_known?d:"—");text(u.hero_title,b);snprintf(b,sizeof(b),"%s%s · %" PRIu64 " строк · %s",s->live_unfiltered?"Угол без сглаживания · ":"",s->rec_known?s->rec_file:"файл —",s->sd.recording?s->sd.written:s->usb.written,s->sd.recording&&s->usb.recording?"SD и USB":s->sd.recording?"SD":s->usb.recording?"USB":"носители —");text(u.hero_sub,b);}
+    else {text(u.hero_title,s->measurement.stable?"Покой":fill<s->measurement.config.roll_window_s?"Накопление":"Качка");snprintf(b,sizeof(b),"%s · размах %.2f° · порог %.2f° · окно %u/%u с",s->live_unfiltered?"Угол без сглаживания":s->measurement.stable?"можно снимать отсчёт":"дождитесь покоя",(double)roll,(double)s->measurement.config.roll_calm_deg,fill,s->measurement.config.roll_window_s);text(u.hero_sub,b);}
     {uint32_t dc=!any?u.err:s->recording?0xFF5A5F:s->measurement.stable?0xB8E039:0xF2B84B;style_color(u.hero_dot,LV_STYLE_BG_COLOR,lv_color_hex(dc),0);style_color(u.hero_dot,LV_STYLE_OUTLINE_COLOR,lv_color_hex(dc),0);}
     for(unsigned i=0;i<2;i++){
         hide(u.hero_kpi[i],s->recording&&i==1);hide(u.hero_key[i],s->recording&&i==1);
@@ -518,9 +585,16 @@ static void update_measure(void){
         for(int a=0;a<2;a++){float v=a?m->roll_y:m->roll_x;bool calm=a?m->calm_y:m->calm_x;unsigned value=valid&&s->measurement.config.roll_calm_deg>0?(unsigned)fminf(1000,fmaxf(0,1000*v/(2*s->measurement.config.roll_calm_deg))):0;lv_bar_set_value(u.roll_bar[i][a],value,LV_ANIM_OFF);style_color(u.roll_mark[i][a],LV_STYLE_BG_COLOR,lv_color_hex(u.dim),0);style_color(u.roll_bar[i][a],LV_STYLE_BG_COLOR,lv_color_hex(calm?u.ok:u.warn),LV_PART_INDICATOR);if(valid)snprintf(b,sizeof(b),"%.2f°",(double)v);else snprintf(b,sizeof(b),"—");text(u.roll_value[i][a],b);text(u.roll_chip[i][a],valid?(calm?"● покой":"▲ качка"):"нет данных");role(u.roll_chip[i][a],valid?(calm?OK:WARN):NEUTRAL);}
         const tab5_measure_sensor_t *old=&u.level_state[i];
         bool was_valid=old->valid&&isfinite(old->x)&&isfinite(old->y);
+        int px=0,py=0,old_px=0,old_py=0;
+        tab5_level_position(m->x,m->y,valid,&px,&py);tab5_level_position(old->x,old->y,was_valid,&old_px,&old_py);
         if(lv_obj_is_visible(u.level[i])&&(!u.level_seen[i]||u.level_light[i]!=u.light||valid!=was_valid||
-           (valid&&(m->x!=old->x||m->y!=old->y||m->roll_x!=old->roll_x||m->roll_y!=old->roll_y)))){
-            lv_obj_invalidate(u.level[i]);u.level_state[i]=*m;u.level_seen[i]=true;u.level_light[i]=u.light;
+           (valid&&(px!=old_px||py!=old_py)))){
+            if(u.level_pixels[i]){
+                tab5_level_t level={.card_bg=lv_color_to_u16(lv_color_hex(u.card)),.alt_circle_bg=lv_color_to_u16(lv_color_hex(u.alt)),
+                    .border=lv_color_to_u16(lv_color_hex(u.border)),.sensor_color=lv_color_to_u16(lv_color_hex(u.sensor[i])),.x=m->x,.y=m->y,.valid=valid};
+                tab5_level_draw(u.level_pixels[i],TAB5_LEVEL_WIDTH,&level);lv_image_cache_drop(&u.level_image[i]);lv_obj_invalidate(u.level_image_obj[i]);
+            }else lv_obj_invalidate(u.level[i]);
+            u.level_state[i]=*m;u.level_seen[i]=true;u.level_light[i]=u.light;
         }
     }
     }
@@ -566,9 +640,29 @@ static void update_notice(const char *s){
 }
 void tab5_ui_update(const tab5_ui_state_t *s){
     if(!u.root||!s)return;
-    tab5_ui_state_t state=*s;u.state=state;
+    /* Work on a borrowed snapshot copy only; never feed presentation values
+     * back into acquisition, recording, roll or zero-offset calculation. */
+    tab5_ui_state_t state=*s;
+    if(state.live_unfiltered)for(unsigned i=0;i<TAB5_SENSOR_COUNT;i++){
+        tab5_measure_sensor_t *m=&state.measurement.sensor[i];
+        m->x=m->decoded_x-m->zero_x;
+        m->y=m->decoded_y-m->zero_y;
+    }
+    u.state=state;
     tab5_ui_graph_sample(&u.graph,&state);
     if(u.light!=state.light_theme){palette(state.light_theme);style_color(u.hero,LV_STYLE_BG_GRAD_COLOR,lv_color_hex(u.navsel),0);}
+    style_color(u.chart,LV_STYLE_BG_COLOR,lv_color_hex(u.card),0);
+    style_num(u.chart,LV_STYLE_BG_OPA,255,0);style_num(u.chart,LV_STYLE_RADIUS,0,0);
+    style_num(u.chart,LV_STYLE_BORDER_WIDTH,0,0);style_num(u.chart,LV_STYLE_SHADOW_WIDTH,0,0);
+    for(unsigned i=0;i<2;i++){
+        style_color(u.level[i],LV_STYLE_BG_COLOR,lv_color_hex(u.card),0);style_num(u.level[i],LV_STYLE_BG_OPA,255,0);style_num(u.level[i],LV_STYLE_RADIUS,0,0);
+        for(unsigned axis=0;axis<2;axis++){
+            lv_obj_t *o=u.angle[i][axis];style_color(o,LV_STYLE_BG_COLOR,lv_color_hex(u.card),0);style_num(o,LV_STYLE_BG_OPA,255,0);style_num(o,LV_STYLE_RADIUS,0,0);
+        }
+    }
+    for(unsigned k=0;k<4;k++){
+        style_color(u.stats[k],LV_STYLE_BG_COLOR,lv_color_hex(u.card),0);style_num(u.stats[k],LV_STYLE_BG_OPA,255,0);style_num(u.stats[k],LV_STYLE_RADIUS,0,0);
+    }
     update_result();update_notice(state.status);if(u.notice_text)style_color(u.notice_text,LV_STYLE_TEXT_COLOR,lv_color_hex(backend_failure()?u.err:u.info),0);
     if(u.pending&&!u.settings_failed&&(!state.action_result_known||u.settings_ack)&&cfg_equal(&state.measurement.config,&u.sent)){tab5_measure_config_t current=draft_config();u.pending=false;u.dirty=!cfg_equal(&current,&u.sent);}
     if(!u.dirty&&!u.pending)config_values(&state.measurement.config,u.draft);
@@ -598,7 +692,7 @@ void tab5_ui_update(const tab5_ui_state_t *s){
     }
     if(state.datetime_known)snprintf(b,sizeof(b),"%02u:%02u",state.datetime.hour,state.datetime.minute);else snprintf(b,sizeof(b),"—");text(u.rail_time,b);text(u.rail_power,!state.clock.known?"—":state.clock.battery_present?"батарея":"внешнее");
     for(unsigned i=0;i<2;i++){caption(u.start[i],state.recording?"■ Стоп записи":"● Старт записи");role(u.start[i],state.recording?RED:ORANGE);}
-    uint64_t now=state.now_known?state.now_us:(uint64_t)lv_tick_get()*1000;if(!u.rendered||now<u.render_us||now-u.render_us>=100000){update_measure();if(u.page==RECORD)update_record();if(u.page==GRAPH)chart_refresh();u.rendered=true;u.render_us=now;}
+    uint64_t now=state.now_known?state.now_us:(uint64_t)lv_tick_get()*1000;if(!u.rendered||now<u.render_us||now-u.render_us>=100000){update_measure();if(u.page==RECORD)update_record();if(u.page==GRAPH)chart_refresh(false);u.rendered=true;u.render_us=now;}
     if(u.keyboard)keyboard_style(u.keyboard);
 }
-void tab5_ui_destroy(void){if(u.repeat)lv_timer_delete(u.repeat);if(u.root)lv_obj_delete(u.root);if(u.styles_ready)for(int i=0;i<STYLE_COUNT;i++)lv_style_reset(&u.style[i]);memset(&u,0,sizeof(u));}
+void tab5_ui_destroy(void){if(u.repeat)lv_timer_delete(u.repeat);if(u.root)lv_obj_delete(u.root);if(u.plot_pixels){lv_image_cache_drop(&u.plot_image);free(u.plot_pixels);}for(unsigned i=0;i<2;i++)if(u.level_pixels[i]){lv_image_cache_drop(&u.level_image[i]);free(u.level_pixels[i]);}if(u.styles_ready)for(int i=0;i<STYLE_COUNT;i++)lv_style_reset(&u.style[i]);memset(&u,0,sizeof(u));}

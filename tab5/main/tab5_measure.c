@@ -160,19 +160,23 @@ static tab5_measure_error_t transact(unsigned i,uint16_t raw[2],uint64_t *end) {
     xSemaphoreTake(mutex,portMAX_DELAY);gap=device.state.config.gap_ms;xSemaphoreGive(mutex);
     wait_until(*end+(uint64_t)gap*1000);
     uint8_t req[8],reply[9];size_t n=0;tab5_measure_request((uint8_t)(i+2),req);
-    uart_flush_input(PORT);
-    gpio_set_level(GPIO_NUM_34,1);
+    if(uart_flush_input(PORT)!=ESP_OK){*end=(uint64_t)esp_timer_get_time();return TAB5_MEASURE_IO;}
+    /* Half-duplex driver asserts RTS/DIR for TX and releases it in TX_DONE
+     * ISR, before waking this task. Never flush after TX: a fast reply may
+     * already be buffered by the time uart_wait_tx_done returns. */
     int sent=uart_write_bytes(PORT,req,sizeof(req));
     esp_err_t tx=uart_wait_tx_done(PORT,ticks_ceil(30));
-    gpio_set_level(GPIO_NUM_34,0);
     tab5_measure_error_t result=TAB5_MEASURE_IO;
     if(sent==8 && tx==ESP_OK) {
         uint64_t deadline=(uint64_t)esp_timer_get_time()+30000;
         size_t want=9;
-        while((uint64_t)esp_timer_get_time()<deadline && n<want) {
+        while(n<want) {
+            /* Drain bytes already buffered for this transaction before testing
+             * the deadline: the task may have been descheduled while RX ISR
+             * collected a complete reply. Never wait for more after expiry. */
             int got=uart_read_bytes(PORT,reply+n,1,0);
             if(got<0)break;
-            if(got==0){vTaskDelay(1);continue;}
+            if(got==0){if((uint64_t)esp_timer_get_time()>=deadline)break;vTaskDelay(1);continue;}
             n++;
             if(n==2 && reply[1]==0x83)want=5;
         }
@@ -207,11 +211,16 @@ esp_err_t tab5_measure_start(const tab5_measure_config_t *config,tab5_measure_sa
     esp_err_t e=gpio_config(&g);
     if(e==ESP_OK)e=gpio_set_level(GPIO_NUM_34,0);
     if(e==ESP_OK)e=uart_param_config(PORT,&u);
-    if(e==ESP_OK)e=uart_set_pin(PORT,20,21,UART_PIN_NO_CHANGE,UART_PIN_NO_CHANGE);
+    /* ESP-IDF RTS is active-low in the software register: 1 deasserts the
+     * physical output (RX/low). Default, non-inverted RS485 RTS is TX/high.
+     * Set RX before routing UART RTS onto the previously low GPIO. */
+    if(e==ESP_OK)e=uart_set_rts(PORT,1);
+    if(e==ESP_OK)e=uart_set_pin(PORT,20,21,34,UART_PIN_NO_CHANGE);
     if(e==ESP_OK){e=uart_driver_install(PORT,256,0,0,NULL,0);installed=e==ESP_OK;}
+    if(e==ESP_OK)e=uart_set_mode(PORT,UART_MODE_RS485_HALF_DUPLEX);
     if(e==ESP_OK){
         tab5_measure_core_init(&device,config,(uint64_t)esp_timer_get_time());sample_cb=cb;sample_user=user;
-        if(xTaskCreate(measure_task,"tab5_measure",4096,NULL,5,&worker)!=pdPASS)e=ESP_ERR_NO_MEM;
+        if(xTaskCreatePinnedToCore(measure_task,"tab5_measure",4096,NULL,5,&worker,0)!=pdPASS)e=ESP_ERR_NO_MEM;
     }
     if(e!=ESP_OK){if(installed)uart_driver_delete(PORT);vSemaphoreDelete(mutex);mutex=NULL;worker=NULL;}
     return e;

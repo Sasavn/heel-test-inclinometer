@@ -95,6 +95,10 @@ typedef struct {
     uint8_t cpu_load_pct;
     uint32_t ram_used_bytes, ram_total_bytes;
     uint32_t psram_used_bytes, psram_total_bytes;
+    /* Presentation only: live angles/level/chart use decoded minus existing
+     * zero offsets. Input snapshot, EMA, roll, zero and recording stay owned
+     * by measurement/main. False preserves the filtered presentation. */
+    bool live_unfiltered;
 } tab5_ui_state_t;
 /* All calls require BSP LVGL lock (or the LVGL thread). Display already started
  * and rotated to 1280x720 by main. No task or display created here; a short-lived stepper repeat timer is UI-owned.

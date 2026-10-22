@@ -173,7 +173,7 @@ static void render_cadence_and_wrap(void){
   for(unsigned j=0;j<first;j++)CHECK(out[j]==LV_CHART_POINT_NONE);
   for(unsigned j=first;j<300;j++)CHECK(out[j]==(int32_t)(401+j));
   if(hz[h]<10)CHECK(raw[298]==LV_CHART_POINT_NONE);
-  tab5_ui_graph_read(&g,120,0,raw);tab5_ui_graph_read_render(&g,120,0,out);CHECK(!memcmp(raw,out,240*sizeof(*raw)));
+  tab5_ui_graph_read(&g,120,0,raw);tab5_ui_graph_read_render(&g,120,0,out);for(unsigned j=0;j<240;j++)if(raw[j]!=LV_CHART_POINT_NONE)CHECK(raw[j]==out[j]);
  }
 }
 static void render_gaps_and_tail(void){
@@ -192,7 +192,7 @@ static void render_gaps_and_tail(void){
   s.measurement.sensor[0].x=2;tab5_ui_graph_sample(&g,&s);
   if(mode==5){s.now_us=1250000;s.measurement.sensor[0].good++;s.measurement.sensor[0].timestamp_us=s.now_us;tab5_ui_graph_sample(&g,&s);}
   int32_t raw[1200],out[1200];tab5_ui_graph_read(&g,30,0,raw);tab5_ui_graph_read_render(&g,30,0,out);
-  CHECK(raw[298]==LV_CHART_POINT_NONE);CHECK(out[298]==(mode==5?100:LV_CHART_POINT_NONE));
+  CHECK(raw[298]==LV_CHART_POINT_NONE);CHECK(out[298]==(mode==0?150:(mode==2||mode==3||mode==5)?100:LV_CHART_POINT_NONE));
   s.now_us+=300000;tab5_ui_graph_sample(&g,&s);tab5_ui_graph_read_render(&g,30,0,out);
   CHECK(out[297]==LV_CHART_POINT_NONE&&out[298]==LV_CHART_POINT_NONE&&out[299]==LV_CHART_POINT_NONE);
  }
@@ -210,17 +210,17 @@ static void render_jitter_and_invalid_axis(void){
  tab5_ui_graph_reset(&g);s=state(1090000,0,0,0,0);s.measurement.config.frequency_hz=10;tab5_ui_graph_sample(&g,&s);
  s.now_us=1210000;s.measurement.sensor[0].timestamp_us=s.now_us;s.measurement.sensor[0].good++;s.measurement.sensor[0].x=2;tab5_ui_graph_sample(&g,&s);
  tab5_ui_graph_read_render(&g,30,0,out);CHECK(out[297]==0&&out[298]==100&&out[299]==200);
- /* A second reply in the recovery bucket cannot hide the prior dropout. */
+ /* A second reply in a healthy recovery bucket preserves its short edge. */
  tab5_ui_graph_reset(&g);s=state(1000000,0,0,0,0);s.measurement.config.frequency_hz=5;tab5_ui_graph_sample(&g,&s);
  s.now_us=1400000;s.measurement.sensor[0].timestamp_us=s.now_us;s.measurement.sensor[0].good++;s.measurement.sensor[0].x=2;tab5_ui_graph_sample(&g,&s);
  s.now_us=1450000;s.measurement.sensor[0].timestamp_us=s.now_us;s.measurement.sensor[0].good++;s.measurement.sensor[0].x=3;tab5_ui_graph_sample(&g,&s);
- tab5_ui_graph_read_render(&g,30,0,out);CHECK(out[298]==LV_CHART_POINT_NONE);
+ tab5_ui_graph_read_render(&g,30,0,out);CHECK(out[298]!=LV_CHART_POINT_NONE);
  /* Explicit nonfinite sample cannot be interpolated through. */
  tab5_ui_graph_reset(&g);s=state(1000000,0,0,0,0);s.measurement.config.frequency_hz=1;tab5_ui_graph_sample(&g,&s);
  s.now_us=1100000;s.measurement.sensor[0].timestamp_us=s.now_us;s.measurement.sensor[0].good++;s.measurement.sensor[0].x=NAN;tab5_ui_graph_sample(&g,&s);
  s.now_us=1200000;s.measurement.sensor[0].timestamp_us=s.now_us;s.measurement.sensor[0].good++;s.measurement.sensor[0].x=2;tab5_ui_graph_sample(&g,&s);
  tab5_ui_graph_read_render(&g,30,0,out);CHECK(out[298]==LV_CHART_POINT_NONE);
- printf("graph RAM: %zu bytes; render metadata: %zu bytes\n",sizeof(g),sizeof(g.fast_real)+sizeof(g.fast_bridge)+sizeof(g.render_good)+sizeof(g.render_errors)+sizeof(g.render_blocked));
+ printf("graph RAM: %zu bytes; render metadata: %zu bytes\n",sizeof(g),sizeof(g.fast_meta)+sizeof(g.slow_meta)+sizeof(g.render_good)+sizeof(g.render_blocked));
 }
 static void render_skipped_snapshots(void){
  for(unsigned mode=0;mode<7;mode++){
@@ -238,7 +238,7 @@ static void render_skipped_snapshots(void){
   tab5_ui_graph_sample(&g,&s);
   int32_t raw[1200],out[1200];tab5_ui_graph_read(&g,30,0,raw);tab5_ui_graph_read_render(&g,30,0,out);
   CHECK(raw[298]==LV_CHART_POINT_NONE);
-  CHECK(out[298]==(mode==0?100:LV_CHART_POINT_NONE));
+  CHECK(out[298]==((mode==0||mode==2||mode==5)?100:LV_CHART_POINT_NONE));
   /* A sensor with no errors remains independent of the failing peer. */
   CHECK(out[299]==(mode==6?LV_CHART_POINT_NONE:200));
  }
@@ -247,6 +247,40 @@ static void render_skipped_snapshots(void){
  tab5_ui_graph_sample(&g,&s);s.now_us=1400000;s.measurement.sensor[0].timestamp_us=s.now_us;s.measurement.sensor[0].good=3;s.measurement.sensor[0].x=4;tab5_ui_graph_sample(&g,&s);
  int32_t out[1200];tab5_ui_graph_read_render(&g,30,0,out);CHECK(out[295]==0&&out[296]==100&&out[297]==200&&out[298]==300&&out[299]==400);
 }
+static void render_short_failures_all_ranges(void){
+ unsigned windows[]={30,120,600};
+ for(unsigned w=0;w<3;w++)for(unsigned mode=0;mode<7;mode++){
+  /* At 1Hz, both grids have interior holes. 1.5s nominal bound admits
+   * isolated errors, never an observed offline/three-failure transition. */
+  tab5_ui_graph_reset(&g);tab5_ui_state_t s=state(1000000,0,0,0,0);
+  s.measurement.config.frequency_hz=1;s.measurement.config.gap_ms=15;tab5_ui_graph_sample(&g,&s);
+  s.now_us=1500000;
+  if(mode==1)s.measurement.sensor[0].valid=false;
+  if(mode==2)s.measurement.sensor[0].fail_streak=3;
+  if(mode==3)s.measurement.sensor[0].fail_streak=2;
+  if(mode==0||mode==3)s.measurement.sensor[0].errors++;
+  if(mode==4){s.measurement.sensor[0].good++;s.measurement.sensor[0].timestamp_us=s.now_us;s.measurement.sensor[0].x=NAN;}
+  tab5_ui_graph_sample(&g,&s);
+  s.now_us=mode==5?3000000:2000000;s.measurement.sensor[0].valid=true;s.measurement.sensor[0].fail_streak=0;
+  s.measurement.sensor[0].good=mode==6?1:3;s.measurement.sensor[0].timestamp_us=s.now_us;s.measurement.sensor[0].x=2;
+  tab5_ui_graph_sample(&g,&s);
+  int32_t raw[1200],out[1200],again[1200];unsigned n=tab5_ui_graph_read(&g,windows[w],0,raw);
+  tab5_ui_graph_read_render(&g,windows[w],0,out);tab5_ui_graph_read(&g,windows[w],0,again);
+  CHECK(!memcmp(raw,again,n*sizeof(*raw)));CHECK(raw[n-2]==LV_CHART_POINT_NONE);
+  CHECK((out[n-2]!=LV_CHART_POINT_NONE)==(mode==0||mode==3));
+  CHECK(out[0]==LV_CHART_POINT_NONE); /* Never fabricate leading history. */
+  s.now_us+=1000000;tab5_ui_graph_sample(&g,&s);tab5_ui_graph_read_render(&g,windows[w],0,out);
+  CHECK(out[n-1]==LV_CHART_POINT_NONE); /* Never extrapolate stale tail. */
+ }
+ /* Actual 10Hz isolated 100-300ms failures, inclusive 500ms threshold;
+  * same bound rejects 600ms even if the good counter jumps. */
+ for(unsigned dt=200000;dt<=600000;dt+=100000){
+  tab5_ui_graph_reset(&g);tab5_ui_state_t s=state(1000000,0,0,0,0);s.measurement.config.frequency_hz=10;tab5_ui_graph_sample(&g,&s);
+  s.now_us+=100000;s.measurement.sensor[0].errors++;s.measurement.sensor[0].fail_streak=1;tab5_ui_graph_sample(&g,&s);
+  s.now_us=1000000+dt;s.measurement.sensor[0].timestamp_us=s.now_us;s.measurement.sensor[0].good=20;s.measurement.sensor[0].fail_streak=0;s.measurement.sensor[0].x=2;tab5_ui_graph_sample(&g,&s);
+  int32_t out[1200];tab5_ui_graph_read_render(&g,30,0,out);CHECK((out[298]!=LV_CHART_POINT_NONE)==(dt<=500000));
+ }
+}
 int main(void){
  _Static_assert(LV_CHART_POINT_NONE==INT32_MAX,"Actual LVGL chart gap marker changed");
  struct {const char *name;void (*run)(void);} cases[]={
@@ -254,7 +288,7 @@ int main(void){
   CASE(empty_and_unknown),CASE(duplicate_timestamps),CASE(validity_and_axis_values),
   CASE(offline_and_stale_gaps),CASE(buckets_and_small_gaps),CASE(delayed_timestamp_fast),
   CASE(delayed_timestamp_slow),CASE(newest_measurement_per_bucket),CASE(delayed_retention_and_exact_edges),CASE(delayed_after_existing_history),CASE(large_jump_and_restart),
-  CASE(capacity_jump_boundaries),CASE(ten_minutes_2hz_then_fast_10hz),CASE(repeated_wrap_all_windows),CASE(render_cadence_and_wrap),CASE(render_gaps_and_tail),CASE(render_jitter_and_invalid_axis),CASE(render_skipped_snapshots)
+  CASE(capacity_jump_boundaries),CASE(ten_minutes_2hz_then_fast_10hz),CASE(repeated_wrap_all_windows),CASE(render_cadence_and_wrap),CASE(render_gaps_and_tail),CASE(render_jitter_and_invalid_axis),CASE(render_skipped_snapshots),CASE(render_short_failures_all_ranges)
 #undef CASE
  };
  for(unsigned i=0;i<sizeof(cases)/sizeof(*cases);i++){int before=failures;cases[i].run();printf("%s %s\n",before==failures?"PASS":"FAIL",cases[i].name);}

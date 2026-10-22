@@ -12,6 +12,8 @@ from PIL import Image
 ROOT = Path(__file__).resolve().parents[2]
 p = argparse.ArgumentParser(description=__doc__)
 p.add_argument('--out', type=Path, default=ROOT/'tab5'/'tests'/'output_ui')
+p.add_argument('--rgb565', action='store_true', help='Compile LV_COLOR_DEPTH=16 and render real RGB565 display buffers')
+p.add_argument('--bench-only', action='store_true', help='Run the identical moving fixtures without screenshot suite')
 a = p.parse_args()
 a.out = a.out.resolve(); a.out.mkdir(parents=True, exist_ok=True)
 lvgl = ROOT/'tab5'/'managed_components'/'lvgl__lvgl'
@@ -23,9 +25,9 @@ import concurrent.futures
 import hashlib
 sources = sorted((lvgl/'src').rglob('*.c'))
 sources += [ROOT/'tab5'/'tests'/'test_ui.c', ROOT/'tab5'/'main'/'tab5_ui.c',ROOT/'tab5'/'main'/'tab5_measure.c']
-sources += [ROOT/'tab5'/'main'/'tab5_ui_graph.c', ROOT/'tab5'/'main'/'tab5_time.c']
+sources += [ROOT/'tab5'/'main'/'tab5_ui_graph.c', ROOT/'tab5'/'main'/'tab5_time.c', ROOT/'tab5'/'main'/'tab5_plot.c', ROOT/'tab5'/'main'/'tab5_level.c']
 sources += sorted((ROOT/'tab5'/'main').glob('font_tab5_*.c'))
-flags = ['-std=c11','-O1','-DLV_CONF_SKIP','-DLV_COLOR_DEPTH=32','-DLV_USE_LOG=0',
+flags = ['-std=c11','-O1','-DLV_CONF_SKIP','-DLV_COLOR_DEPTH='+('16' if a.rgb565 else '32'),'-DLV_USE_LOG=0',
          '-DLV_MEM_SIZE=8388608','-DLV_USE_OS=0','-DLV_USE_DRAW_SW=1','-DLV_USE_DRAW_SW_ASM=0',
          '-I'+str(lvgl),'-I'+str(ROOT/'tab5'/'main')]
 headers = sorted(lvgl.rglob('*.h')) + sorted((ROOT/'tab5'/'main').glob('*.h'))
@@ -34,8 +36,12 @@ cache = Path(tempfile.gettempdir()) / ('tab5-lvgl-headless-' + hashlib.sha256(fi
 cache.mkdir(exist_ok=True)
 def compile_one(source):
     obj = cache / (hashlib.sha256(str(source).encode()).hexdigest()[:20]+'.o')
-    if not obj.exists() or obj.stat().st_mtime_ns < source.stat().st_mtime_ns:
+    # Local UI source edits preserve mtimes: content stamps prevent stale .o.
+    stamp = obj.with_suffix('.sha256')
+    digest = hashlib.sha256(source.read_bytes()).hexdigest() if not source.is_relative_to(lvgl) else None
+    if not obj.exists() or obj.stat().st_mtime_ns < source.stat().st_mtime_ns or (digest is not None and (not stamp.exists() or stamp.read_text() != digest)):
         subprocess.run([compiler,*flags,'-c',str(source),'-o',str(obj)],check=True)
+    if digest is not None: stamp.write_text(digest)
     return obj
 with concurrent.futures.ThreadPoolExecutor(max_workers=min(8,os.cpu_count() or 2)) as pool:
     objects = list(pool.map(compile_one,sources))
@@ -46,7 +52,12 @@ rsp.write_text('\n'.join('"'+s.replace('\\','/')+'"' for s in args),encoding='ut
 subprocess.run([compiler,'@'+str(rsp)],check=True)
 import time
 started = time.time_ns()
-result = subprocess.run([str(exe),str(a.out)],check=False,timeout=90)
+run_env = os.environ.copy()
+run_env['TAB5_TEST_RGB565'] = '1' if a.rgb565 else '0'
+run_env['TAB5_TEST_BENCH_ONLY'] = '1' if a.bench_only else '0'
+result = subprocess.run([str(exe),str(a.out)],check=False,timeout=90,env=run_env,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
+(a.out/'native.log').write_bytes(result.stdout)
+print(result.stdout.decode('utf-8',errors='replace'),end='')
 captures = []
 for ppm in a.out.glob('*.ppm'):
     if ppm.stat().st_mtime_ns < started:

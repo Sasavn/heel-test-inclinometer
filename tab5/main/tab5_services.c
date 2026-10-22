@@ -1,4 +1,5 @@
 #include "tab5_services.h"
+#include "tab5_retry_backoff.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -55,6 +56,8 @@ typedef struct {
  uint64_t flushed;
 } medium_t;
 static medium_t media[2];
+static bool auto_retry[2]={true,true};
+static tab5_retry_backoff_t sd_retry;
 static bool recording, initialized, storage_ready, files_busy, stopping, boot_health;
 static bool usb_driver_ready;
 static esp_err_t usb_driver_error;
@@ -109,6 +112,14 @@ static void ml(unsigned i) { (void)i; }
 static void mu(unsigned i) { (void)i; }
 static uint64_t now_ms(void) { return test_now; }
 #endif
+
+esp_err_t tab5_services_set_auto_retry(tab5_medium_t i,bool enabled) {
+ if((unsigned)i>TAB5_USB)return ESP_ERR_INVALID_ARG;
+ if(!initialized)return ESP_ERR_INVALID_STATE;
+ lock();auto_retry[i]=enabled;
+ if(enabled && i==TAB5_SD)tab5_retry_backoff_reset(&sd_retry,now_ms());
+ unlock();return ESP_OK;
+}
 
 static bool basename_ok(const char *s) {
  if(!s || !*s || strlen(s)>63 || strstr(s,"..")) return false;
@@ -480,6 +491,7 @@ static esp_err_t mount_sd(void) {
  return e;
 }
 static void usb_event(const msc_host_event_t *event,void *ctx) {(void)ctx;xQueueSend(usb_events,event,0);}
+static esp_err_t retry_medium(tab5_medium_t i,bool automatic);
 static void media_task(void *arg) {
  unsigned i=(uintptr_t)arg;uint64_t retried=0;
  for(;;){
@@ -495,15 +507,20 @@ static void media_task(void *arg) {
     }
    }
   }
-  lock();bool retry=!recording && !stopping && !files_busy && !media[i].status.mounted && now_ms()-retried>=2000;unlock();
-  if(retry){retried=now_ms();tab5_services_retry(i);}
+  lock();uint64_t now=now_ms();
+  if(i==TAB5_SD && media[i].status.mounted)tab5_retry_backoff_reset(&sd_retry,now);
+  bool due=i==TAB5_SD?tab5_retry_backoff_due(&sd_retry,now):now-retried>=2000;
+  bool retry=auto_retry[i] && !recording && !stopping && !files_busy && !media[i].status.mounted && due;unlock();
+  if(retry){retried=now_ms();retry_medium(i,true);}
   media_step(i);if(i==0)maintenance();vTaskDelay(pdMS_TO_TICKS(10));
  }
 }
-esp_err_t tab5_services_retry(tab5_medium_t i) {
+static esp_err_t retry_medium(tab5_medium_t i,bool automatic) {
  if(!initialized)return ESP_ERR_INVALID_STATE;
  if((unsigned)i>TAB5_USB)return ESP_ERR_INVALID_ARG;
- lock();if(recording || stopping || files_busy){unlock();return ESP_ERR_INVALID_STATE;}
+ lock();if(recording || stopping || files_busy ||
+    (automatic && (!auto_retry[i] || media[i].status.mounted ||
+     (i==TAB5_SD && !tab5_retry_backoff_due(&sd_retry,now_ms()))))){unlock();return ESP_ERR_INVALID_STATE;}
  if(i==TAB5_USB && !usb_driver_ready){esp_err_t e=usb_driver_error;unlock();return e;}
  files_busy=true;unlock();
  ml(i);esp_err_t e;
@@ -518,8 +535,11 @@ esp_err_t tab5_services_retry(tab5_medium_t i) {
   if(e==ESP_OK)e=msc_host_vfs_register(usb_device,media[i].root,&m,&usb_vfs);
   if(e==ESP_OK && !fat32_drive(drive)){msc_host_vfs_unregister(usb_vfs);usb_vfs=NULL;e=ESP_FAIL;}
  }
- lock();media[i].status.mounted=e==ESP_OK;media[i].status.failed=e!=ESP_OK;media[i].status.error=e;files_busy=false;unlock();mu(i);return e;
+ lock();media[i].status.mounted=e==ESP_OK;media[i].status.failed=e!=ESP_OK;media[i].status.error=e;files_busy=false;
+ if(i==TAB5_SD){if(e==ESP_OK)tab5_retry_backoff_reset(&sd_retry,now_ms());else tab5_retry_backoff_failed(&sd_retry,now_ms());}
+ unlock();mu(i);return e;
 }
+esp_err_t tab5_services_retry(tab5_medium_t i) {return retry_medium(i,false);}
 typedef struct {int fd;uint32_t owner,epoch;bool auth,overflow,dead;size_t used;char rx[TAB5_SERVICE_LINE_MAX];char tx[OUTPUT*8];size_t tx_len,tx_sent;uint64_t connected;} client_t;
 static client_t clients[CLIENTS];
 static void tcp_reply(void *ctx,const char *line) {
@@ -615,7 +635,7 @@ esp_err_t tab5_services_publish(const char *line) {
  output_t out;strcpy(out.text,line);return xQueueSend(publish_queue,&out,0)==pdTRUE?ESP_OK:ESP_ERR_NO_MEM;
 }
 #else
-esp_err_t tab5_services_retry(tab5_medium_t i) {if((unsigned)i>TAB5_USB)return ESP_ERR_INVALID_ARG;if(recording)return ESP_ERR_INVALID_STATE;if(i==TAB5_USB && !usb_driver_ready)return usb_driver_error;media[i].status.mounted=test_present[i];media[i].status.failed=!test_present[i];return test_present[i]?ESP_OK:ESP_FAIL;}
+esp_err_t tab5_services_retry(tab5_medium_t i) {if((unsigned)i>TAB5_USB)return ESP_ERR_INVALID_ARG;if(recording)return ESP_ERR_INVALID_STATE;if(i==TAB5_USB && !usb_driver_ready)return usb_driver_error;media[i].status.mounted=test_present[i];media[i].status.failed=!test_present[i];if(i==TAB5_SD){if(test_present[i])tab5_retry_backoff_reset(&sd_retry,now_ms());else tab5_retry_backoff_failed(&sd_retry,now_ms());}return test_present[i]?ESP_OK:ESP_FAIL;}
 esp_err_t tab5_services_publish(const char *s) {return s && strlen(s)<OUTPUT?ESP_OK:ESP_ERR_INVALID_ARG;}
 static esp_err_t configure_wifi(const tab5_network_config_t *c) {(void)c;test_wifi_starts++;return test_wifi_start_error;}
 #endif
@@ -720,6 +740,7 @@ esp_err_t tab5_services_init(const tab5_services_config_t *cfg) {
  if(!cfg || initialized)return ESP_ERR_INVALID_STATE;
  config=*cfg;
  esp_err_t e=startup_core();if(e!=ESP_OK)return e;
+ auto_retry[0]=auto_retry[1]=true;tab5_retry_backoff_reset(&sd_retry,now_ms());
  initialized=true;
  tab5_services_retry(TAB5_SD); /* Missing/failed storage is optional. */
  e=startup_usb();

@@ -23,7 +23,7 @@ import concurrent.futures
 import hashlib
 sources = sorted((lvgl/'src').rglob('*.c'))
 sources += [ROOT/'tab5'/'tests'/'test_ui_graph_render.c', ROOT/'tab5'/'main'/'tab5_ui.c',ROOT/'tab5'/'main'/'tab5_measure.c']
-sources += [ROOT/'tab5'/'main'/'tab5_ui_graph.c', ROOT/'tab5'/'main'/'tab5_time.c']
+sources += [ROOT/'tab5'/'main'/'tab5_ui_graph.c', ROOT/'tab5'/'main'/'tab5_time.c', ROOT/'tab5'/'main'/'tab5_plot.c', ROOT/'tab5'/'main'/'tab5_level.c']
 sources += sorted((ROOT/'tab5'/'main').glob('font_tab5_*.c'))
 flags = ['-std=c11','-O1','-DLV_CONF_SKIP','-DLV_COLOR_DEPTH=32','-DLV_USE_LOG=0',
          '-DLV_MEM_SIZE=8388608','-DLV_USE_OS=0','-DLV_USE_DRAW_SW=1','-DLV_USE_DRAW_SW_ASM=0',

@@ -5,7 +5,13 @@
 #include "tab5_panel.h"
 #include "tab5_time.h"
 #include "tab5_resources.h"
+#include "tab5_draw_profile.h"
+/* The pinned LVGL 9.3 backend exposes no public flushing getter. Use exactly
+ * the volatile completion flag polled by its own wait_for_flushing(), but
+ * sleep between polls instead of burning an entire CPU core. */
+#include "src/display/lv_display_private.h"
 #include "bsp/esp-bsp.h"
+#include "esp_lvgl_port.h"
 #include "driver/usb_serial_jtag.h"
 #include "esp_chip_info.h"
 #include "esp_app_desc.h"
@@ -79,12 +85,17 @@ static void resources_refresh(uint64_t now) {
 /* Wall times, not CPU utilization. Display events run in the LVGL task;
  * protocol reads/reset run in another task, hence the short critical sections. */
 typedef struct {
-    uint64_t since,render_start,flush_start,refresh_start;
-    uint64_t render_us,flush_us,refresh_us,update_us;
+    uint64_t since,render_start,flush_start,refresh_start,wait_start;
+    uint64_t render_us,flush_us,refresh_us,update_us,wait_us;
     uint32_t renders,flushes,refreshes,updates,lock_misses,refresh_max_us;
+    uint32_t sample_age_us[2],sample_age_max_us[2];
 } ui_perf_t;
 static ui_perf_t ui_perf;
 static portMUX_TYPE ui_perf_lock=portMUX_INITIALIZER_UNLOCKED;
+static void display_flush_wait(lv_display_t *display){
+    while(display->flushing)vTaskDelay(1);
+}
+static uint32_t display_tick_ms(void){return (uint32_t)(esp_timer_get_time()/1000);}
 static void display_perf(lv_event_t *event) {
     uint64_t now=esp_timer_get_time();lv_event_code_t code=lv_event_get_code(event);
     portENTER_CRITICAL(&ui_perf_lock);
@@ -92,27 +103,38 @@ static void display_perf(lv_event_t *event) {
     else if(code==LV_EVENT_RENDER_READY&&ui_perf.render_start){ui_perf.render_us+=now-ui_perf.render_start;ui_perf.renders++;ui_perf.render_start=0;}
     else if(code==LV_EVENT_FLUSH_START)ui_perf.flush_start=now;
     else if(code==LV_EVENT_FLUSH_FINISH&&ui_perf.flush_start){ui_perf.flush_us+=now-ui_perf.flush_start;ui_perf.flushes++;ui_perf.flush_start=0;}
+    else if(code==LV_EVENT_FLUSH_WAIT_START)ui_perf.wait_start=now;
+    else if(code==LV_EVENT_FLUSH_WAIT_FINISH&&ui_perf.wait_start){ui_perf.wait_us+=now-ui_perf.wait_start;ui_perf.wait_start=0;}
     else if(code==LV_EVENT_REFR_START)ui_perf.refresh_start=now;
     else if(code==LV_EVENT_REFR_READY&&ui_perf.refresh_start){uint64_t dt=now-ui_perf.refresh_start;ui_perf.refresh_us+=dt;ui_perf.refreshes++;if(dt>ui_perf.refresh_max_us)ui_perf.refresh_max_us=dt;ui_perf.refresh_start=0;}
     portEXIT_CRITICAL(&ui_perf_lock);
 }
 static void ui_perf_reply(bool reset,tab5_service_reply_fn reply,void *ctx) {
+    if(reset)tab5_draw_profile_snapshot(NULL,true);
     uint64_t now=esp_timer_get_time();ui_perf_t p;
     portENTER_CRITICAL(&ui_perf_lock);
     if(reset){ui_perf=(ui_perf_t){.since=now};}
     p=ui_perf;portEXIT_CRITICAL(&ui_perf_lock);
     char out[640];snprintf(out,sizeof(out),
-        "{\"elapsed_ms\":%llu,\"updates\":%lu,\"update_us\":%llu,\"renders\":%lu,\"render_us\":%llu,\"flushes\":%lu,\"flush_us\":%llu,\"refreshes\":%lu,\"refresh_us\":%llu,\"refresh_max_us\":%lu,\"lock_misses\":%lu,\"ppa\":%s,\"reset_reason\":%d}",
+        "{\"elapsed_ms\":%llu,\"updates\":%lu,\"update_us\":%llu,\"renders\":%lu,\"render_us\":%llu,\"flushes\":%lu,\"flush_us\":%llu,\"refreshes\":%lu,\"refresh_us\":%llu,\"refresh_max_us\":%lu,\"lock_misses\":%lu,\"sample_age_us\":[%lu,%lu],\"sample_age_max_us\":[%lu,%lu],\"flush_wait_us\":%llu,\"ppa\":%s,\"reset_reason\":%d}",
         (unsigned long long)((now-p.since)/1000),(unsigned long)p.updates,(unsigned long long)p.update_us,
         (unsigned long)p.renders,(unsigned long long)p.render_us,(unsigned long)p.flushes,(unsigned long long)p.flush_us,
         (unsigned long)p.refreshes,(unsigned long long)p.refresh_us,(unsigned long)p.refresh_max_us,(unsigned long)p.lock_misses,
+        (unsigned long)p.sample_age_us[0],(unsigned long)p.sample_age_us[1],(unsigned long)p.sample_age_max_us[0],(unsigned long)p.sample_age_max_us[1],
+        (unsigned long long)p.wait_us,
 #if CONFIG_LVGL_PORT_ENABLE_PPA
         "true"
 #else
         "false"
 #endif
         ,(int)esp_reset_reason()
-    );reply(ctx,out);reply(ctx,"OK ui perf");
+    );reply(ctx,out);
+    tab5_draw_profile_snapshot_t draw;tab5_draw_profile_snapshot(&draw,false);
+    for(unsigned i=0;i<TAB5_DRAW_PROFILE_COUNT;i++){
+        snprintf(out,sizeof(out),"{\"draw\":\"%s\",\"us\":%llu,\"calls\":%llu}",draw.entries[i].name,
+            (unsigned long long)draw.entries[i].us,(unsigned long long)draw.entries[i].calls);reply(ctx,out);
+    }
+    reply(ctx,"OK ui perf");
 }
 
 static void boot_failed(void) {
@@ -215,6 +237,7 @@ static void status(tab5_service_reply_fn reply,void *ctx) {
         const tab5_measure_sensor_t *p=&s.sensor[i];cJSON *d=cJSON_CreateObject();cJSON_AddItemToArray(a,d);
         cJSON_AddNumberToObject(d,"addr",p->address);cJSON_AddStringToObject(d,"st",p->valid?"OK":p->good?"LOST":"ABSENT");
         add_num(d,"x",p->valid?p->x:NAN);add_num(d,"y",p->valid?p->y:NAN);
+        add_num(d,"live_x",p->valid?p->decoded_x-p->zero_x:NAN);add_num(d,"live_y",p->valid?p->decoded_y-p->zero_y:NAN);
         add_num(d,"ox",p->zero_x);add_num(d,"oy",p->zero_y);add_num(d,"roll_x",p->roll_x);add_num(d,"roll_y",p->roll_y);
         cJSON_AddBoolToObject(d,"calm_x",p->calm_x);cJSON_AddBoolToObject(d,"calm_y",p->calm_y);
         cJSON_AddNumberToObject(d,"fill",p->roll_fill_s);cJSON_AddNumberToObject(d,"ok",p->good);cJSON_AddNumberToObject(d,"err",p->errors);
@@ -245,6 +268,23 @@ static void command(void *unused,const char *line,tab5_service_reply_fn reply,vo
     if(strcmp(line,"ver")==0){char version[160];snprintf(version,sizeof(version),"BWM427 inclinometer firmware v%s, board=tab5 chip=esp32p4 proto=2",FW_VERSION);reply(ctx,version);reply(ctx,"OK");}
     else if(strcmp(line,"status")==0 || strcmp(line,"diag")==0)status(reply,ctx);
     else if(strcmp(line,"ui perf")==0 || strcmp(line,"ui perf reset")==0)ui_perf_reply(strcmp(line,"ui perf reset")==0,reply,ctx);
+    else if(strcmp(line,"sd auto on")==0 || strcmp(line,"sd auto off")==0){
+        bool enabled=strcmp(line,"sd auto on")==0;
+        reply(ctx,tab5_services_set_auto_retry(TAB5_SD,enabled)==ESP_OK?(enabled?"OK sd auto on":"OK sd auto off"):"ERR sd auto");
+    }
+    else if(strcmp(line,"sd retry")==0)reply(ctx,tab5_services_retry(TAB5_SD)==ESP_OK?"OK sd ready":"ERR sd unavailable");
+    else if(strcmp(line,"ui tasks")==0){
+        UBaseType_t cap=uxTaskGetNumberOfTasks()+8;
+        TaskStatus_t *tasks=cap<=96?calloc(cap,sizeof(*tasks)):NULL;
+        if(!tasks)reply(ctx,"ERR task snapshot memory");
+        else{configRUN_TIME_COUNTER_TYPE total=0;UBaseType_t count=uxTaskGetSystemState(tasks,cap,&total);
+            cJSON *j=cJSON_CreateObject();cJSON_AddNumberToObject(j,"task_clock",total);
+            cJSON *a=cJSON_AddArrayToObject(j,"tasks");
+            for(UBaseType_t i=0;i<count;i++){TaskStatus_t *t=&tasks[i];cJSON *d=cJSON_CreateObject();cJSON_AddItemToArray(a,d);
+                cJSON_AddStringToObject(d,"task",t->pcTaskName);cJSON_AddNumberToObject(d,"run",t->ulRunTimeCounter);cJSON_AddNumberToObject(d,"priority",t->uxCurrentPriority);}
+            char *text=cJSON_PrintUnformatted(j);if(text){reply(ctx,text);cJSON_free(text);}else reply(ctx,"ERR task snapshot JSON");
+            cJSON_Delete(j);free(tasks);reply(ctx,"OK ui tasks");}
+    }
     else if(strcmp(line,"zero")==0 || strcmp(line,"zero reset")==0){tab5_measure_zero(strcmp(line,"zero reset")==0);reply(ctx,"OK zero");}
     else if(strcmp(line,"rec on")==0 || strcmp(line,"rec off")==0){reply(ctx,set_recording(strcmp(line,"rec on")==0)==ESP_OK?"OK recording":"ERR recording unavailable");}
     else if(strcmp(line,"samples on")==0 || strcmp(line,"samples off")==0){samples_on=strcmp(line,"samples on")==0;reply(ctx,samples_on?"OK samples on, dropped 0":"OK samples off, dropped 0");}
@@ -333,12 +373,22 @@ void app_main(void) {
     esp_err_t services_result=tab5_services_init(&services);
     if(xTaskCreate(storage_router_task,"sample_storage",6144,NULL,4,NULL)!=pdPASS){boot_failed();return;}
     if(xTaskCreate(usb_task,"protocol_usb",16384,NULL,4,NULL)!=pdPASS){boot_failed();return;}
-    const bsp_display_cfg_t display_cfg={
+    bsp_display_cfg_t display_cfg={
         .lvgl_port_cfg=ESP_LVGL_PORT_INIT_CONFIG(),
-        .buffer_size=BSP_LCD_H_RES*128,.double_buffer=true,
+        .buffer_size=BSP_LCD_H_RES*BSP_LCD_V_RES,.double_buffer=true,
         .flags={.buff_dma=false,.buff_spiram=true,.sw_rotate=true}};
+    /* Keep expensive drawing away from the UART ISR/acquisition core. */
+    display_cfg.lvgl_port_cfg.task_affinity=1;
     lv_display_t *display=bsp_display_start_with_config(&display_cfg);if(!display || !tab5_panel_ready()){boot_failed();return;}
-    if(bsp_display_lock(2000)){ui_perf.since=esp_timer_get_time();lv_display_add_event_cb(display,display_perf,LV_EVENT_ALL,NULL);bsp_display_rotate(display,LV_DISPLAY_ROTATION_90);tab5_ui_init(ui_callback,NULL);bsp_display_unlock();}else {boot_failed();return;}
+    if(bsp_display_lock(2000)){
+        /* The port's periodic tick locks timer_mux also held during touch I/O.
+         * A high-priority esp_timer callback must never wait on touch or draw.
+         * Read the monotonic clock directly; no periodic tick or catch-up queue. */
+        if(lvgl_port_stop()!=ESP_OK){bsp_display_unlock();boot_failed();return;}
+        lv_tick_set_cb(display_tick_ms);lv_timer_enable(true);
+        ui_perf.since=esp_timer_get_time();lv_display_set_flush_wait_cb(display,display_flush_wait);
+        lv_display_add_event_cb(display,display_perf,LV_EVENT_ALL,NULL);bsp_display_rotate(display,LV_DISPLAY_ROTATION_90);tab5_ui_init(ui_callback,NULL);bsp_display_unlock();
+    }else {boot_failed();return;}
     bsp_display_brightness_set(60);persist();
     if(services_result!=ESP_OK){boot_failed();return;}
     bool trial_confirmed=false;
@@ -411,7 +461,20 @@ void app_main(void) {
         ui.tcp_clients_known=true;ui.tcp_clients=(uint16_t)net.clients;
         snprintf(ui.link.ap_ip,sizeof(ui.link.ap_ip),"%s",net.ap_ip);snprintf(ui.link.sta_ip,sizeof(ui.link.sta_ip),"%s",net.sta_ip);
         xSemaphoreGive(app_mutex);
-        if(now-last_ui>=100000){last_ui=now;if(bsp_display_lock(20)){uint64_t update_start=esp_timer_get_time();tab5_ui_update(&ui);
+        if(now-last_ui>=100000){last_ui=now;if(bsp_display_lock(20)){
+            /* Service/battery calls and the display lock can take time. Take the
+             * measurement first, then its time bound; never reject a new reply
+             * as "from the future" against the old loop-start timestamp. */
+            tab5_measure_snapshot(&ui.measurement);
+            ui.now_us=esp_timer_get_time();ui.live_unfiltered=true;
+            portENTER_CRITICAL(&ui_perf_lock);
+            for(unsigned i=0;i<2;i++)if(ui.measurement.sensor[i].valid&&ui.measurement.sensor[i].timestamp_us<=ui.now_us){
+                uint64_t age=ui.now_us-ui.measurement.sensor[i].timestamp_us;
+                ui_perf.sample_age_us[i]=age>UINT32_MAX?UINT32_MAX:(uint32_t)age;
+                if(ui_perf.sample_age_us[i]>ui_perf.sample_age_max_us[i])ui_perf.sample_age_max_us[i]=ui_perf.sample_age_us[i];
+            }
+            portEXIT_CRITICAL(&ui_perf_lock);
+            uint64_t update_start=esp_timer_get_time();tab5_ui_update(&ui);
             uint64_t update_elapsed=esp_timer_get_time()-update_start;portENTER_CRITICAL(&ui_perf_lock);ui_perf.updates++;ui_perf.update_us+=update_elapsed;portEXIT_CRITICAL(&ui_perf_lock);bsp_display_unlock();
             if(!trial_confirmed && now>=2000000 && esp_get_free_heap_size()>16384){
                 esp_err_t health=tab5_services_confirm_boot();

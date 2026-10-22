@@ -59,6 +59,11 @@ void tab5_services_record_stop(void);
 esp_err_t tab5_services_submit(const tab5_service_sample_t *sample);
 void tab5_services_status(tab5_medium_t medium, tab5_medium_status_t *out);
 esp_err_t tab5_services_retry(tab5_medium_t medium);
+/* Diagnostic control of background mount attempts only. Defaults to true.
+ * Does not unmount, stop recording, or cancel an already-started mount.
+ * Enabling resets SD backoff (first retry after 2s); disabling preserves it.
+ * Explicit tab5_services_retry() remains available while auto retry is off. */
+esp_err_t tab5_services_set_auto_retry(tab5_medium_t medium,bool enabled);
 /* Route console OTA here BEFORE application parser. Returns true if consumed.
  * Main owns console authentication; TCP service authenticates before callback.
  * owner must be nonzero and unique per live connection. */

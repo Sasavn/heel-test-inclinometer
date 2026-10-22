@@ -1,6 +1,6 @@
 idf_component_register(SRCS
-    "main.c" "tab5_board.c" "tab5_measure.c" "tab5_ui.c" "tab5_services.c" "tab5_panel.c" "tab5_time.c"
-    "tab5_ui_graph.c" "font_tab5_16.c" "font_tab5_24.c" "font_tab5_40.c" "font_tab5_20.c" "font_tab5_32.c" "font_tab5_16m.c" "font_tab5_20m.c" "font_tab5_64.c"
+    "main.c" "tab5_board.c" "tab5_measure.c" "tab5_ui.c" "tab5_services.c" "tab5_panel.c" "tab5_time.c" "tab5_draw_profile.c"
+    "tab5_ui_graph.c" "tab5_plot.c" "tab5_level.c" "font_tab5_16.c" "font_tab5_24.c" "font_tab5_40.c" "font_tab5_20.c" "font_tab5_32.c" "font_tab5_16m.c" "font_tab5_20m.c" "font_tab5_64.c"
     INCLUDE_DIRS "."
     REQUIRES nvs_flash esp_timer app_update json esp_driver_uart esp_driver_gpio
              esp_driver_usb_serial_jtag esp_driver_i2c esp_wifi esp_netif
@@ -11,4 +11,7 @@ foreach(fn esp_lcd_new_dsi_bus esp_lcd_new_panel_st7123 esp_lcd_new_panel_ili988
            esp_lcd_touch_new_i2c_st7123 esp_lcd_touch_new_i2c_gt911
            esp_lcd_panel_reset esp_lcd_panel_init esp_lcd_panel_disp_on_off)
     target_link_options(${COMPONENT_LIB} INTERFACE "LINKER:--wrap=${fn}")
+endforeach()
+foreach(fn fill border box_shadow image label arc line layer)
+    target_link_options(${COMPONENT_LIB} INTERFACE "LINKER:--wrap=lv_draw_sw_${fn}")
 endforeach()
