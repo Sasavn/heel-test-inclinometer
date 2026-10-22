@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
 set(IDF_TARGET esp32p4 CACHE STRING "Tab5 application processor")
-set(PROJECT_VER "1.5.0-esp32")
+set(PROJECT_VER "1.6.0-esp32")
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 project(krenomer-esp32)

@@ -2,6 +2,8 @@
 #include "tab5_ui.h"
 #include "tab5_board.h"
 #include "tab5_services.h"
+#include "tab5_panel.h"
+#include "tab5_time.h"
 #include "bsp/esp-bsp.h"
 #include "driver/usb_serial_jtag.h"
 #include "esp_chip_info.h"
@@ -37,8 +39,13 @@ static bool recording, samples_on, light_theme;
 static unsigned stream_ms, measurement_number;
 static uint32_t sample_drops, usb_drops, storage_drops, route_drops;
 static uint64_t record_start_us;
+static char record_name[40];
+static uint32_t record_duration_s;
+static uint32_t ui_result_serial;
+static tab5_ui_action_kind_t ui_result_kind;
+static bool ui_result_success;
 static float battery = NAN;
-static char notice[160]="Ready; set clock before recording";
+static char notice[160]="Прибор готов. Перед записью установите часы";
 
 static void boot_failed(void) {
     esp_ota_img_states_t state;
@@ -61,16 +68,17 @@ static void ui_callback(const tab5_ui_action_t *a,void *unused) {
     (void)unused;xQueueSend(actions,a,0);
 }
 static void broadcast(const char *line) { usb_reply(NULL,line);tab5_services_publish(line); }
-static void persist(void) {
+static bool persist(void) {
     nvs_handle_t n;
-    if(nvs_open("tab5",NVS_READWRITE,&n)!=ESP_OK){snprintf(notice,sizeof(notice),"NVS open failed");return;}
+    if(nvs_open("tab5",NVS_READWRITE,&n)!=ESP_OK){snprintf(notice,sizeof(notice),"Не удалось открыть настройки");return false;}
     tab5_measure_snapshot_t s;tab5_measure_snapshot(&s);
     esp_err_t e=nvs_set_blob(n,"measure",&s.config,sizeof(s.config));
     if(e==ESP_OK)e=nvs_set_blob(n,"network",&network,sizeof(network));
     if(e==ESP_OK)e=nvs_set_u8(n,"theme",light_theme);
     if(e==ESP_OK)e=nvs_set_u32(n,"session",measurement_number);
     if(e==ESP_OK)e=nvs_commit(n);
-    nvs_close(n);if(e!=ESP_OK)snprintf(notice,sizeof(notice),"Settings save failed: %s",esp_err_to_name(e));
+    nvs_close(n);if(e!=ESP_OK)snprintf(notice,sizeof(notice),"Настройки не сохранены: %s",esp_err_to_name(e));
+    return e==ESP_OK;
 }
 static void load_config(tab5_measure_config_t *cfg) {
     tab5_measure_config_default(cfg);
@@ -96,16 +104,18 @@ static void load_config(tab5_measure_config_t *cfg) {
 static esp_err_t set_recording(bool on) {
     if(on==recording)return ESP_OK;
     if(!on){xSemaphoreTake(route_mutex,portMAX_DELAY);route_recording=false;xSemaphoreGive(route_mutex);
-        tab5_services_record_stop();recording=false;snprintf(notice,sizeof(notice),"Recording stopped");return ESP_OK;}
-    if(!tab5_board_time_valid()){snprintf(notice,sizeof(notice),"Set date/time before recording");return ESP_ERR_INVALID_STATE;}
+        tab5_services_record_stop();record_duration_s=(uint32_t)((esp_timer_get_time()-record_start_us)/1000000);
+        recording=false;snprintf(notice,sizeof(notice),"Запись остановлена");return ESP_OK;}
+    if(!tab5_board_time_valid()){snprintf(notice,sizeof(notice),"Перед записью установите дату и время");return ESP_ERR_INVALID_STATE;}
     measurement_number++;persist();
     time_t now=time(NULL);struct tm t;localtime_r(&now,&t);char session[64];
     snprintf(session,sizeof(session),"%04d-%02d-%02d_M%03u",t.tm_year+1900,t.tm_mon+1,t.tm_mday,measurement_number);
     esp_err_t e=tab5_services_record_start(session);
     if(e==ESP_OK){recording=true;record_start_us=esp_timer_get_time();
+        snprintf(record_name,sizeof(record_name),"%.39s",session);record_duration_s=0;
         xSemaphoreTake(route_mutex,portMAX_DELAY);route_start_us=record_start_us;route_recording=true;xSemaphoreGive(route_mutex);
-        snprintf(notice,sizeof(notice),"Recording %s",session);}
-    else snprintf(notice,sizeof(notice),"Cannot start: %s",esp_err_to_name(e));
+        snprintf(notice,sizeof(notice),"Запись %s",session);}
+    else snprintf(notice,sizeof(notice),"Запись недоступна: %s",esp_err_to_name(e));
     return e;
 }
 static void add_num(cJSON *j,const char *key,double v) {
@@ -248,7 +258,7 @@ void app_main(void) {
     esp_err_t services_result=tab5_services_init(&services);
     if(xTaskCreate(storage_router_task,"sample_storage",6144,NULL,4,NULL)!=pdPASS){boot_failed();return;}
     if(xTaskCreate(usb_task,"protocol_usb",16384,NULL,4,NULL)!=pdPASS){boot_failed();return;}
-    lv_display_t *display=bsp_display_start();if(!display){boot_failed();return;}
+    lv_display_t *display=bsp_display_start();if(!display || !tab5_panel_ready()){boot_failed();return;}
     if(bsp_display_lock(2000)){bsp_display_rotate(display,LV_DISPLAY_ROTATION_90);tab5_ui_init(ui_callback,NULL);bsp_display_unlock();}else {boot_failed();return;}
     bsp_display_brightness_set(60);persist();
     if(services_result!=ESP_OK){boot_failed();return;}
@@ -258,18 +268,47 @@ void app_main(void) {
         sample_event_t sample;while(xQueueReceive(samples,&sample,0)==pdTRUE)consume_sample(&sample);
         tab5_ui_action_t a;
         while(xQueueReceive(actions,&a,0)==pdTRUE){
-            if(a.kind==TAB5_UI_START)set_recording(true);else if(a.kind==TAB5_UI_STOP)set_recording(false);
+            if(a.kind==TAB5_UI_START || a.kind==TAB5_UI_STOP){
+                ui_result_success=set_recording(a.kind==TAB5_UI_START)==ESP_OK;
+                ui_result_kind=a.kind;ui_result_serial++;}
             else if(a.kind==TAB5_UI_ZERO || a.kind==TAB5_UI_ZERO_RESET)tab5_measure_zero(a.kind==TAB5_UI_ZERO_RESET);
-            else if(a.kind==TAB5_UI_SETTINGS){if(a.config.gap_ms<15)a.config.gap_ms=15;tab5_measure_configure(&a.config);light_theme=a.light_theme;persist();}
+            else if(a.kind==TAB5_UI_SETTINGS){if(a.config.gap_ms<15)a.config.gap_ms=15;tab5_measure_configure(&a.config);light_theme=a.light_theme;
+                ui_result_success=persist();ui_result_kind=a.kind;ui_result_serial++;
+                if(ui_result_success)snprintf(notice,sizeof(notice),"Настройки сохранены");}
+            else if(a.kind==TAB5_UI_TIME){
+                const tab5_ui_datetime_t *d=&a.datetime;
+                ui_result_success=false;ui_result_kind=a.kind;ui_result_serial++;
+                if(!tab5_time_fields_valid(d->year,d->month,d->day,d->hour,d->minute,d->second))
+                    snprintf(notice,sizeof(notice),"Недопустимая дата или время");
+                else {struct tm t={.tm_year=d->year-1900,.tm_mon=d->month-1,.tm_mday=d->day,
+                                  .tm_hour=d->hour,.tm_min=d->minute,.tm_sec=d->second};
+                    bool ok=tab5_board_set_time(&t);ui_result_success=ok;
+                    snprintf(notice,sizeof(notice),"%s",!ok?"Часы не установлены":tab5_board_rtc_valid()?"Дата и время установлены":"Часы установлены; RTC недоступны");}}
             else if(a.kind==TAB5_UI_NETWORK){tab5_network_config_t next=network;next.ap_enabled=a.network.ap_enabled;next.sta_enabled=a.network.sta_enabled;
                 memcpy(next.ap_ssid,a.network.ap_ssid,sizeof(next.ap_ssid));memcpy(next.ap_password,a.network.ap_password,sizeof(next.ap_password));
                 memcpy(next.sta_ssid,a.network.sta_ssid,sizeof(next.sta_ssid));memcpy(next.sta_password,a.network.sta_password,sizeof(next.sta_password));strcpy(next.auth_token,next.ap_password);
-                if(tab5_services_network_configure(&next)==ESP_OK){network=next;persist();snprintf(notice,sizeof(notice),"Network settings applied");}else snprintf(notice,sizeof(notice),"Network config rejected");}}
+                ui_result_success=false;ui_result_kind=a.kind;ui_result_serial++;
+                if(tab5_services_network_configure(&next)==ESP_OK){network=next;ui_result_success=persist();
+                    if(ui_result_success)snprintf(notice,sizeof(notice),"Настройки сети применены");}else snprintf(notice,sizeof(notice),"Настройки сети не применены");}}
         uint64_t now=esp_timer_get_time();if(now-last_battery>=1000000){battery=tab5_board_battery();last_battery=now;
             xSemaphoreTake(route_mutex,portMAX_DELAY);route_battery=battery;xSemaphoreGive(route_mutex);}
         tab5_ui_state_t ui={.recording=recording,.light_theme=light_theme};tab5_measure_snapshot(&ui.measurement);
+        ui.action_result_known=ui_result_serial!=0;ui.action_result_serial=ui_result_serial;
+        ui.action_result_kind=ui_result_kind;ui.action_result_success=ui_result_success;
+        ui.now_known=true;ui.now_us=now;ui.rec_known=true;ui.rec_started_us=record_start_us;
+        snprintf(ui.rec_file,sizeof(ui.rec_file),"%s",record_name);
+        ui.rec_duration_known=record_name[0]!=0;
+        ui.rec_duration_s=recording?(uint32_t)((now-record_start_us)/1000000):record_duration_s;
         char clock_text[64]="Установите часы";time_t wall=time(NULL);struct tm wall_tm;localtime_r(&wall,&wall_tm);
         if(tab5_board_time_valid())strftime(clock_text,sizeof(clock_text),"%d.%m.%Y %H:%M:%S",&wall_tm);
+        ui.datetime_known=tab5_board_time_valid();
+        if(ui.datetime_known)ui.datetime=(tab5_ui_datetime_t){.year=wall_tm.tm_year+1900,.month=wall_tm.tm_mon+1,
+            .day=wall_tm.tm_mday,.hour=wall_tm.tm_hour,.minute=wall_tm.tm_min,.second=wall_tm.tm_sec};
+        ui.clock.known=true;ui.clock.time_valid=tab5_board_time_valid();
+        ui.clock.battery_present=isfinite(battery) && battery>5;ui.clock.battery_v=battery;
+        snprintf(ui.clock.datetime,sizeof(ui.clock.datetime),"%.31s",clock_text);
+        tab5_panel_describe(ui.panel,sizeof(ui.panel));
+        snprintf(ui.firmware,sizeof(ui.firmware),"%s",FW_VERSION);
         if(isfinite(battery) && battery>5)snprintf(ui.clock_power,sizeof(ui.clock_power),"%s | %.2f В",clock_text,(double)battery);
         else snprintf(ui.clock_power,sizeof(ui.clock_power),"%s | внешнее питание",clock_text);
         if(stream_ms && now-last_stream>=(uint64_t)stream_ms*1000){last_stream=now;char line[200];const tab5_measure_sensor_t *p=ui.measurement.sensor;
@@ -278,8 +317,17 @@ void app_main(void) {
         memcpy(ui.network.ap_ssid,network.ap_ssid,sizeof(ui.network.ap_ssid));memcpy(ui.network.ap_password,network.ap_password,sizeof(ui.network.ap_password));
         memcpy(ui.network.sta_ssid,network.sta_ssid,sizeof(ui.network.sta_ssid));memcpy(ui.network.sta_password,network.sta_password,sizeof(ui.network.sta_password));
         tab5_medium_status_t sd,flash;tab5_services_status(TAB5_SD,&sd);tab5_services_status(TAB5_USB,&flash);
-        snprintf(ui.status,sizeof(ui.status),"%.75s | SD %s: %lu | USB %s: %lu",notice,sd.failed?"ERROR":sd.mounted?"OK":"absent",(unsigned long)sd.written,flash.failed?"ERROR":flash.mounted?"OK":"absent",(unsigned long)flash.written);
+        ui.sd=(tab5_ui_medium_t){.known=true,.mounted=sd.mounted,.recording=sd.recording,.failed=sd.failed,.written=sd.written};
+        ui.usb=(tab5_ui_medium_t){.known=true,.mounted=flash.mounted,.recording=flash.recording,.failed=flash.failed,.written=flash.written};
+        ui.capacity[0].details_known=sd.mounted;ui.capacity[1].details_known=flash.mounted;
+        for(unsigned i=0;i<2;i++)if(ui.capacity[i].details_known){
+            snprintf(ui.capacity[i].filesystem,sizeof(ui.capacity[i].filesystem),"FAT32");
+            snprintf(ui.capacity[i].folder,sizeof(ui.capacity[i].folder),"/");}
+        snprintf(ui.status,sizeof(ui.status),"%s",notice);
         tab5_network_snapshot_t net;tab5_services_network_snapshot(&net);snprintf(ui.network_status,sizeof(ui.network_status),"AP %s  STA %s | TCP %u | %s",net.ap_started?net.ap_ip:"off",net.sta_connected?net.sta_ip:"off",network.tcp_port,esp_err_to_name(net.last_error));
+        ui.link=(tab5_ui_link_t){.known=true,.ap_started=net.ap_started,.sta_connected=net.sta_connected,.tcp_port=network.tcp_port,.error=net.last_error};
+        ui.tcp_clients_known=true;ui.tcp_clients=(uint16_t)net.clients;
+        snprintf(ui.link.ap_ip,sizeof(ui.link.ap_ip),"%s",net.ap_ip);snprintf(ui.link.sta_ip,sizeof(ui.link.sta_ip),"%s",net.sta_ip);
         xSemaphoreGive(app_mutex);
         if(now-last_ui>=100000){last_ui=now;if(bsp_display_lock(20)){tab5_ui_update(&ui);bsp_display_unlock();
             if(!trial_confirmed && now>=2000000 && esp_get_free_heap_size()>16384){

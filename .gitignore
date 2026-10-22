@@ -36,6 +36,7 @@ tab5/managed_components/
 tab5/sdkconfig
 tab5/sdkconfig.old
 tab5/tests/output_ui/
+tab5/tests/output_redesign/
 tab5/tests/output_services/
 tab5/tests/*.exe
 tab5/tests/test-sd/

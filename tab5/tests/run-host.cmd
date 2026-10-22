@@ -11,5 +11,9 @@ gcc -std=c11 -Wall -Wextra -Werror -O2 main/tab5_measure.c tests/test_measure.c 
 if errorlevel 1 exit /b 1
 build-host\test_measure.exe
 if errorlevel 1 exit /b 1
+gcc -std=c11 -Wall -Wextra -Werror -O2 main/tab5_time.c tests/test_time.c -o build-host/test_time.exe
+if errorlevel 1 exit /b 1
+build-host\test_time.exe
+if errorlevel 1 exit /b 1
 python -m unittest discover -s tests -p test_package.py -v
 exit /b %errorlevel%

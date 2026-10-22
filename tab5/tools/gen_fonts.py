@@ -14,9 +14,9 @@ from fontTools.ttLib import TTFont
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / 'tab5' / 'main'
 ASSETS = ROOT / 'pc' / 'assets' / 'fonts'
-TEXT = set(range(0x20, 0x7f)) | set(range(0x400, 0x460)) | {0xb0, 0x2013, 0x2014, 0x2212}
+TEXT = set(range(0x20, 0x7f)) | set(range(0x400, 0x460)) | {ord(c) for c in '°–—−·…✓⚠✗●▲⌫±■○«»→'}
 NUM = set(map(ord, ' +-.0123456789:°—−'))
-FONTS = [(20, 'DejaVuSans.ttf', TEXT), (28, 'DejaVuSans.ttf', TEXT), (64, 'DejaVuSans-Bold.ttf', NUM)]
+FONTS = [(16, 'DejaVuSans.ttf', TEXT), (24, 'DejaVuSans-Bold.ttf', TEXT), (40, 'DejaVuSans-Bold.ttf', TEXT), (20, 'DejaVuSans.ttf', TEXT), (28, 'DejaVuSans.ttf', TEXT), (64, 'DejaVuSans-Bold.ttf', NUM)]
 
 def ranges(codes):
     return ','.join(hex(c) for c in sorted(codes))
@@ -45,7 +45,7 @@ def main():
         if not args.check:
             data = re.sub(r' \* Opts:.*', ' * Generated with tab5/tools/gen_fonts.py; DejaVu license: pc/assets/fonts/LICENSE_DEJAVU.txt', data)
             data = data.replace('#ifdef LV_LVGL_H_INCLUDE_SIMPLE\n#include "lvgl.h"\n#else\n#include "lvgl/lvgl.h"\n#endif', '#include "lvgl.h"')
-            target.write_text(data, encoding='utf-8')
+            target.write_text(data.rstrip() + '\n', encoding='utf-8')
         # Check the actual generated cmap range tables, not only command comments.
         blocks = re.findall(r'\.range_start\s*=\s*(\d+).*?\.range_length\s*=\s*(\d+).*?\.glyph_id_start.*?\.unicode_list\s*=\s*(NULL|unicode_list_\d+).*?\.list_length\s*=\s*(\d+)', data, re.S)
         actual = set()

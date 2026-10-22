@@ -23,9 +23,10 @@ import concurrent.futures
 import hashlib
 sources = sorted((lvgl/'src').rglob('*.c'))
 sources += [ROOT/'tab5'/'tests'/'test_ui.c', ROOT/'tab5'/'main'/'tab5_ui.c',ROOT/'tab5'/'main'/'tab5_measure.c']
+sources += [ROOT/'tab5'/'main'/'tab5_ui_graph.c', ROOT/'tab5'/'main'/'tab5_time.c']
 sources += sorted((ROOT/'tab5'/'main').glob('font_tab5_*.c'))
 flags = ['-std=c11','-O1','-DLV_CONF_SKIP','-DLV_COLOR_DEPTH=32','-DLV_USE_LOG=0',
-         '-DLV_USE_OS=0','-DLV_USE_DRAW_SW=1','-DLV_USE_DRAW_SW_ASM=0',
+         '-DLV_MEM_SIZE=8388608','-DLV_USE_OS=0','-DLV_USE_DRAW_SW=1','-DLV_USE_DRAW_SW_ASM=0',
          '-I'+str(lvgl),'-I'+str(ROOT/'tab5'/'main')]
 headers = sorted(lvgl.rglob('*.h')) + sorted((ROOT/'tab5'/'main').glob('*.h'))
 fingerprint = str(ROOT) + str(flags) + ''.join(str(h.stat().st_mtime_ns) for h in headers)
@@ -43,7 +44,25 @@ rsp = cache/'link.rsp'
 args = [str(o) for o in objects] + ['-lm','-o',str(exe)]
 rsp.write_text('\n'.join('"'+s.replace('\\','/')+'"' for s in args),encoding='utf-8')
 subprocess.run([compiler,'@'+str(rsp)],check=True)
-result = subprocess.run([str(exe),str(a.out)],check=False)
+import time
+started = time.time_ns()
+result = subprocess.run([str(exe),str(a.out)],check=False,timeout=90)
+captures = []
 for ppm in a.out.glob('*.ppm'):
+    if ppm.stat().st_mtime_ns < started:
+        continue
     with Image.open(ppm) as im: im.save(ppm.with_suffix('.png'))
+    captures.append(ppm.with_suffix('.png'))
+# A review sheet of only this run's actual LVGL flush captures.
+if captures:
+    from PIL import ImageDraw
+    captures.sort()
+    sheet = Image.new('RGB',(384*4,238*((len(captures)+3)//4)), '#e9edf4')
+    draw = ImageDraw.Draw(sheet)
+    for index, path in enumerate(captures):
+        with Image.open(path) as im:
+            im = im.convert('RGB'); im.thumbnail((384,216))
+            x, y = (index%4)*384, (index//4)*238
+            sheet.paste(im,(x,y)); draw.text((x+4,y+219),path.stem,fill='#1a1d24')
+    sheet.save(a.out/'contact_sheet.png')
 raise SystemExit(result.returncode)

@@ -41,6 +41,7 @@ class Peer : public IConnection
     bool open = true, enabled = true, dropAck = false, disconnected = false, powercut = false, rollback = false,
          badOffset = false, wrongInfo = false, confirmed = true, closeWithCommit=false, closeAfterLines=false;
     unsigned opens = 1, bootSlot = 0;
+    unsigned revision = 100;
     std::size_t offset = 0;
     bool active = false;
     unsigned begins = 0, duplicates = 0;
@@ -78,7 +79,7 @@ class Peer : public IConnection
         else if (cmd == "ota info")
         {
             reply(std::string("{\"board\":\"") + (wrongInfo ? "other" : "tab5") +
-                  "\",\"chip\":\"esp32p4\",\"proto\":2,\"chip_revision\":100,"
+                  "\",\"chip\":\"esp32p4\",\"proto\":2,\"chip_revision\":" + std::to_string(revision) + ","
                   "\"version\":\"" +
                   version + "\",\"max_size\":6291456,\"recording\":false,\"boot_confirmed\":" +
                   (confirmed ? "true" : "false") + "}");
@@ -589,6 +590,27 @@ int main(int argc, char **argv)
         auto image = fw::CheckEspImage(data);
         CHECK_MSG(image.ok, "%s", image.error.c_str());
         std::printf("Actual app: %s, %zu bytes\n", image.version.c_str(), data.size());
+        if(image.ok) {
+            Rig r;
+            r.peer->revision=unsigned(data[15])+(unsigned(data[16])<<8);
+            if(!r.peer->revision)r.peer->revision=unsigned(data[14])*100;
+            {
+                std::ofstream actual(r.path,std::ios::binary|std::ios::trunc);
+                actual.write(reinterpret_cast<const char*>(data.data()),static_cast<std::streamsize>(data.size()));
+            }
+            CHECK(r.Start());
+            for(std::size_t i=0;i<(data.size()/256+1000)*4 && r.ota.Busy() && r.ota.GetState()!=fw::EspOta::State::WaitReboot;i++)r.Run(10);
+            CHECK_MSG(r.ota.GetState()==fw::EspOta::State::WaitReboot,"%s",r.ota.Message().c_str());
+            CHECK(r.peer->bytes==data);
+            r.Reboot();
+            CHECK_MSG(r.ota.GetState()==fw::EspOta::State::Done,"%s",r.ota.Message().c_str());
+            CHECK(r.peer->version==image.version && r.link.Snapshot().ver.version==image.version);
+            std::printf("Actual OTA mock: %s -> %s, %zu identical bytes, boot confirmed\n","1.5.0-esp32",image.version.c_str(),data.size());
+            r.peer->revision=r.peer->revision<300?300:100;
+            const unsigned begins=r.peer->begins;
+            CHECK(r.Start());r.Run(1000);
+            CHECK(r.ota.GetState()==fw::EspOta::State::Failed && r.peer->begins==begins);
+        }
     }
     if (argc > 2 && std::string(argv[1]) == "--service-dll")
         ProductionIntegration(argv[2]);

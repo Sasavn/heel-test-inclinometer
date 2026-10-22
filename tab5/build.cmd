@@ -1,8 +1,8 @@
 @echo off
 setlocal
 rem Build only. This script never enumerates ports and never flashes a device.
-set "IDF_TOOLS_PATH=%~dp0..\.tools\idf-tools"
-set "IDF_PATH=%~dp0..\.tools\esp-idf"
+for %%I in ("%~dp0..\.tools\idf-tools") do set "IDF_TOOLS_PATH=%%~fI"
+for %%I in ("%~dp0..\.tools\esp-idf") do set "IDF_PATH=%%~fI"
 if not exist "%IDF_PATH%\export.bat" (
   echo ESP-IDF 5.5.2 is missing. See tab5\README.md.
   exit /b 1
