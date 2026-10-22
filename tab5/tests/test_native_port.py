@@ -30,7 +30,7 @@ typedef struct {const void *buffer;size_t buffer_size;int pic_w,pic_h,block_w,bl
 typedef struct {ppa_buf_t in,out;int rotation_angle;float scale_x,scale_y;int mode;} ppa_srm_oper_config_t;
 typedef struct {void *panel;} bsp_lcd_handles_t;
 typedef struct {int dummy;} bsp_display_config_t;
-typedef struct {uint64_t render_us,flush_us,refresh_us,wait_us,rotate_us;uint32_t renders,flushes,refreshes,refresh_max_us,errors;} tab5_native_port_stats_t;
+typedef struct {uint64_t render_us,flush_us,refresh_us,wait_us,rotate_us;uint32_t renders,flushes,refreshes,refresh_max_us,errors,interactive_renders,input_render_wait_max_us;} tab5_native_port_stats_t;
 enum {ESP_OK=0,ESP_FAIL=-1,ESP_ERR_NO_MEM=1,ESP_ERR_INVALID_STATE=2,pdTRUE=1,pdFALSE=0,pdPASS=1,
  MALLOC_CAP_SPIRAM=1,MALLOC_CAP_8BIT=2,PPA_OPERATION_SRM=1,PPA_SRM_COLOR_MODE_RGB565=1,
  PPA_SRM_ROTATION_ANGLE_90=1,PPA_TRANS_MODE_BLOCKING=1,BSP_FEATURE_TOUCH=1,BSP_FEATURE_LCD=2};
@@ -42,6 +42,10 @@ enum {ESP_OK=0,ESP_FAIL=-1,ESP_ERR_NO_MEM=1,ESP_ERR_INVALID_STATE=2,pdTRUE=1,pdF
 static int fail_at,step,live,display_live,io_live,renderer_live,ui_held;
 static unsigned rotations,submits,ticks,touches,renders,dirty,loops,loop_limit;
 static bool auto_complete;
+static bool input_pressed,touch_dirty,stream_dirty;
+static unsigned input_begin_loop,input_end_loop,complete_at_loop;
+static uint64_t draw_times[256];
+static unsigned draw_count;
 static uint64_t test_now;
 static jmp_buf stop_loop;
 static SemaphoreHandle_t first_mutex;
@@ -77,19 +81,26 @@ void nui_native_set_clock_cb(uint64_t (*cb)(void)){assert(cb);}
 void tab5_ui_init(tab5_ui_action_cb_t cb,void *p){(void)cb;(void)p;}
 void tab5_ui_destroy(void){}
 void nui_native_tick(uint32_t ms){(void)ms;assert(ui_held);ticks++;}
-void nui_native_touch(int x,int y,bool p){(void)x;(void)y;(void)p;assert(ui_held);touches++;}
-size_t nui_native_render(void){assert(ui_held);renders++;unsigned n=dirty;dirty=0;return n;}
+void nui_native_touch(int x,int y,bool p){(void)x;(void)y;assert(ui_held);touches++;if(touch_dirty&&(p||(input_end_loop&&loops==input_end_loop)))dirty=1;}
+size_t nui_native_render(void){assert(ui_held);renders++;unsigned n=dirty;dirty=0;if(n){assert(draw_count<256);draw_times[draw_count++]=test_now;}return n;}
 void nui_native_invalidate(const nui_area_t *a){assert(ui_held&&a&&a->x2==1279);dirty=1;}
 static int esp_lcd_touch_read_data(void *p){(void)p;assert(!ui_held);return 0;}
-static bool esp_lcd_touch_get_coordinates(void *p,uint16_t *x,uint16_t *y,uint16_t *s,uint8_t *n,unsigned cap){(void)p;(void)x;(void)y;(void)s;(void)n;assert(cap==1);return false;}
+static bool esp_lcd_touch_get_coordinates(void *p,uint16_t *x,uint16_t *y,uint16_t *s,uint8_t *n,unsigned cap){(void)p;assert(cap==1);if(!input_pressed)return false;*x=100;*y=100;*s=1;*n=1;return true;}
 static int ppa_do_scale_rotate_mirror(void *p,const ppa_srm_oper_config_t *c){assert(p&&!ui_held);assert(c->in.pic_w==1280&&c->in.pic_h==720&&c->out.pic_w==720&&c->out.pic_h==1280&&c->rotation_angle==1);rotations++;return 0;}
 static int esp_lcd_panel_draw_bitmap(void *p,int x,int y,int w,int h,void *buf){assert(p&&buf&&!ui_held&&x==0&&y==0&&w==720&&h==1280);submits++;return 0;}
-static void vTaskDelay(unsigned ms){assert(!ui_held);test_now+=(uint64_t)ms*1000;if(auto_complete&&done_cb)done_cb(NULL,NULL,NULL);if(++loops>=loop_limit)longjmp(stop_loop,1);}
+static void vTaskDelay(unsigned ms){assert(!ui_held);test_now+=(uint64_t)ms*1000;loops++;if((auto_complete||loops==complete_at_loop)&&done_cb)done_cb(NULL,NULL,NULL);if(input_begin_loop&&loops==input_begin_loop)input_pressed=true;if(input_end_loop&&loops==input_end_loop)input_pressed=false;if(stream_dirty)dirty=1;if(loops>=loop_limit)longjmp(stop_loop,1);}
 #define free released
 '''
 TEST = r'''
 #undef free
 static void run_loop(unsigned count){loops=0;loop_limit=count;if(!setjmp(stop_loop))native_task(NULL);}
+static void fresh_runtime(void){
+ startup_cleanup(true,true);started=false;assert(!live);
+ stats=(tab5_native_port_stats_t){0};rotations=submits=ticks=touches=renders=draw_count=0;
+ input_pressed=touch_dirty=stream_dirty=auto_complete=false;
+ input_begin_loop=input_end_loop=complete_at_loop=0;test_now=1000000;dirty=1;
+ assert(tab5_native_port_start(NULL,NULL)==ESP_OK);
+}
 int main(void){
  for(int fault=1;fault<=12;fault++){
   fail_at=fault;step=0;assert(tab5_native_port_start(NULL,NULL)!=ESP_OK);
@@ -106,9 +117,29 @@ int main(void){
  assert(rotations==1&&submits==1&&ticks==touches&&touches>=170);
  assert(tab5_native_port_lock(0));tab5_native_port_unlock();
  assert(frame&&rotated&&stats.errors==1);
+ /* A press/release sampled 10/20 ms after a periodic frame is serviced at
+  * 40 ms, not the former 100 ms cap. Both input events still reach UI. */
+ fresh_runtime();auto_complete=true;touch_dirty=true;input_begin_loop=1;input_end_loop=2;
+ run_loop(12);assert(draw_count==2&&draw_times[0]==1000000&&draw_times[1]==1040000);
+ assert(stats.interactive_renders==1&&stats.input_render_wait_max_us==30000);
+ assert(touches==12&&rotations==2&&submits==2);
+ /* Holding/repeat may request fast frames, but cannot exceed 25 Hz. */
+ fresh_runtime();auto_complete=true;input_pressed=touch_dirty=true;run_loop(100);
+ assert(draw_count==25&&stats.interactive_renders==25);
+ for(unsigned i=1;i<draw_count;i++)assert(draw_times[i]-draw_times[i-1]>=40000);
+ /* Non-input dirty producers retain their 10 Hz display budget. */
+ fresh_runtime();auto_complete=true;stream_dirty=true;run_loop(100);
+ assert(draw_count==10&&!stats.interactive_renders);
+ for(unsigned i=1;i<draw_count;i++)assert(draw_times[i]-draw_times[i-1]>=100000);
+ /* Urgency never overrides pending DMA. A request survives a late callback. */
+ fresh_runtime();touch_dirty=true;input_begin_loop=1;input_end_loop=2;complete_at_loop=20;
+ run_loop(25);assert(draw_count==2&&draw_times[1]==1200000);
+ assert(rotations==2&&submits==2&&stats.interactive_renders==1);
+ assert(stats.input_render_wait_max_us==190000);
  startup_cleanup(true,true);started=false;
  assert(!live&&!display_live&&!io_live&&!renderer_live);
  puts("native port source: 12 startup fault cleanups/restart, idle skip, no-lock PPA/flush, no reuse without completion, all PPA90 pixels PASS");
+ puts("native scheduling: 40 ms input eligibility / 100 ms periodic; 25 Hz hold bound; late-DMA request preserved PASS (stub time, not hardware latency)");
  return 0;
 }
 '''

@@ -1,0 +1,19 @@
+ATOMIC_ROLE theme=0 variant=0 path=sole-MAIN-no-allocation inherited/geometry/incremental/full/sequential-oracle PASS
+ATOMIC_ROLE theme=0 variant=1 path=sole-MAIN-no-allocation inherited/geometry/incremental/full/sequential-oracle PASS
+ATOMIC_ROLE theme=0 variant=2 path=sole-MAIN-no-allocation inherited/geometry/incremental/full/sequential-oracle PASS
+ATOMIC_ROLE theme=0 variant=3 path=sole-MAIN-no-allocation inherited/geometry/incremental/full/sequential-oracle PASS
+ATOMIC_ROLE theme=0 variant=4 path=sole-MAIN-no-allocation inherited/geometry/incremental/full/sequential-oracle PASS
+ATOMIC_ROLE theme=0 variant=5 path=unknown-styles/selectors-conservative-fallback inherited/geometry/incremental/full/sequential-oracle PASS
+ATOMIC_ROLE theme=0 variant=6 path=unknown-styles/selectors-conservative-fallback inherited/geometry/incremental/full/sequential-oracle PASS
+ATOMIC_ROLE theme=0 variant=7 path=unknown-styles/selectors-conservative-fallback inherited/geometry/incremental/full/sequential-oracle PASS
+ATOMIC_ROLE theme=0 variant=8 path=sole-MAIN-no-allocation inherited/geometry/incremental/full/sequential-oracle PASS
+ATOMIC_ROLE theme=1 variant=0 path=sole-MAIN-no-allocation inherited/geometry/incremental/full/sequential-oracle PASS
+ATOMIC_ROLE theme=1 variant=1 path=sole-MAIN-no-allocation inherited/geometry/incremental/full/sequential-oracle PASS
+ATOMIC_ROLE theme=1 variant=2 path=sole-MAIN-no-allocation inherited/geometry/incremental/full/sequential-oracle PASS
+ATOMIC_ROLE theme=1 variant=3 path=sole-MAIN-no-allocation inherited/geometry/incremental/full/sequential-oracle PASS
+ATOMIC_ROLE theme=1 variant=4 path=sole-MAIN-no-allocation inherited/geometry/incremental/full/sequential-oracle PASS
+ATOMIC_ROLE theme=1 variant=5 path=unknown-styles/selectors-conservative-fallback inherited/geometry/incremental/full/sequential-oracle PASS
+ATOMIC_ROLE theme=1 variant=6 path=unknown-styles/selectors-conservative-fallback inherited/geometry/incremental/full/sequential-oracle PASS
+ATOMIC_ROLE theme=1 variant=7 path=unknown-styles/selectors-conservative-fallback inherited/geometry/incremental/full/sequential-oracle PASS
+ATOMIC_ROLE theme=1 variant=8 path=sole-MAIN-no-allocation inherited/geometry/incremental/full/sequential-oracle PASS
+ATOMIC_ROLE_GATE fine=0 cases=18 PASS

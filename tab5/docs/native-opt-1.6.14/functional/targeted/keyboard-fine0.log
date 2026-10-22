@@ -1,0 +1,51 @@
+PARTIAL_FULL key press PASS
+KEYBOARD_GLOBAL_PRESSED PASS all 40 key rectangles dirty and visibly changed under ITEMS|PRESSED
+PARTIAL_FULL key release PASS
+PARTIAL_FULL key press PASS
+PARTIAL_FULL move between keys PASS
+PARTIAL_FULL key release PASS
+PARTIAL_FULL key press PASS
+PARTIAL_FULL press lost outside keyboard PASS
+PARTIAL_FULL release after press lost PASS
+PARTIAL_FULL key press PASS
+PARTIAL_FULL held repeat PASS
+PARTIAL_FULL key release PASS
+PARTIAL_FULL key press PASS
+PARTIAL_FULL key release PASS
+PARTIAL_FULL key press PASS
+PARTIAL_FULL key release PASS
+PARTIAL_FULL key press PASS
+PARTIAL_FULL key release PASS
+PARTIAL_FULL key press PASS
+PARTIAL_FULL key release PASS
+PARTIAL_FULL key press PASS
+PARTIAL_FULL key release PASS
+PARTIAL_FULL key press PASS
+PARTIAL_FULL held repeat PASS
+PARTIAL_FULL held repeat PASS
+PARTIAL_FULL key release PASS
+PARTIAL_FULL key press PASS
+PARTIAL_FULL key release PASS
+PARTIAL_FULL key press PASS
+PARTIAL_FULL key release PASS
+PARTIAL_FULL key press PASS
+PARTIAL_FULL key release PASS
+PARTIAL_FULL key press PASS
+PARTIAL_FULL key release PASS
+PARTIAL_FULL cursor setter PASS
+PARTIAL_FULL caret blink PASS
+PARTIAL_FULL key press PASS
+PARTIAL_FULL key release PASS
+PARTIAL_FULL numeric mode PASS
+PARTIAL_FULL key press PASS
+PARTIAL_FULL key release PASS
+PARTIAL_FULL custom map replace PASS
+PARTIAL_FULL key press PASS
+PARTIAL_FULL key release PASS
+PARTIAL_FULL key press PASS
+PARTIAL_FULL held repeat PASS
+PARTIAL_FULL key release PASS
+PARTIAL_FULL key press PASS
+PARTIAL_FULL key release PASS
+KEYBOARD_DIRTY PASS conservative-full-keyboard/press/move/release/presslost/NO_REPEAT/UTF8-repeat/mode/map/rebind/cursor partial-full exact
+TARGETED_GROUP keyboard fine=0 checks=48 PASS

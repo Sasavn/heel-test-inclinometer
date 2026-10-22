@@ -1,0 +1,1728 @@
+{
+  "baseline": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\accepted-v1\\frames",
+  "captures": [
+    {
+      "name": "backend_network_error_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "backend_network_error_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "backend_network_nvs_error_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "backend_network_nvs_error_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "backend_network_retry_success_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "backend_network_retry_success_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "backend_nvs_error_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "backend_nvs_error_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "backend_record_error_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "backend_record_error_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "backend_repeated_error_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "backend_repeated_error_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "backend_settings_retry_success_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "backend_settings_retry_success_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "backend_time_error_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "backend_time_error_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "chart_30_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "chart_30_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "chart_5hz_synthetic_2min_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "chart_5hz_synthetic_2min_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "chart_5hz_synthetic_continuous_30s_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "chart_5hz_synthetic_continuous_30s_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "chart_5hz_synthetic_failed_gap_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "chart_5hz_synthetic_failed_gap_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "chart_5hz_synthetic_offline_empty_tail_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "chart_5hz_synthetic_offline_empty_tail_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "chart_5hz_synthetic_pending_readings_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "chart_5hz_synthetic_pending_readings_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "chart_600_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "chart_600_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "chart_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "chart_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "chart_live_unfiltered_synthetic_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "chart_live_unfiltered_synthetic_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "chart_samples_fixture_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "chart_samples_fixture_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "chart_touch_hidden_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "chart_touch_hidden_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "dashboard_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "dashboard_disconnected_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "dashboard_disconnected_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "dashboard_extremes_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "dashboard_extremes_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "dashboard_level_raster_synthetic_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "dashboard_level_raster_synthetic_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "dashboard_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "dashboard_live_unfiltered_synthetic_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "dashboard_live_unfiltered_synthetic_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "dashboard_recording_error_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "dashboard_recording_error_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "dirty_navigation_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "dirty_navigation_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "network_ack_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "network_ack_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "network_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "network_invalid_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "network_invalid_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "network_keyboard_en_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "network_keyboard_en_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "network_keyboard_long_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "network_keyboard_long_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "network_keyboard_ru_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "network_keyboard_ru_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "network_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "network_long_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "network_long_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "network_pending_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "network_pending_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "network_revealed_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "network_revealed_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "numeric_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "numeric_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "numeric_valid_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "numeric_valid_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "recording_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "recording_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "resources_100_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "resources_100_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "resources_dashboard_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "resources_dashboard_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "resources_unknown_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "resources_unknown_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "settings_ack_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "settings_ack_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "settings_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "settings_dirty_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "settings_dirty_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "settings_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "settings_longpress_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "settings_longpress_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "settings_pending_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "settings_pending_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "time_invalid_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "time_invalid_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "time_valid_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "time_valid_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "zero_confirm_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    },
+    {
+      "name": "zero_confirm_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "equal",
+      "changed_pixels": 0,
+      "changed_fraction": 0.0,
+      "mean_absolute_channel_error": 0.0,
+      "maximum_channel_error": 0,
+      "difference_bbox": null
+    }
+  ],
+  "missing_baseline": [],
+  "missing_native": [],
+  "geometry": {
+    "status": "equal",
+    "baseline_points": 10934,
+    "native_points": 10934,
+    "field_mismatch_counts": {},
+    "differences": []
+  },
+  "suite_returncode": 0,
+  "raw_tree_geometry": {
+    "status": "equal",
+    "baseline_points": 10904,
+    "native_points": 10904,
+    "field_mismatch_counts": {},
+    "differences": []
+  },
+  "structure_exceptions": {
+    "rule": "Textarea internal labels replaced by actual semantic content records; no fake children and no tolerance",
+    "baseline_internal_labels": [],
+    "native_internal_labels": [],
+    "baseline_content_invalid_or_missing": [],
+    "native_content_invalid_or_missing": [],
+    "native_content_bounds_unavailable": []
+  },
+  "manifest_evidence": {
+    "missing_cases": {
+      "baseline": [],
+      "native": []
+    },
+    "unknown_fonts": {
+      "baseline": [],
+      "native": []
+    }
+  },
+  "semantic_text_mismatch_groups": [],
+  "input_contracts": {
+    "status": "equal",
+    "expected_states": 30,
+    "actual_states": 30,
+    "differences": [],
+    "baseline_sha256": {
+      "keyboard": "45ce0ff902bad0fa5f0392bcddae7990185957a52ba2e86b7cb4918d6c208f77",
+      "textarea": "e19afea5d8670517ca327ed265f0c5a4fa85f13badee4f402d1bae99bf5bbf40"
+    }
+  },
+  "automated_contracts_pass": true,
+  "native_v1_exact_rgb": "PASS",
+  "pixel_exact": true,
+  "exact_parity": true,
+  "automated_status": "PASS",
+  "manual_acceptance": {
+    "status": "not_a_substitute_for_native_v1_exact_rgb",
+    "automatic": false,
+    "policy": "Optimization stage requires exact decoded RGB vs accepted c4cf2cf v1. No new AA/manual waiver."
+  },
+  "exact_geometry_difference_count": 0
+}

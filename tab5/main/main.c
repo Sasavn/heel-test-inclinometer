@@ -107,6 +107,9 @@ static void ui_perf_reply(bool reset,tab5_service_reply_fn reply,void *ctx) {
         "true"
         ,(int)esp_reset_reason()
     );reply(ctx,out);
+    snprintf(out,sizeof(out),"{\"schedule\":\"native\",\"interactive_renders\":%lu,\"input_render_wait_max_us\":%lu}",
+             (unsigned long)native.interactive_renders,(unsigned long)native.input_render_wait_max_us);
+    reply(ctx,out);
     tab5_draw_profile_snapshot_t draw;tab5_draw_profile_snapshot(&draw,false);
     for(unsigned i=0;i<TAB5_DRAW_PROFILE_COUNT;i++){
         tab5_draw_profile_format(out,sizeof(out),&draw.entries[i]);reply(ctx,out);

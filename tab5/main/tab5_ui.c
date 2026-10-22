@@ -73,7 +73,15 @@ static void style_num(nui_obj_t *o,nui_style_prop_t prop,int32_t n,nui_style_sel
 static void style_color(nui_obj_t *o,nui_style_prop_t prop,nui_color_t c,nui_style_selector_t sel){nui_style_value_t old,v={.color=c};if(nui_obj_get_local_style_prop(o,prop,&old,sel)!=NUI_STYLE_RES_FOUND||!nui_color_eq(old.color,c))nui_obj_set_local_style_prop(o,prop,v,sel);}
 static void style_font(nui_obj_t *o,const nui_font_t *f,nui_style_selector_t sel){nui_style_value_t old,v={.ptr=f};if(nui_obj_get_local_style_prop(o,NUI_STYLE_TEXT_FONT,&old,sel)!=NUI_STYLE_RES_FOUND||old.ptr!=f)nui_obj_set_local_style_prop(o,NUI_STYLE_TEXT_FONT,v,sel);}
 static void enabled(nui_obj_t *o,bool on){if(on)nui_obj_remove_state(o,NUI_STATE_DISABLED);else nui_obj_add_state(o,NUI_STATE_DISABLED);style_num(o,NUI_STYLE_OPA,on?255:115,0);}
-static void role(nui_obj_t *o,int r){if(nui_obj_get_style_prop(o,NUI_PART_MAIN,role_prop).num==r+1)return;for(int i=0;i<STYLE_COUNT;i++)nui_obj_remove_style(o,&u.style[i],NUI_PART_MAIN);nui_obj_add_style(o,&u.style[r],NUI_PART_MAIN);}
+static void role(nui_obj_t *o,int r){
+    int previous=nui_obj_get_style_prop(o,NUI_PART_MAIN,role_prop).num-1;
+    if(previous==r)return;
+    /* Known role pair only. Ambiguous/stacked references keep the old fallback. */
+    if(previous>=0&&previous<STYLE_COUNT&&r>=0&&r<STYLE_COUNT&&
+       nui_obj_replace_style_atomic(o,&u.style[previous],&u.style[r],NUI_PART_MAIN))return;
+    for(int i=0;i<STYLE_COUNT;i++)nui_obj_remove_style(o,&u.style[i],NUI_PART_MAIN);
+    nui_obj_add_style(o,&u.style[r],NUI_PART_MAIN);
+}
 static nui_obj_t *box(nui_obj_t *parent,int x,int y,int w,int h,int r){
     nui_obj_t *o=nui_obj_create(parent);nui_obj_remove_style_all(o);nui_obj_set_pos(o,x,y);nui_obj_set_size(o,w,h);nui_obj_remove_flag(o,NUI_OBJ_FLAG_SCROLLABLE);nui_obj_remove_flag(o,NUI_OBJ_FLAG_CLICKABLE);role(o,r);return o;
 }
@@ -157,7 +165,15 @@ static void icon_draw(nui_event_t *e){
     else {L(5,9,27,9);L(5,16,23,16);L(5,23,18,23);}
     #undef L
 }
-static nui_obj_t *icon(nui_obj_t *p,int id,int x,int y,int size,int r){nui_obj_t *o=box(p,x,y,size,size,r);nui_obj_add_event_cb(o,icon_draw,NUI_EVENT_DRAW_MAIN,(void*)(intptr_t)id);return o;}
+static nui_obj_t *icon(nui_obj_t *p,int id,int x,int y,int size,int r){
+    nui_obj_t *o=box(p,x,y,size,size,r);
+    nui_obj_add_event_cb(o,icon_draw,NUI_EVENT_DRAW_MAIN,(void*)(intptr_t)id);
+    /* Audited leaf: icon_draw only reads coordinates/color and paints primitives;
+     * no actions, state mutation or event side effects. Only this pure callback
+     * may be omitted under a proven opaque cover; other callbacks keep the guard. */
+    nui_obj_add_flag(o,NUI_OBJ_FLAG_OCCLUSION_PAINT_INERT);
+    return o;
+}
 static void heading(nui_obj_t *p,int id,const char *s){icon(p,id,20,20,22,MUTED);nui_point_t size;nui_text_get_size(&size,s,F20M,0,0,NUI_COORD_MAX,NUI_TEXT_FLAG_NONE);nui_obj_update_layout(p);int w=nui_obj_get_width(p)-72;if(size.x<w)w=size.x+1;label(p,s,52,19,w,30,F20M,TEXT);}
 /* Заголовок страницы 32 Bold; возвращает x, с которого можно ставить чип состояния. */
 static int page_title(nui_obj_t *p,const char *s){nui_point_t z;nui_text_get_size(&z,s,F32,0,0,NUI_COORD_MAX,NUI_TEXT_FLAG_NONE);label(p,s,0,15,z.x+2,44,F32,TEXT);return z.x+20;}

@@ -15,8 +15,11 @@ sources += [main / s for s in ('tab5_ui.c','tab5_ui_graph.c','tab5_measure.c',
                               'native/native_ui.c','native/font_native_fallback14.c')]
 sources += sorted(main.glob('font_tab5_*.c'))
 with tempfile.TemporaryDirectory(prefix='tab5-native-page-dirty-') as td:
-    exe = Path(td) / 'page-dirty.exe'
-    subprocess.run([cc,'-std=c11','-O2','-DNUI_PROFILE_FINE_COUNTERS=1',
-                    '-DNUI_PROFILE_PRIMITIVE_TIMING=0','-I'+str(main),*[str(p) for p in sources],
-                    '-lm','-o',str(exe)],check=True)
-    subprocess.run([str(exe)],check=True,timeout=120)
+    for fine in (0, 1):
+        exe = Path(td) / f'page-dirty-fine{fine}.exe'
+        subprocess.run([cc,'-std=c11','-O2',f'-DNUI_PROFILE_FINE_COUNTERS={fine}',
+                        '-DTAB5_RELEASE_CAPTURE_BUILD=1','-DNUI_PROFILE_PRIMITIVE_TIMING=0',
+                        '-I'+str(main),*[str(p) for p in sources],
+                        '-lm','-o',str(exe)],check=True)
+        subprocess.run([str(exe)],check=True,timeout=120)
+        print(f'page dirty40 fine={fine} timing=0 PASS',flush=True)

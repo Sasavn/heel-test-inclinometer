@@ -84,11 +84,31 @@ static bool area_intersect(nui_area_t *out,nui_area_t a,nui_area_t b){*out=(nui_
 static bool area_contains(nui_area_t a,nui_area_t b){return a.x1<=b.x1&&a.y1<=b.y1&&a.x2>=b.x2&&a.y2>=b.y2;}
 int32_t nui_area_get_width(const nui_area_t *a){return a->x2-a->x1+1;}
 int32_t nui_area_get_height(const nui_area_t *a){return a->y2-a->y1+1;}
-static uint64_t style_epoch=1,layout_epoch=1;
+static uint64_t style_epoch=1,layout_epoch=1,geometry_epoch=1;
 /* Cache payload is embedded in each retained object and already included in allocations. */
 #define OBJECT_CACHE_BYTES (offsetof(nui_obj_t,class_p))
 static size_t cache_objects,cache_objects_peak;
 static bool inherited(nui_style_prop_t p){return p==NUI_STYLE_TEXT_COLOR||p==NUI_STYLE_TEXT_FONT||p==NUI_STYLE_TEXT_LETTER_SPACE||p==NUI_STYLE_TEXT_LINE_SPACE||p==NUI_STYLE_TEXT_ALIGN;}
+/* Paint-only local edits must not evict unrelated objects or coordinates.
+ * Geometry and inheritance stay conservative at shared-generation boundaries. */
+static bool geometry_prop(nui_style_prop_t p){return p==NUI_STYLE_BORDER_WIDTH||
+    (p>=NUI_STYLE_PAD_TOP&&p<=NUI_STYLE_PAD_COLUMN)||p==NUI_STYLE_TEXT_FONT||
+    p==NUI_STYLE_TEXT_LETTER_SPACE||p==NUI_STYLE_TEXT_LINE_SPACE||
+    p==NUI_STYLE_WIDTH||p==NUI_STYLE_HEIGHT;}
+static void local_style_changed(nui_obj_t *o,nui_style_prop_t p){
+    if(inherited(p))style_epoch++;else o->cache_epoch=0;
+    if(geometry_prop(p))geometry_epoch++;
+}
+static void state_style_changed(nui_obj_t *o,uint32_t changed){
+    bool inherit_change=false,geometry_change=false;
+    for(nui_style_entry_t *e=o->local;e;e=e->next)if(e->selector&changed){
+        inherit_change|=inherited(e->prop);geometry_change|=geometry_prop(e->prop);
+    }
+    for(style_ref *r=o->styles;r;r=r->next)for(nui_style_entry_t *e=r->style->entries;e;e=e->next)
+        if((r->selector|e->selector)&changed){inherit_change|=inherited(e->prop);geometry_change|=geometry_prop(e->prop);}
+    if(inherit_change)style_epoch++;else o->cache_epoch=0;
+    if(geometry_change)geometry_epoch++;
+}
 static nui_style_value_t default_prop(nui_style_prop_t p){nui_style_value_t v={0};if(p==NUI_STYLE_TEXT_FONT)v.ptr=NUI_FONT_DEFAULT;else if(p==NUI_STYLE_TEXT_COLOR||p==NUI_STYLE_LINE_COLOR)v.color=0xffffff;else if(p==NUI_STYLE_OPA||p==NUI_STYLE_IMAGE_OPA||p==NUI_STYLE_LINE_OPA||p==NUI_STYLE_SHADOW_OPA||p==NUI_STYLE_OUTLINE_OPA)v.num=255;else if(p==NUI_STYLE_LINE_WIDTH)v.num=1;return v;}
 static bool entry_find(nui_style_entry_t *e,nui_style_prop_t p,nui_style_selector_t sel,nui_style_value_t *out,bool exact){int score=-1;bool found=false;for(;e;e=e->next){if(e->prop!=p)continue;if(exact){if(e->selector!=sel)continue;}else if((e->selector&0xffff0000)!=(sel&0xffff0000)||(e->selector&0xffff&~sel))continue;unsigned bits=e->selector&0xffff;int s=0;while(bits){s+=bits&1;bits>>=1;}if(s>score){*out=e->value;score=s;found=true;}}return found;}
 static bool prop_find(const nui_obj_t *o,nui_style_prop_t p,nui_style_selector_t part,nui_style_value_t *v){if(!o)return false;nui_style_selector_t sel=(part&0xffff0000)|o->state|(part&0xffff);if(entry_find(o->local,p,sel,v,false))return true;int best=-1;bool found=false;for(style_ref *r=o->styles;r;r=r->next){if((r->selector&0xffff0000)!=(sel&0xffff0000)||(r->selector&0xffff&~sel))continue;int score=0;unsigned bits=r->selector&0xffff;while(bits){score+=bits&1;bits>>=1;}nui_style_value_t value;if(score>best&&entry_find(r->style->entries,p,0,&value,true)){*v=value;best=score;found=true;}}if(found)return true;if(inherited(p)&&o->parent)return prop_find(o->parent,p,NUI_PART_MAIN,v);return false;}
@@ -106,18 +126,42 @@ static int32_t num(const nui_obj_t *o,nui_style_prop_t p,unsigned part){return n
 static nui_color_t color(const nui_obj_t *o,nui_style_prop_t p,unsigned part){return nui_obj_get_style_prop(o,part,p).color;}
 static const nui_font_t *font(const nui_obj_t *o,unsigned part){const nui_font_t *f=nui_obj_get_style_prop(o,part,NUI_STYLE_TEXT_FONT).ptr;return f?f:NUI_FONT_DEFAULT;}
 static void entries_free(nui_style_entry_t *e){while(e){nui_style_entry_t *next=e->next;mem_free(e);e=next;}}
-static bool entry_set(nui_style_entry_t **head,nui_style_prop_t p,nui_style_selector_t sel,nui_style_value_t v){for(nui_style_entry_t *e=*head;e;e=e->next)if(e->prop==p&&e->selector==sel){if(!memcmp(&e->value,&v,sizeof(v)))return false;e->value=v;style_epoch++;return true;}nui_style_entry_t *e=mem_alloc(sizeof(*e));if(!e)return false;*e=(nui_style_entry_t){p,sel,v,*head};*head=e;style_epoch++;return true;}
+static bool entry_set(nui_style_entry_t **head,nui_style_prop_t p,nui_style_selector_t sel,nui_style_value_t v){for(nui_style_entry_t *e=*head;e;e=e->next)if(e->prop==p&&e->selector==sel){if(!memcmp(&e->value,&v,sizeof(v)))return false;e->value=v;return true;}nui_style_entry_t *e=mem_alloc(sizeof(*e));if(!e)return false;*e=(nui_style_entry_t){p,sel,v,*head};*head=e;return true;}
 void nui_style_init(nui_style_t *s){s->entries=NULL;}
-void nui_style_reset(nui_style_t *s){if(s){entries_free(s->entries);s->entries=NULL;style_epoch++;}}
-void nui_style_set_prop(nui_style_t *s,nui_style_prop_t p,nui_style_value_t v){if(s)entry_set(&s->entries,p,0,v);}
+void nui_style_reset(nui_style_t *s){if(s){entries_free(s->entries);s->entries=NULL;style_epoch++;geometry_epoch++;}}
+void nui_style_set_prop(nui_style_t *s,nui_style_prop_t p,nui_style_value_t v){if(s&&entry_set(&s->entries,p,0,v)){style_epoch++;if(geometry_prop(p))geometry_epoch++;}}
 nui_style_prop_t nui_style_register_prop(unsigned flags){(void)flags;return 1024+(++n.props);}
 unsigned nui_style_get_num_custom_props(void){return n.props;}
 int nui_obj_get_local_style_prop(const nui_obj_t *o,nui_style_prop_t p,nui_style_value_t *v,nui_style_selector_t sel){return o&&entry_find(o->local,p,sel,v,true)?NUI_STYLE_RES_FOUND:NUI_STYLE_RES_NOT_FOUND;}
-void nui_obj_set_local_style_prop(nui_obj_t *o,nui_style_prop_t p,nui_style_value_t v,nui_style_selector_t sel){if(o&&!o->deleted&&entry_set(&o->local,p,sel,v)){nui_obj_invalidate(o);}}
-void nui_obj_add_style(nui_obj_t *o,const nui_style_t *s,nui_style_selector_t sel){if(!o||!s)return;for(style_ref *r=o->styles;r;r=r->next)if(r->style==s&&r->selector==sel)return;style_ref *r=mem_alloc(sizeof(*r));if(r){*r=(style_ref){s,sel,o->styles};o->styles=r;style_epoch++;nui_obj_invalidate(o);}}
-void nui_obj_remove_style(nui_obj_t *o,const nui_style_t *s,nui_style_selector_t sel){if(!o)return;style_ref **r=&o->styles;while(*r){if((!s||(*r)->style==s)&&(*r)->selector==sel){style_ref *dead=*r;*r=dead->next;mem_free(dead);style_epoch++;nui_obj_invalidate(o);}else r=&(*r)->next;}}
-void nui_obj_remove_style_all(nui_obj_t *o){if(!o)return;entries_free(o->local);o->local=NULL;while(o->styles){style_ref *r=o->styles;o->styles=r->next;mem_free(r);}style_epoch++;nui_obj_invalidate(o);}
-void nui_obj_report_style_change(const nui_style_t *s){(void)s;style_epoch++;if(n.root)nui_obj_invalidate(n.root);}
+void nui_obj_set_local_style_prop(nui_obj_t *o,nui_style_prop_t p,nui_style_value_t v,nui_style_selector_t sel){if(o&&!o->deleted&&entry_set(&o->local,p,sel,v)){local_style_changed(o,p);nui_obj_invalidate(o);}}
+void nui_obj_add_style(nui_obj_t *o,const nui_style_t *s,nui_style_selector_t sel){if(!o||!s)return;for(style_ref *r=o->styles;r;r=r->next)if(r->style==s&&r->selector==sel)return;style_ref *r=mem_alloc(sizeof(*r));if(r){*r=(style_ref){s,sel,o->styles};o->styles=r;style_epoch++;geometry_epoch++;nui_obj_invalidate(o);}}
+/* Replace only an unambiguous MAIN reference, retaining its list position.
+ * Resolve without caches so the transient removed-style inheritance never
+ * reaches either the framebuffer or global cache generations. */
+bool nui_obj_replace_style_atomic(nui_obj_t *o,const nui_style_t *old_style,const nui_style_t *new_style,nui_style_selector_t sel){
+    if(!o||o->deleted||!old_style||!new_style||sel!=NUI_PART_MAIN||!o->styles||
+       o->styles->next||o->styles->selector!=sel||o->styles->style!=old_style)return false;
+    if(old_style==new_style)return true;
+    nui_style_value_t before[34];
+    for(nui_style_prop_t p=1;p<34;p++)if(inherited(p)||geometry_prop(p))
+        if(!prop_find(o,p,sel,&before[p]))before[p]=default_prop(p);
+    nui_obj_invalidate(o);
+    o->styles->style=new_style;
+    bool inherit_change=false,geometry_change=false;
+    for(nui_style_prop_t p=1;p<34;p++)if(inherited(p)||geometry_prop(p)){
+        nui_style_value_t after;if(!prop_find(o,p,sel,&after))after=default_prop(p);
+        bool changed=p==NUI_STYLE_TEXT_FONT?before[p].ptr!=after.ptr:before[p].num!=after.num;
+        if(changed){inherit_change|=inherited(p);geometry_change|=geometry_prop(p);}
+    }
+    o->cache_epoch=0;
+    if(inherit_change)style_epoch++;
+    if(geometry_change)geometry_epoch++;
+    nui_obj_invalidate(o);
+    return true;
+}
+void nui_obj_remove_style(nui_obj_t *o,const nui_style_t *s,nui_style_selector_t sel){if(!o)return;style_ref **r=&o->styles;while(*r){if((!s||(*r)->style==s)&&(*r)->selector==sel){style_ref *dead=*r;*r=dead->next;mem_free(dead);style_epoch++;geometry_epoch++;nui_obj_invalidate(o);}else r=&(*r)->next;}}
+void nui_obj_remove_style_all(nui_obj_t *o){if(!o)return;entries_free(o->local);o->local=NULL;while(o->styles){style_ref *r=o->styles;o->styles=r->next;mem_free(r);}style_epoch++;geometry_epoch++;nui_obj_invalidate(o);}
+void nui_obj_report_style_change(const nui_style_t *s){(void)s;style_epoch++;geometry_epoch++;if(n.root)nui_obj_invalidate(n.root);}
 void nui_style_set_bg_color(nui_style_t *s,nui_color_t v){nui_style_value_t val={0};val.color=v;nui_style_set_prop(s,NUI_STYLE_BG_COLOR,val);}
 void nui_obj_set_style_bg_color(nui_obj_t *o,nui_color_t v,nui_style_selector_t sel){nui_style_value_t val={0};val.color=v;nui_obj_set_local_style_prop(o,NUI_STYLE_BG_COLOR,val,sel);}
 nui_color_t nui_obj_get_style_bg_color(const nui_obj_t *o,nui_style_selector_t sel){return nui_obj_get_style_prop(o,sel,NUI_STYLE_BG_COLOR).color;}
@@ -243,10 +287,10 @@ static bool is_kind(const nui_obj_t *o,unsigned kind){return o&&!o->deleted&&o->
 static void content_size(const nui_obj_t *o,int *w,int *h){nui_point_t size={0,0};if(is_kind(o,1)||is_kind(o,4)){nui_text_get_size(&size,o->text?o->text:"",font(o,0),num(o,NUI_STYLE_TEXT_LETTER_SPACE,0),num(o,NUI_STYLE_TEXT_LINE_SPACE,0),o->w>0?MAX(1,o->w-num(o,NUI_STYLE_PAD_LEFT,0)-num(o,NUI_STYLE_PAD_RIGHT,0)):NUI_COORD_MAX,(o->w==NUI_SIZE_CONTENT||o->one_line)?NUI_TEXT_FLAG_EXPAND:0);}else if(is_kind(o,7)&&o->image){size.x=o->image->header.w;size.y=o->image->header.h;}else{for(nui_obj_t *c=o->first;c;c=c->next){size.x=MAX(size.x,c->x+nui_obj_get_width(c));size.y=MAX(size.y,c->y+nui_obj_get_height(c));}}*w=size.x+num(o,NUI_STYLE_PAD_LEFT,0)+num(o,NUI_STYLE_PAD_RIGHT,0)+2*num(o,NUI_STYLE_BORDER_WIDTH,0);*h=size.y+num(o,NUI_STYLE_PAD_TOP,0)+num(o,NUI_STYLE_PAD_BOTTOM,0)+2*num(o,NUI_STYLE_BORDER_WIDTH,0);}
 int32_t nui_obj_get_width(const nui_obj_t *o){if(!o||o->deleted)return 0;if(o->w!=NUI_SIZE_CONTENT)return MAX(0,o->w);int w,h;content_size(o,&w,&h);return w;}
 int32_t nui_obj_get_height(const nui_obj_t *o){if(!o||o->deleted)return 0;if(o->h!=NUI_SIZE_CONTENT)return MAX(0,o->h);int w,h;content_size(o,&w,&h);return h;}
-void nui_obj_get_coords(const nui_obj_t *o,nui_area_t *a){if(!a)return;if(!o||o->deleted){*a=(nui_area_t){0,0,-1,-1};return;}if(o->coords_epoch==layout_epoch&&o->coords_style_epoch==style_epoch){*a=o->coords_cache;FINE_COUNT(n.stats.layout_cache_hits++);return;}if(o->coords_epoch)FINE_COUNT(n.stats.layout_cache_evictions++);int w=nui_obj_get_width(o),h=nui_obj_get_height(o),x=o->x,y=o->y;if(o->parent){nui_area_t p;nui_obj_get_coords(o->parent,&p);int border=num(o->parent,NUI_STYLE_BORDER_WIDTH,0),left=num(o->parent,NUI_STYLE_PAD_LEFT,0),top=num(o->parent,NUI_STYLE_PAD_TOP,0);
+void nui_obj_get_coords(const nui_obj_t *o,nui_area_t *a){if(!a)return;if(!o||o->deleted){*a=(nui_area_t){0,0,-1,-1};return;}if(o->coords_epoch==layout_epoch&&o->coords_style_epoch==geometry_epoch){*a=o->coords_cache;FINE_COUNT(n.stats.layout_cache_hits++);return;}if(o->coords_epoch)FINE_COUNT(n.stats.layout_cache_evictions++);int w=nui_obj_get_width(o),h=nui_obj_get_height(o),x=o->x,y=o->y;if(o->parent){nui_area_t p;nui_obj_get_coords(o->parent,&p);int border=num(o->parent,NUI_STYLE_BORDER_WIDTH,0),left=num(o->parent,NUI_STYLE_PAD_LEFT,0),top=num(o->parent,NUI_STYLE_PAD_TOP,0);
 if(o->center_x)x=(nui_obj_get_width(o->parent)-2*border-left-num(o->parent,NUI_STYLE_PAD_RIGHT,0)-w)/2;
 if(o->center_y)y=(nui_obj_get_height(o->parent)-2*border-top-num(o->parent,NUI_STYLE_PAD_BOTTOM,0)-h)/2;
-x+=p.x1+border+left;y+=p.y1+border+top;}*a=(nui_area_t){x,y,x+w-1,y+h-1};((nui_obj_t*)o)->coords_cache=*a;((nui_obj_t*)o)->coords_epoch=layout_epoch;((nui_obj_t*)o)->coords_style_epoch=style_epoch;FINE_COUNT(n.stats.layout_cache_misses++);}
+x+=p.x1+border+left;y+=p.y1+border+top;}*a=(nui_area_t){x,y,x+w-1,y+h-1};((nui_obj_t*)o)->coords_cache=*a;((nui_obj_t*)o)->coords_epoch=layout_epoch;((nui_obj_t*)o)->coords_style_epoch=geometry_epoch;FINE_COUNT(n.stats.layout_cache_misses++);}
 bool nui_obj_is_visible(const nui_obj_t *o){if(!o)return false;for(;o;o=o->parent)if(o->deleted||(o->flags&NUI_OBJ_FLAG_HIDDEN))return false;return true;}
 static nui_area_t object_visual(const nui_obj_t *o){nui_area_t a;nui_obj_get_coords(o,&a);int ext=MAX(num(o,NUI_STYLE_SHADOW_WIDTH,0)+abs(num(o,NUI_STYLE_SHADOW_OFFSET_Y,0)),num(o,NUI_STYLE_OUTLINE_WIDTH,0)+num(o,NUI_STYLE_OUTLINE_PAD,0));a.x1-=ext;a.y1-=ext;a.x2+=ext;a.y2+=ext;return a;}
 void nui_native_invalidate(const nui_area_t *area){if(!n.fb||!area)return;nui_area_t a;if(!area_intersect(&a,*area,(nui_area_t){0,0,n.width-1,n.height-1}))return;for(size_t i=0;i<n.dirty_count;){nui_area_t existing=n.dirty[i],isect;if(area_contains(existing,a))return;if(area_intersect(&isect,a,existing)||area_contains(a,existing)){a=(nui_area_t){MIN(a.x1,existing.x1),MIN(a.y1,existing.y1),MAX(a.x2,existing.x2),MAX(a.y2,existing.y2)};n.dirty[i]=n.dirty[--n.dirty_count];i=0;}else i++;}if(n.dirty_count==MAX_DIRTY){n.dirty_count=1;n.dirty[0]=(nui_area_t){0,0,n.width-1,n.height-1};}else n.dirty[n.dirty_count++]=a;}
@@ -300,8 +344,8 @@ static bool pressed_paint_inert(const nui_obj_t *o,uint32_t state){
     for(style_ref *r=o->styles;r;r=r->next)if(r->selector&NUI_STATE_PRESSED)return false;
     return true;
 }
-void nui_obj_add_state(nui_obj_t *o,uint32_t state){if(o&&(o->state&state)!=state){bool skip=pressed_paint_inert(o,state);if(!skip)nui_obj_invalidate(o);o->state|=state;if(!skip)style_epoch++;if(!skip)nui_obj_invalidate(o);else FINE_COUNT(n.stats.skipped_state_invalidations++);}}
-void nui_obj_remove_state(nui_obj_t *o,uint32_t state){if(o&&(o->state&state)){bool skip=pressed_paint_inert(o,state);if(!skip)nui_obj_invalidate(o);o->state&=~state;if(!skip)style_epoch++;if(!skip)nui_obj_invalidate(o);else FINE_COUNT(n.stats.skipped_state_invalidations++);}}
+void nui_obj_add_state(nui_obj_t *o,uint32_t state){if(o&&(o->state&state)!=state){bool skip=pressed_paint_inert(o,state);if(!skip)nui_obj_invalidate(o);uint32_t changed=state&~o->state;o->state|=state;if(!skip)state_style_changed(o,changed);if(!skip)nui_obj_invalidate(o);else FINE_COUNT(n.stats.skipped_state_invalidations++);}}
+void nui_obj_remove_state(nui_obj_t *o,uint32_t state){if(o&&(o->state&state)){bool skip=pressed_paint_inert(o,state);if(!skip)nui_obj_invalidate(o);uint32_t changed=state&o->state;o->state&=~state;if(!skip)state_style_changed(o,changed);if(!skip)nui_obj_invalidate(o);else FINE_COUNT(n.stats.skipped_state_invalidations++);}}
 
 bool nui_obj_has_state(const nui_obj_t *o,uint32_t state){return o&&(o->state&state)==state;}
 void nui_obj_set_ext_click_area(nui_obj_t *o,int32_t v){if(o)o->ext=v;}

@@ -1,0 +1,228 @@
+{
+  "equal": true,
+  "scope": "Actual final RGB images, flush/refresh counts and available coarse dirty work only; excludes fine primitive/cache counters",
+  "checks": [
+    {
+      "equal": true,
+      "count": 10,
+      "rows": [
+        {
+          "name": "angles_dark",
+          "equal": true,
+          "reference_rgb_sha256": "3db0b6f142fba9042e6c7beb6acab1764210f6e517f5e0de778b4c4321591725",
+          "candidate_rgb_sha256": "3db0b6f142fba9042e6c7beb6acab1764210f6e517f5e0de778b4c4321591725"
+        },
+        {
+          "name": "angles_light",
+          "equal": true,
+          "reference_rgb_sha256": "24a7aabbdcce6ea9f57f9adb3fb6ed2c5c329619bdf3cd126795dc6404428b13",
+          "candidate_rgb_sha256": "24a7aabbdcce6ea9f57f9adb3fb6ed2c5c329619bdf3cd126795dc6404428b13"
+        },
+        {
+          "name": "graph_dark",
+          "equal": true,
+          "reference_rgb_sha256": "29a4c6ab9a3eaab6d4d4a29d2fcd68ab0ecaba25c95b488d621107f84aa7862b",
+          "candidate_rgb_sha256": "29a4c6ab9a3eaab6d4d4a29d2fcd68ab0ecaba25c95b488d621107f84aa7862b"
+        },
+        {
+          "name": "graph_light",
+          "equal": true,
+          "reference_rgb_sha256": "e7c77793bee32291e856cecb2c77c3ab4744613e3fd77fa170636a8d7880a7d2",
+          "candidate_rgb_sha256": "e7c77793bee32291e856cecb2c77c3ab4744613e3fd77fa170636a8d7880a7d2"
+        },
+        {
+          "name": "idle_dark",
+          "equal": true,
+          "reference_rgb_sha256": "7c16561b144ac3c09695b23ed6984a49634b6e4c1afd0e93346a49c36304a6b7",
+          "candidate_rgb_sha256": "7c16561b144ac3c09695b23ed6984a49634b6e4c1afd0e93346a49c36304a6b7"
+        },
+        {
+          "name": "idle_light",
+          "equal": true,
+          "reference_rgb_sha256": "04230d9a7e77122ec995494b7ad9a5134f4064fc86e525dd39758005ba2818fc",
+          "candidate_rgb_sha256": "04230d9a7e77122ec995494b7ad9a5134f4064fc86e525dd39758005ba2818fc"
+        },
+        {
+          "name": "modal_dark",
+          "equal": true,
+          "reference_rgb_sha256": "97e95ad624db26e4a3e4308eb61505ebe860c03319357aeda5513aae5bb6fe59",
+          "candidate_rgb_sha256": "97e95ad624db26e4a3e4308eb61505ebe860c03319357aeda5513aae5bb6fe59"
+        },
+        {
+          "name": "modal_light",
+          "equal": true,
+          "reference_rgb_sha256": "e9627a99bd38e22a067282d66063d458e8f93a60ba7e3601a25bdfbf46c530d9",
+          "candidate_rgb_sha256": "e9627a99bd38e22a067282d66063d458e8f93a60ba7e3601a25bdfbf46c530d9"
+        },
+        {
+          "name": "transition_dark",
+          "equal": true,
+          "reference_rgb_sha256": "cf846cd14295ef64e00c2689a42c9f91fa7888b5de3f2f57ebce77ff22c27286",
+          "candidate_rgb_sha256": "cf846cd14295ef64e00c2689a42c9f91fa7888b5de3f2f57ebce77ff22c27286"
+        },
+        {
+          "name": "transition_light",
+          "equal": true,
+          "reference_rgb_sha256": "9e2d95a9f9e68681ac58581671093c68818b233b9e75518dafc2adf1d931f5c1",
+          "candidate_rgb_sha256": "9e2d95a9f9e68681ac58581671093c68818b233b9e75518dafc2adf1d931f5c1"
+        }
+      ],
+      "reference": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-optimization-1.6.14\\final-0dee13b5\\final\\round-1\\native_c49",
+      "candidate": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-optimization-1.6.14\\final-0dee13b5\\cache-profile\\native_c49",
+      "scope": "All supplied final captured RGB images; not every intermediate rendered framebuffer",
+      "refresh_dirty_work_equal": true,
+      "primitive_counter_comparison": {
+        "status": "unavailable",
+        "reason": "Release fine counters may be disabled; diagnostic fine counters are enabled. Zero placeholders are not evidence of equal work."
+      }
+    },
+    {
+      "equal": true,
+      "count": 10,
+      "rows": [
+        {
+          "name": "angles_dark",
+          "equal": true,
+          "reference_rgb_sha256": "3db0b6f142fba9042e6c7beb6acab1764210f6e517f5e0de778b4c4321591725",
+          "candidate_rgb_sha256": "3db0b6f142fba9042e6c7beb6acab1764210f6e517f5e0de778b4c4321591725"
+        },
+        {
+          "name": "angles_light",
+          "equal": true,
+          "reference_rgb_sha256": "24a7aabbdcce6ea9f57f9adb3fb6ed2c5c329619bdf3cd126795dc6404428b13",
+          "candidate_rgb_sha256": "24a7aabbdcce6ea9f57f9adb3fb6ed2c5c329619bdf3cd126795dc6404428b13"
+        },
+        {
+          "name": "graph_dark",
+          "equal": true,
+          "reference_rgb_sha256": "29a4c6ab9a3eaab6d4d4a29d2fcd68ab0ecaba25c95b488d621107f84aa7862b",
+          "candidate_rgb_sha256": "29a4c6ab9a3eaab6d4d4a29d2fcd68ab0ecaba25c95b488d621107f84aa7862b"
+        },
+        {
+          "name": "graph_light",
+          "equal": true,
+          "reference_rgb_sha256": "e7c77793bee32291e856cecb2c77c3ab4744613e3fd77fa170636a8d7880a7d2",
+          "candidate_rgb_sha256": "e7c77793bee32291e856cecb2c77c3ab4744613e3fd77fa170636a8d7880a7d2"
+        },
+        {
+          "name": "idle_dark",
+          "equal": true,
+          "reference_rgb_sha256": "7c16561b144ac3c09695b23ed6984a49634b6e4c1afd0e93346a49c36304a6b7",
+          "candidate_rgb_sha256": "7c16561b144ac3c09695b23ed6984a49634b6e4c1afd0e93346a49c36304a6b7"
+        },
+        {
+          "name": "idle_light",
+          "equal": true,
+          "reference_rgb_sha256": "04230d9a7e77122ec995494b7ad9a5134f4064fc86e525dd39758005ba2818fc",
+          "candidate_rgb_sha256": "04230d9a7e77122ec995494b7ad9a5134f4064fc86e525dd39758005ba2818fc"
+        },
+        {
+          "name": "modal_dark",
+          "equal": true,
+          "reference_rgb_sha256": "97e95ad624db26e4a3e4308eb61505ebe860c03319357aeda5513aae5bb6fe59",
+          "candidate_rgb_sha256": "97e95ad624db26e4a3e4308eb61505ebe860c03319357aeda5513aae5bb6fe59"
+        },
+        {
+          "name": "modal_light",
+          "equal": true,
+          "reference_rgb_sha256": "e9627a99bd38e22a067282d66063d458e8f93a60ba7e3601a25bdfbf46c530d9",
+          "candidate_rgb_sha256": "e9627a99bd38e22a067282d66063d458e8f93a60ba7e3601a25bdfbf46c530d9"
+        },
+        {
+          "name": "transition_dark",
+          "equal": true,
+          "reference_rgb_sha256": "cf846cd14295ef64e00c2689a42c9f91fa7888b5de3f2f57ebce77ff22c27286",
+          "candidate_rgb_sha256": "cf846cd14295ef64e00c2689a42c9f91fa7888b5de3f2f57ebce77ff22c27286"
+        },
+        {
+          "name": "transition_light",
+          "equal": true,
+          "reference_rgb_sha256": "9e2d95a9f9e68681ac58581671093c68818b233b9e75518dafc2adf1d931f5c1",
+          "candidate_rgb_sha256": "9e2d95a9f9e68681ac58581671093c68818b233b9e75518dafc2adf1d931f5c1"
+        }
+      ],
+      "reference": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-optimization-1.6.14\\final-0dee13b5\\final\\round-2\\native_c49",
+      "candidate": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-optimization-1.6.14\\final-0dee13b5\\cache-profile\\native_c49",
+      "scope": "All supplied final captured RGB images; not every intermediate rendered framebuffer",
+      "refresh_dirty_work_equal": true,
+      "primitive_counter_comparison": {
+        "status": "unavailable",
+        "reason": "Release fine counters may be disabled; diagnostic fine counters are enabled. Zero placeholders are not evidence of equal work."
+      }
+    },
+    {
+      "equal": true,
+      "count": 10,
+      "rows": [
+        {
+          "name": "angles_dark",
+          "equal": true,
+          "reference_rgb_sha256": "3db0b6f142fba9042e6c7beb6acab1764210f6e517f5e0de778b4c4321591725",
+          "candidate_rgb_sha256": "3db0b6f142fba9042e6c7beb6acab1764210f6e517f5e0de778b4c4321591725"
+        },
+        {
+          "name": "angles_light",
+          "equal": true,
+          "reference_rgb_sha256": "24a7aabbdcce6ea9f57f9adb3fb6ed2c5c329619bdf3cd126795dc6404428b13",
+          "candidate_rgb_sha256": "24a7aabbdcce6ea9f57f9adb3fb6ed2c5c329619bdf3cd126795dc6404428b13"
+        },
+        {
+          "name": "graph_dark",
+          "equal": true,
+          "reference_rgb_sha256": "29a4c6ab9a3eaab6d4d4a29d2fcd68ab0ecaba25c95b488d621107f84aa7862b",
+          "candidate_rgb_sha256": "29a4c6ab9a3eaab6d4d4a29d2fcd68ab0ecaba25c95b488d621107f84aa7862b"
+        },
+        {
+          "name": "graph_light",
+          "equal": true,
+          "reference_rgb_sha256": "e7c77793bee32291e856cecb2c77c3ab4744613e3fd77fa170636a8d7880a7d2",
+          "candidate_rgb_sha256": "e7c77793bee32291e856cecb2c77c3ab4744613e3fd77fa170636a8d7880a7d2"
+        },
+        {
+          "name": "idle_dark",
+          "equal": true,
+          "reference_rgb_sha256": "7c16561b144ac3c09695b23ed6984a49634b6e4c1afd0e93346a49c36304a6b7",
+          "candidate_rgb_sha256": "7c16561b144ac3c09695b23ed6984a49634b6e4c1afd0e93346a49c36304a6b7"
+        },
+        {
+          "name": "idle_light",
+          "equal": true,
+          "reference_rgb_sha256": "04230d9a7e77122ec995494b7ad9a5134f4064fc86e525dd39758005ba2818fc",
+          "candidate_rgb_sha256": "04230d9a7e77122ec995494b7ad9a5134f4064fc86e525dd39758005ba2818fc"
+        },
+        {
+          "name": "modal_dark",
+          "equal": true,
+          "reference_rgb_sha256": "97e95ad624db26e4a3e4308eb61505ebe860c03319357aeda5513aae5bb6fe59",
+          "candidate_rgb_sha256": "97e95ad624db26e4a3e4308eb61505ebe860c03319357aeda5513aae5bb6fe59"
+        },
+        {
+          "name": "modal_light",
+          "equal": true,
+          "reference_rgb_sha256": "e9627a99bd38e22a067282d66063d458e8f93a60ba7e3601a25bdfbf46c530d9",
+          "candidate_rgb_sha256": "e9627a99bd38e22a067282d66063d458e8f93a60ba7e3601a25bdfbf46c530d9"
+        },
+        {
+          "name": "transition_dark",
+          "equal": true,
+          "reference_rgb_sha256": "cf846cd14295ef64e00c2689a42c9f91fa7888b5de3f2f57ebce77ff22c27286",
+          "candidate_rgb_sha256": "cf846cd14295ef64e00c2689a42c9f91fa7888b5de3f2f57ebce77ff22c27286"
+        },
+        {
+          "name": "transition_light",
+          "equal": true,
+          "reference_rgb_sha256": "9e2d95a9f9e68681ac58581671093c68818b233b9e75518dafc2adf1d931f5c1",
+          "candidate_rgb_sha256": "9e2d95a9f9e68681ac58581671093c68818b233b9e75518dafc2adf1d931f5c1"
+        }
+      ],
+      "reference": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-optimization-1.6.14\\final-0dee13b5\\final\\round-3\\native_c49",
+      "candidate": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-optimization-1.6.14\\final-0dee13b5\\cache-profile\\native_c49",
+      "scope": "All supplied final captured RGB images; not every intermediate rendered framebuffer",
+      "refresh_dirty_work_equal": true,
+      "primitive_counter_comparison": {
+        "status": "unavailable",
+        "reason": "Release fine counters may be disabled; diagnostic fine counters are enabled. Zero placeholders are not evidence of equal work."
+      }
+    }
+  ]
+}

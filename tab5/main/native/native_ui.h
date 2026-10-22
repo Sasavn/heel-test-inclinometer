@@ -254,6 +254,9 @@ void nui_style_set_prop(nui_style_t*,nui_style_prop_t,nui_style_value_t);
 nui_style_prop_t nui_style_register_prop(unsigned);
 unsigned nui_style_get_num_custom_props(void);
 void nui_obj_add_style(nui_obj_t*,const nui_style_t*,nui_style_selector_t);
+/* Sole matching MAIN reference only; false leaves the object untouched for
+ * conservative remove/add fallback. Reuses its node; no allocation or cache. */
+bool nui_obj_replace_style_atomic(nui_obj_t*,const nui_style_t *old_style,const nui_style_t *new_style,nui_style_selector_t);
 void nui_obj_remove_style(nui_obj_t*,const nui_style_t*,nui_style_selector_t);
 void nui_obj_remove_style_all(nui_obj_t*);
 void nui_obj_report_style_change(const nui_style_t*);

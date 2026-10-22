@@ -1,0 +1,61 @@
+{
+  "version": "1.6.14-esp32",
+  "archive": "Krenomer-Tab5-1.6.14-esp32.zip",
+  "archive_sha256": "91c1a9cc2a531ba9962b5363a57eb5543b2eeaa189617ba4d2c8642a76d1b25e",
+  "packages": [
+    {
+      "profile": "p4-rev1",
+      "format": 1,
+      "board": "tab5",
+      "chip": "esp32p4",
+      "protocol": 2,
+      "version": "1.6.14-esp32",
+      "kind": "ota-app",
+      "size": 1427360,
+      "sha256": "666d91519d5dbcd00263c394ae28e6ced9d4a7a70d63338b0a86f571f737c334",
+      "factory_parts": {
+        "0x2000": "bootloader.bin",
+        "0x20000": "krenomer-esp32.bin",
+        "0x8000": "partition-table.bin",
+        "0xf000": "ota_data_initial.bin"
+      },
+      "warning": "Untested on hardware; never send factory image to OTA",
+      "revision_min": 100,
+      "revision_max": 199,
+      "parts_sha256": {
+        "bootloader.bin": "bbd608b895888e50044723bb2d2e8ff98a008512033ea585047ec63c1441457e",
+        "krenomer-esp32.bin": "666d91519d5dbcd00263c394ae28e6ced9d4a7a70d63338b0a86f571f737c334",
+        "partition-table.bin": "f1572c83b8e4718acde1887b9238701bc7a53f03afd086330432a3148b8165a3",
+        "ota_data_initial.bin": "7d2c7ac4888bfd75cd5f56e8d61f69595121183afc81556c876732fd3782c62f"
+      }
+    },
+    {
+      "profile": "p4-rev3",
+      "format": 1,
+      "board": "tab5",
+      "chip": "esp32p4",
+      "protocol": 2,
+      "version": "1.6.14-esp32",
+      "kind": "ota-app",
+      "size": 1429584,
+      "sha256": "2cbfcd5dd26671871e9d005895e356b88991b8b28455cd6fe238b70f631ecb10",
+      "factory_parts": {
+        "0x2000": "bootloader.bin",
+        "0x20000": "krenomer-esp32.bin",
+        "0x8000": "partition-table.bin",
+        "0xf000": "ota_data_initial.bin"
+      },
+      "warning": "Untested on hardware; never send factory image to OTA",
+      "revision_min": 300,
+      "revision_max": 399,
+      "parts_sha256": {
+        "bootloader.bin": "e7955123d3f565b24e0fc0817b502902f462a24da648551bf065b2e8d497c0dd",
+        "krenomer-esp32.bin": "2cbfcd5dd26671871e9d005895e356b88991b8b28455cd6fe238b70f631ecb10",
+        "partition-table.bin": "f1572c83b8e4718acde1887b9238701bc7a53f03afd086330432a3148b8165a3",
+        "ota_data_initial.bin": "7d2c7ac4888bfd75cd5f56e8d61f69595121183afc81556c876732fd3782c62f"
+      }
+    }
+  ],
+  "hardware_tested": false,
+  "flashed": false
+}

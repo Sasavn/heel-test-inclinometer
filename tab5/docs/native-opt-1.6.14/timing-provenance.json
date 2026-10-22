@@ -1,0 +1,9 @@
+{
+  "status": "FINAL TIMINGREADY",
+  "shared_gate_owner": "benchmark worker; blocks other workers",
+  "independent_gate": ".tools/native-1.6.14/final-20261023-005512-0dee13b5/FINAL_GATE.json",
+  "firmware_version": "1.6.14-esp32",
+  "host_fixture_version": "1.6.1 immutable identical for all three",
+  "production_port_scheduling_dma_in_host": false,
+  "production_hardware_timing": "N/A"
+}

@@ -1,0 +1,3605 @@
+{
+  "rows": [
+    {
+      "scene": "idle",
+      "theme": "dark",
+      "frames": 0,
+      "dirty_rects": 0,
+      "dirty_pixels": 0,
+      "engine_render_us_excluding_flush": 0,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "native_c49",
+      "round": 1
+    },
+    {
+      "scene": "angles",
+      "theme": "dark",
+      "frames": 600,
+      "dirty_rects": 4132,
+      "dirty_pixels": 116429128,
+      "engine_render_us_excluding_flush": 54881,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "native_c49",
+      "round": 1
+    },
+    {
+      "scene": "graph",
+      "theme": "dark",
+      "frames": 600,
+      "dirty_rects": 2652,
+      "dirty_pixels": 142676352,
+      "engine_render_us_excluding_flush": 20645,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "native_c49",
+      "round": 1
+    },
+    {
+      "scene": "modal",
+      "theme": "dark",
+      "frames": 600,
+      "dirty_rects": 1800,
+      "dirty_pixels": 49156800,
+      "engine_render_us_excluding_flush": 86268,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "native_c49",
+      "round": 1
+    },
+    {
+      "scene": "transition",
+      "theme": "dark",
+      "frames": 840,
+      "dirty_rects": 2610,
+      "dirty_pixels": 516861208,
+      "engine_render_us_excluding_flush": 467205,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "native_c49",
+      "round": 1
+    },
+    {
+      "scene": "idle",
+      "theme": "light",
+      "frames": 0,
+      "dirty_rects": 0,
+      "dirty_pixels": 0,
+      "engine_render_us_excluding_flush": 0,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "native_c49",
+      "round": 1
+    },
+    {
+      "scene": "angles",
+      "theme": "light",
+      "frames": 600,
+      "dirty_rects": 4132,
+      "dirty_pixels": 116429128,
+      "engine_render_us_excluding_flush": 59937,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "native_c49",
+      "round": 1
+    },
+    {
+      "scene": "graph",
+      "theme": "light",
+      "frames": 600,
+      "dirty_rects": 2652,
+      "dirty_pixels": 142676352,
+      "engine_render_us_excluding_flush": 25058,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "native_c49",
+      "round": 1
+    },
+    {
+      "scene": "modal",
+      "theme": "light",
+      "frames": 600,
+      "dirty_rects": 1800,
+      "dirty_pixels": 49156800,
+      "engine_render_us_excluding_flush": 109442,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "native_c49",
+      "round": 1
+    },
+    {
+      "scene": "transition",
+      "theme": "light",
+      "frames": 840,
+      "dirty_rects": 2610,
+      "dirty_pixels": 516861208,
+      "engine_render_us_excluding_flush": 557358,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "native_c49",
+      "round": 1
+    },
+    {
+      "scene": "idle",
+      "theme": "dark",
+      "frames": 0,
+      "dirty_rects": 0,
+      "dirty_pixels": 0,
+      "engine_render_us_excluding_flush": 0,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "optimized",
+      "round": 1
+    },
+    {
+      "scene": "angles",
+      "theme": "dark",
+      "frames": 600,
+      "dirty_rects": 4132,
+      "dirty_pixels": 116429128,
+      "engine_render_us_excluding_flush": 46430,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "optimized",
+      "round": 1
+    },
+    {
+      "scene": "graph",
+      "theme": "dark",
+      "frames": 600,
+      "dirty_rects": 2652,
+      "dirty_pixels": 142676352,
+      "engine_render_us_excluding_flush": 16279,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "optimized",
+      "round": 1
+    },
+    {
+      "scene": "modal",
+      "theme": "dark",
+      "frames": 600,
+      "dirty_rects": 1800,
+      "dirty_pixels": 49156800,
+      "engine_render_us_excluding_flush": 22771,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "optimized",
+      "round": 1
+    },
+    {
+      "scene": "transition",
+      "theme": "dark",
+      "frames": 840,
+      "dirty_rects": 2610,
+      "dirty_pixels": 516861208,
+      "engine_render_us_excluding_flush": 439544,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "optimized",
+      "round": 1
+    },
+    {
+      "scene": "idle",
+      "theme": "light",
+      "frames": 0,
+      "dirty_rects": 0,
+      "dirty_pixels": 0,
+      "engine_render_us_excluding_flush": 0,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "optimized",
+      "round": 1
+    },
+    {
+      "scene": "angles",
+      "theme": "light",
+      "frames": 600,
+      "dirty_rects": 4132,
+      "dirty_pixels": 116429128,
+      "engine_render_us_excluding_flush": 47236,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "optimized",
+      "round": 1
+    },
+    {
+      "scene": "graph",
+      "theme": "light",
+      "frames": 600,
+      "dirty_rects": 2652,
+      "dirty_pixels": 142676352,
+      "engine_render_us_excluding_flush": 20758,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "optimized",
+      "round": 1
+    },
+    {
+      "scene": "modal",
+      "theme": "light",
+      "frames": 600,
+      "dirty_rects": 1800,
+      "dirty_pixels": 49156800,
+      "engine_render_us_excluding_flush": 26618,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "optimized",
+      "round": 1
+    },
+    {
+      "scene": "transition",
+      "theme": "light",
+      "frames": 840,
+      "dirty_rects": 2610,
+      "dirty_pixels": 516861208,
+      "engine_render_us_excluding_flush": 513854,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "optimized",
+      "round": 1
+    },
+    {
+      "scene": "idle",
+      "theme": "dark",
+      "frames": 0,
+      "dirty_rects": 0,
+      "dirty_pixels": 0,
+      "engine_render_us_excluding_flush": 0,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "native_c49",
+      "round": 2
+    },
+    {
+      "scene": "angles",
+      "theme": "dark",
+      "frames": 600,
+      "dirty_rects": 4132,
+      "dirty_pixels": 116429128,
+      "engine_render_us_excluding_flush": 55856,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "native_c49",
+      "round": 2
+    },
+    {
+      "scene": "graph",
+      "theme": "dark",
+      "frames": 600,
+      "dirty_rects": 2652,
+      "dirty_pixels": 142676352,
+      "engine_render_us_excluding_flush": 19615,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "native_c49",
+      "round": 2
+    },
+    {
+      "scene": "modal",
+      "theme": "dark",
+      "frames": 600,
+      "dirty_rects": 1800,
+      "dirty_pixels": 49156800,
+      "engine_render_us_excluding_flush": 87261,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "native_c49",
+      "round": 2
+    },
+    {
+      "scene": "transition",
+      "theme": "dark",
+      "frames": 840,
+      "dirty_rects": 2610,
+      "dirty_pixels": 516861208,
+      "engine_render_us_excluding_flush": 468318,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "native_c49",
+      "round": 2
+    },
+    {
+      "scene": "idle",
+      "theme": "light",
+      "frames": 0,
+      "dirty_rects": 0,
+      "dirty_pixels": 0,
+      "engine_render_us_excluding_flush": 0,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "native_c49",
+      "round": 2
+    },
+    {
+      "scene": "angles",
+      "theme": "light",
+      "frames": 600,
+      "dirty_rects": 4132,
+      "dirty_pixels": 116429128,
+      "engine_render_us_excluding_flush": 61993,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "native_c49",
+      "round": 2
+    },
+    {
+      "scene": "graph",
+      "theme": "light",
+      "frames": 600,
+      "dirty_rects": 2652,
+      "dirty_pixels": 142676352,
+      "engine_render_us_excluding_flush": 26273,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "native_c49",
+      "round": 2
+    },
+    {
+      "scene": "modal",
+      "theme": "light",
+      "frames": 600,
+      "dirty_rects": 1800,
+      "dirty_pixels": 49156800,
+      "engine_render_us_excluding_flush": 109060,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "native_c49",
+      "round": 2
+    },
+    {
+      "scene": "transition",
+      "theme": "light",
+      "frames": 840,
+      "dirty_rects": 2610,
+      "dirty_pixels": 516861208,
+      "engine_render_us_excluding_flush": 557794,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "native_c49",
+      "round": 2
+    },
+    {
+      "scene": "idle",
+      "theme": "dark",
+      "frames": 0,
+      "dirty_rects": 0,
+      "dirty_pixels": 0,
+      "engine_render_us_excluding_flush": 0,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "optimized",
+      "round": 2
+    },
+    {
+      "scene": "angles",
+      "theme": "dark",
+      "frames": 600,
+      "dirty_rects": 4132,
+      "dirty_pixels": 116429128,
+      "engine_render_us_excluding_flush": 46232,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "optimized",
+      "round": 2
+    },
+    {
+      "scene": "graph",
+      "theme": "dark",
+      "frames": 600,
+      "dirty_rects": 2652,
+      "dirty_pixels": 142676352,
+      "engine_render_us_excluding_flush": 15893,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "optimized",
+      "round": 2
+    },
+    {
+      "scene": "modal",
+      "theme": "dark",
+      "frames": 600,
+      "dirty_rects": 1800,
+      "dirty_pixels": 49156800,
+      "engine_render_us_excluding_flush": 23336,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "optimized",
+      "round": 2
+    },
+    {
+      "scene": "transition",
+      "theme": "dark",
+      "frames": 840,
+      "dirty_rects": 2610,
+      "dirty_pixels": 516861208,
+      "engine_render_us_excluding_flush": 444497,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "optimized",
+      "round": 2
+    },
+    {
+      "scene": "idle",
+      "theme": "light",
+      "frames": 0,
+      "dirty_rects": 0,
+      "dirty_pixels": 0,
+      "engine_render_us_excluding_flush": 0,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "optimized",
+      "round": 2
+    },
+    {
+      "scene": "angles",
+      "theme": "light",
+      "frames": 600,
+      "dirty_rects": 4132,
+      "dirty_pixels": 116429128,
+      "engine_render_us_excluding_flush": 47066,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "optimized",
+      "round": 2
+    },
+    {
+      "scene": "graph",
+      "theme": "light",
+      "frames": 600,
+      "dirty_rects": 2652,
+      "dirty_pixels": 142676352,
+      "engine_render_us_excluding_flush": 20169,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "optimized",
+      "round": 2
+    },
+    {
+      "scene": "modal",
+      "theme": "light",
+      "frames": 600,
+      "dirty_rects": 1800,
+      "dirty_pixels": 49156800,
+      "engine_render_us_excluding_flush": 26768,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "optimized",
+      "round": 2
+    },
+    {
+      "scene": "transition",
+      "theme": "light",
+      "frames": 840,
+      "dirty_rects": 2610,
+      "dirty_pixels": 516861208,
+      "engine_render_us_excluding_flush": 510016,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "optimized",
+      "round": 2
+    },
+    {
+      "scene": "idle",
+      "theme": "dark",
+      "frames": 0,
+      "dirty_rects": 0,
+      "dirty_pixels": 0,
+      "engine_render_us_excluding_flush": 0,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "optimized",
+      "round": 3
+    },
+    {
+      "scene": "angles",
+      "theme": "dark",
+      "frames": 600,
+      "dirty_rects": 4132,
+      "dirty_pixels": 116429128,
+      "engine_render_us_excluding_flush": 47347,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "optimized",
+      "round": 3
+    },
+    {
+      "scene": "graph",
+      "theme": "dark",
+      "frames": 600,
+      "dirty_rects": 2652,
+      "dirty_pixels": 142676352,
+      "engine_render_us_excluding_flush": 16440,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "optimized",
+      "round": 3
+    },
+    {
+      "scene": "modal",
+      "theme": "dark",
+      "frames": 600,
+      "dirty_rects": 1800,
+      "dirty_pixels": 49156800,
+      "engine_render_us_excluding_flush": 22186,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "optimized",
+      "round": 3
+    },
+    {
+      "scene": "transition",
+      "theme": "dark",
+      "frames": 840,
+      "dirty_rects": 2610,
+      "dirty_pixels": 516861208,
+      "engine_render_us_excluding_flush": 445067,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "optimized",
+      "round": 3
+    },
+    {
+      "scene": "idle",
+      "theme": "light",
+      "frames": 0,
+      "dirty_rects": 0,
+      "dirty_pixels": 0,
+      "engine_render_us_excluding_flush": 0,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "optimized",
+      "round": 3
+    },
+    {
+      "scene": "angles",
+      "theme": "light",
+      "frames": 600,
+      "dirty_rects": 4132,
+      "dirty_pixels": 116429128,
+      "engine_render_us_excluding_flush": 48917,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "optimized",
+      "round": 3
+    },
+    {
+      "scene": "graph",
+      "theme": "light",
+      "frames": 600,
+      "dirty_rects": 2652,
+      "dirty_pixels": 142676352,
+      "engine_render_us_excluding_flush": 20322,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "optimized",
+      "round": 3
+    },
+    {
+      "scene": "modal",
+      "theme": "light",
+      "frames": 600,
+      "dirty_rects": 1800,
+      "dirty_pixels": 49156800,
+      "engine_render_us_excluding_flush": 28808,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "optimized",
+      "round": 3
+    },
+    {
+      "scene": "transition",
+      "theme": "light",
+      "frames": 840,
+      "dirty_rects": 2610,
+      "dirty_pixels": 516861208,
+      "engine_render_us_excluding_flush": 520056,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "optimized",
+      "round": 3
+    },
+    {
+      "scene": "idle",
+      "theme": "dark",
+      "frames": 0,
+      "dirty_rects": 0,
+      "dirty_pixels": 0,
+      "engine_render_us_excluding_flush": 0,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "native_c49",
+      "round": 3
+    },
+    {
+      "scene": "angles",
+      "theme": "dark",
+      "frames": 600,
+      "dirty_rects": 4132,
+      "dirty_pixels": 116429128,
+      "engine_render_us_excluding_flush": 54347,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "native_c49",
+      "round": 3
+    },
+    {
+      "scene": "graph",
+      "theme": "dark",
+      "frames": 600,
+      "dirty_rects": 2652,
+      "dirty_pixels": 142676352,
+      "engine_render_us_excluding_flush": 20017,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "native_c49",
+      "round": 3
+    },
+    {
+      "scene": "modal",
+      "theme": "dark",
+      "frames": 600,
+      "dirty_rects": 1800,
+      "dirty_pixels": 49156800,
+      "engine_render_us_excluding_flush": 86126,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "native_c49",
+      "round": 3
+    },
+    {
+      "scene": "transition",
+      "theme": "dark",
+      "frames": 840,
+      "dirty_rects": 2610,
+      "dirty_pixels": 516861208,
+      "engine_render_us_excluding_flush": 472147,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "native_c49",
+      "round": 3
+    },
+    {
+      "scene": "idle",
+      "theme": "light",
+      "frames": 0,
+      "dirty_rects": 0,
+      "dirty_pixels": 0,
+      "engine_render_us_excluding_flush": 0,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "native_c49",
+      "round": 3
+    },
+    {
+      "scene": "angles",
+      "theme": "light",
+      "frames": 600,
+      "dirty_rects": 4132,
+      "dirty_pixels": 116429128,
+      "engine_render_us_excluding_flush": 58474,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "native_c49",
+      "round": 3
+    },
+    {
+      "scene": "graph",
+      "theme": "light",
+      "frames": 600,
+      "dirty_rects": 2652,
+      "dirty_pixels": 142676352,
+      "engine_render_us_excluding_flush": 24794,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "native_c49",
+      "round": 3
+    },
+    {
+      "scene": "modal",
+      "theme": "light",
+      "frames": 600,
+      "dirty_rects": 1800,
+      "dirty_pixels": 49156800,
+      "engine_render_us_excluding_flush": 99369,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "native_c49",
+      "round": 3
+    },
+    {
+      "scene": "transition",
+      "theme": "light",
+      "frames": 840,
+      "dirty_rects": 2610,
+      "dirty_pixels": 516861208,
+      "engine_render_us_excluding_flush": 550374,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "native_c49",
+      "round": 3
+    }
+  ],
+  "notice": "Release requests primitive timing=0 and fine counters=0. Native c49 and optimized both support the fine flag. Disabled primitive/cache hit counters are unavailable, not measured zero. Cache byte accounting remains available."
+}

@@ -1,0 +1,129 @@
+RESOURCE ЦП — bounds=(2,550)-(101,573) glyph=40x19
+RESOURCE ОЗУ — bounds=(2,578)-(101,601) glyph=47x19
+RESOURCE PS — bounds=(2,606)-(101,629) glyph=37x19
+CASE resources_unknown_dark
+RESOURCE ЦП 100% bounds=(2,550)-(101,573) glyph=66x19
+RESOURCE ОЗУ 100% bounds=(2,578)-(101,601) glyph=73x19
+RESOURCE PS 100% bounds=(2,606)-(101,629) glyph=63x19
+CASE resources_100_dark
+RESOURCE ЦП — bounds=(2,550)-(101,573) glyph=40x19
+RESOURCE ОЗУ — bounds=(2,578)-(101,601) glyph=47x19
+RESOURCE PS 100% bounds=(2,606)-(101,629) glyph=63x19
+RESOURCE ЦП 0% bounds=(2,550)-(101,573) glyph=48x19
+RESOURCE ОЗУ — bounds=(2,578)-(101,601) glyph=47x19
+RESOURCE PS — bounds=(2,606)-(101,629) glyph=37x19
+RESOURCE ЦП 12% bounds=(2,550)-(101,573) glyph=57x19
+RESOURCE ОЗУ 48% bounds=(2,578)-(101,601) glyph=64x19
+RESOURCE PS 8% bounds=(2,606)-(101,629) glyph=45x19
+CASE resources_dashboard_dark
+CASE dashboard_dark
+CASE chart_dark
+CASE recording_dark
+CASE settings_dark
+CASE network_dark
+CASE settings_longpress_dark
+CASE dashboard_recording_error_dark
+CASE zero_confirm_dark
+CASE settings_dirty_dark
+CASE numeric_dark
+CASE numeric_valid_dark
+CASE dirty_navigation_dark
+CASE settings_pending_dark
+CASE settings_ack_dark
+CASE time_invalid_dark
+CASE time_valid_dark
+CASE network_keyboard_en_dark
+CASE network_keyboard_ru_dark
+CASE network_pending_dark
+CASE network_ack_dark
+CASE network_invalid_dark
+CASE network_revealed_dark
+CASE dashboard_extremes_dark
+CASE network_keyboard_long_dark
+CASE network_long_dark
+CASE chart_samples_fixture_dark
+CASE chart_30_dark
+CASE chart_600_dark
+CASE chart_touch_hidden_dark
+CASE dashboard_disconnected_dark
+CASE backend_record_error_dark
+CASE backend_repeated_error_dark
+CASE backend_time_error_dark
+CASE backend_network_error_dark
+CASE backend_network_nvs_error_dark
+CASE backend_network_retry_success_dark
+CASE backend_nvs_error_dark
+CASE backend_settings_retry_success_dark
+RESOURCE ЦП — bounds=(2,550)-(101,573) glyph=40x19
+RESOURCE ОЗУ — bounds=(2,578)-(101,601) glyph=47x19
+RESOURCE PS — bounds=(2,606)-(101,629) glyph=37x19
+CASE resources_unknown_light
+RESOURCE ЦП 100% bounds=(2,550)-(101,573) glyph=66x19
+RESOURCE ОЗУ 100% bounds=(2,578)-(101,601) glyph=73x19
+RESOURCE PS 100% bounds=(2,606)-(101,629) glyph=63x19
+CASE resources_100_light
+RESOURCE ЦП — bounds=(2,550)-(101,573) glyph=40x19
+RESOURCE ОЗУ — bounds=(2,578)-(101,601) glyph=47x19
+RESOURCE PS 100% bounds=(2,606)-(101,629) glyph=63x19
+RESOURCE ЦП 0% bounds=(2,550)-(101,573) glyph=48x19
+RESOURCE ОЗУ — bounds=(2,578)-(101,601) glyph=47x19
+RESOURCE PS — bounds=(2,606)-(101,629) glyph=37x19
+RESOURCE ЦП 12% bounds=(2,550)-(101,573) glyph=57x19
+RESOURCE ОЗУ 48% bounds=(2,578)-(101,601) glyph=64x19
+RESOURCE PS 8% bounds=(2,606)-(101,629) glyph=45x19
+CASE resources_dashboard_light
+CASE dashboard_light
+CASE chart_light
+CASE recording_light
+CASE settings_light
+CASE network_light
+CASE settings_longpress_light
+CASE dashboard_recording_error_light
+CASE zero_confirm_light
+CASE settings_dirty_light
+CASE numeric_light
+CASE numeric_valid_light
+CASE dirty_navigation_light
+CASE settings_pending_light
+CASE settings_ack_light
+CASE time_invalid_light
+CASE time_valid_light
+CASE network_keyboard_en_light
+CASE network_keyboard_ru_light
+CASE network_pending_light
+CASE network_ack_light
+CASE network_invalid_light
+CASE network_revealed_light
+CASE dashboard_extremes_light
+CASE network_keyboard_long_light
+CASE network_long_light
+CASE chart_samples_fixture_light
+CASE chart_30_light
+CASE chart_600_light
+CASE chart_touch_hidden_light
+CASE dashboard_disconnected_light
+CASE backend_record_error_light
+CASE backend_repeated_error_light
+CASE backend_time_error_light
+CASE backend_network_error_light
+CASE backend_network_nvs_error_light
+CASE backend_network_retry_success_light
+CASE backend_nvs_error_light
+CASE backend_settings_retry_success_light
+CASE chart_5hz_synthetic_continuous_30s_dark
+CASE chart_5hz_synthetic_pending_readings_dark
+CASE chart_5hz_synthetic_2min_dark
+CASE chart_5hz_synthetic_failed_gap_dark
+CASE chart_5hz_synthetic_offline_empty_tail_dark
+CASE chart_5hz_synthetic_continuous_30s_light
+CASE chart_5hz_synthetic_pending_readings_light
+CASE chart_5hz_synthetic_2min_light
+CASE chart_5hz_synthetic_failed_gap_light
+CASE chart_5hz_synthetic_offline_empty_tail_light
+CASE dashboard_live_unfiltered_synthetic_dark
+CASE chart_live_unfiltered_synthetic_dark
+CASE dashboard_live_unfiltered_synthetic_light
+CASE chart_live_unfiltered_synthetic_light
+CASE dashboard_level_raster_synthetic_dark
+CASE dashboard_level_raster_synthetic_light
+RESULT cases=98 callbacks=38 layout_guardrail_failures=0

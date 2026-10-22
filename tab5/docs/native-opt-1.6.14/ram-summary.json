@@ -1,0 +1,59 @@
+{
+  "ranges": {
+    "lvgl": {
+      "lvgl_arena_reserved_bytes": {
+        "min": 8388608,
+        "max": 8388608
+      },
+      "lvgl_current_used_block_bytes": {
+        "min": 144504,
+        "max": 162904
+      },
+      "lvgl_process_peak_used_block_bytes": {
+        "min": 159240,
+        "max": 165768
+      },
+      "lvgl_live_blocks": {
+        "min": 2614,
+        "max": 2904
+      }
+    },
+    "native_c49": {
+      "native_logical_payload_current_bytes": {
+        "min": 289858,
+        "max": 334511
+      },
+      "native_logical_payload_process_peak_bytes": {
+        "min": 289858,
+        "max": 334592
+      },
+      "allocation_live_blocks": {
+        "min": 1927,
+        "max": 2130
+      },
+      "native_allocation_failures_process": {
+        "min": 0,
+        "max": 0
+      }
+    },
+    "optimized": {
+      "native_logical_payload_current_bytes": {
+        "min": 289858,
+        "max": 334511
+      },
+      "native_logical_payload_process_peak_bytes": {
+        "min": 289858,
+        "max": 334592
+      },
+      "allocation_live_blocks": {
+        "min": 1927,
+        "max": 2130
+      },
+      "native_allocation_failures_process": {
+        "min": 0,
+        "max": 0
+      }
+    }
+  },
+  "notice": "Native requested payload/current live blocks, not total RAM or cumulative calls. Lifetime peaks. Cache heap is a subset, not additive. LVGL arena reserved separate from used allocator blocks. Header/CRT overhead unknown. Target GDB ledger belongs to independent main worker."
+}

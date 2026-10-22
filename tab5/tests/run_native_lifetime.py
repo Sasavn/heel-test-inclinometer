@@ -14,7 +14,10 @@ sources += [main / s for s in ('tab5_ui.c','tab5_ui_graph.c','tab5_measure.c',
                               'native/native_ui.c','native/font_native_fallback14.c')]
 sources += sorted(main.glob('font_tab5_*.c'))
 with tempfile.TemporaryDirectory(prefix='tab5-native-lifetime-') as td:
-    exe = Path(td) / 'lifetime.exe'
-    subprocess.run([cc,'-std=c11','-O2','-I'+str(main),*[str(p) for p in sources],
-                    '-lm','-o',str(exe)],check=True)
-    subprocess.run([str(exe)],check=True,timeout=120)
+    for fine in (0, 1):
+        exe = Path(td) / f'lifetime-fine{fine}.exe'
+        subprocess.run([cc,'-std=c11','-O2',f'-DNUI_PROFILE_FINE_COUNTERS={fine}',
+                        '-DNUI_PROFILE_PRIMITIVE_TIMING=0','-I'+str(main),*[str(p) for p in sources],
+                        '-lm','-o',str(exe)],check=True)
+        subprocess.run([str(exe)],check=True,timeout=120)
+        print(f'production lifetime64 fine={fine} timing=0 PASS', flush=True)

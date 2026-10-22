@@ -16,6 +16,11 @@
 #define WIDTH 1280
 #define HEIGHT 720
 #define FRAME_BYTES (WIDTH*HEIGHT*sizeof(uint16_t))
+/* Acquisition/UI state still updates at 10 Hz in main.c. Only an observed
+ * interaction can request the shorter, bounded display interval. No second
+ * render or rotation is allowed while the previous LCD transfer owns buffers. */
+#define PERIODIC_RENDER_US UINT64_C(100000)
+#define INTERACTION_RENDER_US UINT64_C(40000)
 static SemaphoreHandle_t ui_mutex,transfer_done;
 static esp_lcd_panel_handle_t panel;
 static esp_lcd_touch_handle_t touch;
@@ -52,7 +57,8 @@ static uint64_t clock_us(void){return (uint64_t)esp_timer_get_time();}
 static void native_task(void *arg) {
     (void)arg;uint32_t last_ms=(uint32_t)(clock_us()/1000);
     uint64_t last_render=0,pending_start=0,pending_submitted=0;
-    bool pending=false,timeout_reported=false;int x=0,y=0;
+    bool pending=false,timeout_reported=false,was_pressed=false,input_requested=false;
+    uint64_t input_since=0;int x=0,y=0;
     for(;;) {
         uint64_t now=clock_us();
         if(pending&&xSemaphoreTake(transfer_done,0)==pdTRUE) {
@@ -74,13 +80,22 @@ static void native_task(void *arg) {
         bool pressed=esp_lcd_touch_read_data(touch)==ESP_OK &&
             esp_lcd_touch_get_coordinates(touch,&tx,&ty,&strength,&points,1)&&points;
         if(pressed)pressed=native_touch_position(tx,ty,&x,&y);
+        if(pressed||was_pressed){
+            if(!input_requested)input_since=clock_us();
+            input_requested=true;
+        }
+        was_pressed=pressed;
         xSemaphoreTake(ui_mutex,portMAX_DELAY);
         uint32_t ms=(uint32_t)(clock_us()/1000);
         nui_native_tick(ms-last_ms);last_ms=ms;
         nui_native_touch(x,y,pressed);
         uint64_t start=clock_us();size_t dirty=0;
-        if(!pending&&start-last_render>=100000) {
+        bool interactive=input_requested;
+        uint64_t interval=interactive?INTERACTION_RENDER_US:PERIODIC_RENDER_US;
+        uint64_t input_wait=interactive?start-input_since:0;
+        if(!pending&&start-last_render>=interval) {
             last_render=start;dirty=nui_native_render();
+            input_requested=false;
         }
         uint64_t rendered=clock_us();
         xSemaphoreGive(ui_mutex);
@@ -98,6 +113,11 @@ static void native_task(void *arg) {
             uint64_t submitted=clock_us();
             portENTER_CRITICAL(&stats_lock);
             stats.renders++;stats.render_us+=rendered-start;
+            if(interactive){
+                stats.interactive_renders++;
+                if(input_wait>stats.input_render_wait_max_us)
+                    stats.input_render_wait_max_us=input_wait>UINT32_MAX?UINT32_MAX:(uint32_t)input_wait;
+            }
             stats.rotate_us+=rotated_at-rendered;stats.flush_us+=submitted-rotated_at;
             if(e==ESP_OK)stats.flushes++;else stats.errors++;
             portEXIT_CRITICAL(&stats_lock);

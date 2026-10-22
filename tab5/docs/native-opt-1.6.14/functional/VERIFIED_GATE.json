@@ -1,0 +1,197 @@
+{
+  "status": "PASS",
+  "artifact_directory": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-1.6.14\\final-20261023-005512-0dee13b5",
+  "final98_png_dir": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-1.6.14\\final-20261023-005512-0dee13b5\\equivalence\\release",
+  "diagnostic98_png_dir": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-1.6.14\\final-20261023-005512-0dee13b5\\equivalence\\diagnostic",
+  "native_c_sha256": "0dee13b5fd02652656d6315830813445fe339676145f2bf34c4994308e642992",
+  "native_h_sha256": "1dd8d7d3b216033490db7db9ac872404c53003490c444ea2a89b82c04134a590",
+  "ui_sha256": "b9d1434572c66b7e25de6c326224f62f8af2490b6f84402811aaa01d3d821c25",
+  "source_manifest": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-1.6.14\\final-20261023-005512-0dee13b5\\SOURCE_MANIFEST.json",
+  "source_manifest_sha256": "f354869cb06bd92aedcf352117ec4abdc8e6197b625fca512773ddff7e72e578",
+  "source_closure_unchanged": true,
+  "parity": {
+    "status": "PASS",
+    "frames_per_mode": 98,
+    "exact_rgb_immutable_parent": true,
+    "exact_rgb_between_modes": true,
+    "geometry_semantic_differences": 0,
+    "all_existing_inputs": "PASS both modes",
+    "report": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-1.6.14\\final-20261023-005512-0dee13b5\\equivalence\\counter_mode_equivalence.json"
+  },
+  "targeted": {
+    "status": "PASS",
+    "groups_per_mode": [
+      "keyboard",
+      "cache",
+      "custom",
+      "numeric",
+      "cold-memory"
+    ],
+    "flags": [
+      0,
+      1
+    ],
+    "report": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-1.6.14\\final-20261023-005512-0dee13b5\\targeted\\TARGETED_GATE.json",
+    "keyboard": {
+      "checks_per_mode": 48,
+      "global_pressed_keys": 40,
+      "fallback_preserved": true
+    }
+  },
+  "atomic_role": {
+    "status": "PASS",
+    "cases_per_mode": 18,
+    "flags": [
+      0,
+      1
+    ],
+    "sole_MAIN_no_allocation": true,
+    "unknown_styles_conservative_fallback": true,
+    "oracle": "accepted sequential remove-known/add-target semantics",
+    "report": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-1.6.14\\final-20261023-005512-0dee13b5\\atomic-role\\ATOMIC_ROLE_GATE.json"
+  },
+  "helpers": [
+    {
+      "name": "targeted",
+      "status": "PASS",
+      "returncode": 0,
+      "log": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-1.6.14\\final-20261023-005512-0dee13b5\\logs\\targeted.log",
+      "command": [
+        "C:\\ProgramData\\anaconda3\\python.exe",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-1.6.14\\final-20261023-005512-0dee13b5\\source\\tab5\\tests\\run_native_cache_keyboard.py",
+        "--group",
+        "all",
+        "--out",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-1.6.14\\final-20261023-005512-0dee13b5\\targeted",
+        "--benchmark-gate",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-opt\\BENCHMARK_GATE"
+      ]
+    },
+    {
+      "name": "atomic-role",
+      "status": "PASS",
+      "returncode": 0,
+      "log": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-1.6.14\\final-20261023-005512-0dee13b5\\logs\\atomic-role.log",
+      "command": [
+        "C:\\ProgramData\\anaconda3\\python.exe",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-1.6.14\\final-20261023-005512-0dee13b5\\source\\tab5\\tests\\run_native_atomic_role.py",
+        "--out",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-1.6.14\\final-20261023-005512-0dee13b5\\atomic-role",
+        "--benchmark-gate",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-opt\\BENCHMARK_GATE"
+      ]
+    },
+    {
+      "name": "run_native_gradient",
+      "status": "PASS",
+      "returncode": 0,
+      "log": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-1.6.14\\final-20261023-005512-0dee13b5\\logs\\run_native_gradient.log",
+      "command": [
+        "C:\\ProgramData\\anaconda3\\python.exe",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-1.6.14\\final-20261023-005512-0dee13b5\\source\\tab5\\tests\\run_native_gradient.py"
+      ]
+    },
+    {
+      "name": "run_native_profile_flags",
+      "status": "PASS",
+      "returncode": 0,
+      "log": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-1.6.14\\final-20261023-005512-0dee13b5\\logs\\run_native_profile_flags.log",
+      "command": [
+        "C:\\ProgramData\\anaconda3\\python.exe",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-1.6.14\\final-20261023-005512-0dee13b5\\source\\tab5\\tests\\run_native_profile_flags.py"
+      ]
+    },
+    {
+      "name": "run_draw_profile_mode",
+      "status": "PASS",
+      "returncode": 0,
+      "log": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-1.6.14\\final-20261023-005512-0dee13b5\\logs\\run_draw_profile_mode.log",
+      "command": [
+        "C:\\ProgramData\\anaconda3\\python.exe",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-1.6.14\\final-20261023-005512-0dee13b5\\source\\tab5\\tests\\run_draw_profile_mode.py"
+      ]
+    },
+    {
+      "name": "run_native_lifetime",
+      "status": "PASS",
+      "returncode": 0,
+      "log": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-1.6.14\\final-20261023-005512-0dee13b5\\logs\\run_native_lifetime.log",
+      "command": [
+        "C:\\ProgramData\\anaconda3\\python.exe",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-1.6.14\\final-20261023-005512-0dee13b5\\source\\tab5\\tests\\run_native_lifetime.py"
+      ]
+    },
+    {
+      "name": "run_native_page_dirty",
+      "status": "PASS",
+      "returncode": 0,
+      "log": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-1.6.14\\final-20261023-005512-0dee13b5\\logs\\run_native_page_dirty.log",
+      "command": [
+        "C:\\ProgramData\\anaconda3\\python.exe",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-1.6.14\\final-20261023-005512-0dee13b5\\source\\tab5\\tests\\run_native_page_dirty.py"
+      ]
+    },
+    {
+      "name": "final-regressions-build",
+      "status": "PASS",
+      "returncode": 0,
+      "log": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-1.6.14\\final-20261023-005512-0dee13b5\\logs\\final-regressions-build.log",
+      "command": [
+        "C:\\Users\\aaaor\\gcc\\bin\\gcc.EXE",
+        "-std=c11",
+        "-O2",
+        "-DNUI_PROFILE_FINE_COUNTERS=1",
+        "-DNUI_PROFILE_PRIMITIVE_TIMING=0",
+        "-IC:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-1.6.14\\final-20261023-005512-0dee13b5\\source\\tab5\\main",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-1.6.14\\final-20261023-005512-0dee13b5\\source\\tab5\\tests\\test_native_final_regressions.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-1.6.14\\final-20261023-005512-0dee13b5\\source\\tab5\\main\\native\\font_native_fallback14.c",
+        "-lm",
+        "-o",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-1.6.14\\final-20261023-005512-0dee13b5\\logs\\final-regressions.exe"
+      ]
+    },
+    {
+      "name": "final-regressions",
+      "status": "PASS",
+      "returncode": 0,
+      "log": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-1.6.14\\final-20261023-005512-0dee13b5\\logs\\final-regressions.log",
+      "command": [
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-1.6.14\\final-20261023-005512-0dee13b5\\logs\\final-regressions.exe"
+      ]
+    }
+  ],
+  "lifetime": {
+    "status": "PASS",
+    "cycles_per_mode": 64,
+    "flags": [
+      0,
+      1
+    ],
+    "retained_masks_accounted": true,
+    "log": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-1.6.14\\final-20261023-005512-0dee13b5\\logs\\run_native_lifetime.log"
+  },
+  "dirty_pages": {
+    "status": "PASS",
+    "transitions_per_mode": 40,
+    "flags": [
+      0,
+      1
+    ],
+    "incremental_full_exact": true,
+    "log": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-1.6.14\\final-20261023-005512-0dee13b5\\logs\\run_native_page_dirty.log"
+  },
+  "callback_clipped_span": {
+    "status": "PASS",
+    "log": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-1.6.14\\final-20261023-005512-0dee13b5\\logs\\final-regressions.log"
+  },
+  "sanitizers": {
+    "status": "UNAVAILABLE",
+    "reason": "Known installed GCC lacks libasan/libubsan; sanitizer coverage not claimed"
+  },
+  "strict_checker": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-1.6.14\\final-20261023-005512-0dee13b5\\verify_final_pack.py",
+  "strict_check_log": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-1.6.14\\final-20261023-005512-0dee13b5\\strict-check.log",
+  "cpu_tests_complete": true,
+  "cpu_stopped": true,
+  "performance": "Functional timings are not final benchmark numbers",
+  "hardware_used": false
+}

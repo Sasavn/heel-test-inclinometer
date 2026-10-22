@@ -1,0 +1,2 @@
+native port source: 12 startup fault cleanups/restart, idle skip, no-lock PPA/flush, no reuse without completion, all PPA90 pixels PASS
+native scheduling: 40 ms input eligibility / 100 ms periodic; 25 Hz hold bound; late-DMA request preserved PASS (stub time, not hardware latency)

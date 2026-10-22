@@ -1,0 +1,4 @@
+native profile flags: fine=0 timing=0 clock_reads=2 frames=1 calls=0 PASS
+native profile flags: fine=1 timing=0 clock_reads=2 frames=1 calls=4 PASS
+native profile flags: fine=1 timing=1 clock_reads=10 frames=1 calls=4 PASS
+native profile flags: fine=0 timing=1 clock_reads=10 frames=1 calls=0 PASS
