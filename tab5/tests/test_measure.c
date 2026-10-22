@@ -67,4 +67,33 @@ static void rolling(void){
     /* A long gap does not retain a filled window or insert synthetic readings. */
     sample(0,0,100000000);assert(c.state.sensor[0].roll_fill_s==0 && !c.state.sensor[0].calm_x);
 }
-int main(void){protocol();filtering();schedule();rolling();puts("tab5 measurement tests: PASS");return 0;}
+static unsigned step_response(float alpha,unsigned hz) {
+    tab5_measure_config_t cfg;tab5_measure_config_default(&cfg);cfg.alpha=alpha;cfg.frequency_hz=hz;
+    tab5_measure_core_init(&c,&cfg,0);
+    for(unsigned k=0;k<20;k++)sample(0,0,(uint64_t)k*1000000/hz);
+    unsigned first=0,settled=0;
+    for(unsigned k=1;k<=100;k++){
+        sample(10,0,(uint64_t)(19+k)*1000000/hz);
+        if(!first&&c.state.sensor[0].x>0)first=k;
+        if(!settled&&c.state.sensor[0].x>=9.5f)settled=k;
+        if(settled)break;
+    }
+    assert(first==2);assert(settled);
+    printf("step alpha=%.2f hz=%u: first=%ums,95%%=%ums after last pre-step sample\n",alpha,hz,first*1000/hz,settled*1000/hz);
+    return settled;
+}
+static void response_and_reconfigure(void) {
+    assert(step_response(.15f,5)==20);
+    assert(step_response(.5f,10)==6);
+    /* Do not mix the old filter/rate regime into a new calm window. */
+    tab5_measure_core_init(&c,NULL,0);
+    for(unsigned k=0;k<120;k++)sample(0,0,(uint64_t)k*200000);
+    assert(c.state.sensor[0].calm_x&&c.filter[0].count);
+    tab5_measure_config_t cfg=c.state.config;cfg.alpha=.5f;
+    tab5_measure_core_configure(&c,&cfg,24000000);
+    assert(!c.state.stable&&!c.filter[0].count&&c.state.sensor[0].roll_fill_s==0);
+    sample(0,0,24200000);assert(c.filter[0].count);
+    cfg.frequency_hz=5;tab5_measure_core_configure(&c,&cfg,24400000);
+    assert(!c.filter[0].count&&!c.state.stable);
+}
+int main(void){protocol();filtering();schedule();rolling();response_and_reconfigure();puts("tab5 measurement tests: PASS");return 0;}

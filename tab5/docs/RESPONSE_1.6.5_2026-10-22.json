@@ -1,0 +1,47 @@
+{
+  "version": "1.6.5-esp32",
+  "hardware_flashed": false,
+  "tuning_applied": false,
+  "blocker": "COM11 first busy, then device absent from USB on remote host",
+  "last_verified_live_config": {
+    "firmware": "1.6.4-esp32",
+    "frequency_hz": 5,
+    "alpha": 0.15,
+    "recording": false
+  },
+  "proposed_live_config": {
+    "frequency_hz": 10,
+    "alpha": 0.5
+  },
+  "packages": [
+    {
+      "version": "1.6.5-esp32",
+      "revision_min": 100,
+      "revision_max": 199,
+      "size": 1706160,
+      "sha256": "19ecc54d5b89ca3cd4ce0b2188728772f1201a2e45ca879f34fe28a25207d0dd"
+    },
+    {
+      "version": "1.6.5-esp32",
+      "revision_min": 300,
+      "revision_max": 399,
+      "size": 1708288,
+      "sha256": "0b346fa1ea6918c147d662f119d9f626113e1bd5bf365931f84d7781e67cc0a8"
+    }
+  ],
+  "tests": {
+    "native_cases": 92,
+    "native_geometry_failures": 0,
+    "graph_assertions": 45915,
+    "actual_image_mock_runs": 28,
+    "step_settling_samples_before": 20,
+    "step_settling_samples_after": 6
+  },
+  "source_sha256": {
+    "tab5/main/tab5_ui.c": "7bff716113576342a8b63ad0a4a61ece6f4c2504e55abf3e59807a79e2d3068a",
+    "tab5/main/tab5_ui_graph.c": "19c1a5aafe2caaf2143dae785e76df4c6b376cf0bf5d738409b83e3a9efcdc35",
+    "tab5/main/tab5_ui_graph.h": "ed8f9bca3d6292be29d891df7299e3906e91834686489c9e44006a95ee24509a",
+    "tab5/main/tab5_measure.c": "9fb2cf37a959a0808be44c0bdf759808114c24136ad18746e3f647e1c87e4f88",
+    "tab5/main/main.c": "b14a11b02acf7d78b54a252fa0a4ed7f1dd9b2acb1d8fe77d1e783a1f1818cca"
+  }
+}

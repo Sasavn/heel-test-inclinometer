@@ -44,7 +44,8 @@ void tab5_measure_core_configure(tab5_measure_core_t *c, const tab5_measure_conf
     c->state.config=n;
     if(n.frequency_hz!=old.frequency_hz)
         c->next_cycle_us=now+(1000000u+n.frequency_hz-1)/n.frequency_hz;
-    if(n.roll_window_s!=old.roll_window_s || n.roll_rate_hz!=old.roll_rate_hz) {
+    if(n.roll_window_s!=old.roll_window_s || n.roll_rate_hz!=old.roll_rate_hz ||
+       n.frequency_hz!=old.frequency_hz || n.alpha!=old.alpha) {
         for(unsigned i=0;i<TAB5_SENSOR_COUNT;i++) reset_roll(c,i);
         stable(c);
     }

@@ -2,6 +2,7 @@
  * Finds controls through public object tree and drives a synthetic touch input.
  * Captures actual flush pixels and audits rendered object coordinates. */
 #include "tab5_ui.h"
+#include "tab5_ui_graph.h"
 /* Pinned LVGL9.3 diagnostic geometry; production UI uses only public APIs. */
 #include "src/widgets/buttonmatrix/lv_buttonmatrix_private.h"
 #include <assert.h>
@@ -196,6 +197,101 @@ static void resources_regression(tab5_ui_state_t *s,unsigned theme){
     assert(!flushes&&!flushed_pixels&&!refreshes);
     printf("RESOURCES theme=%u unknown/zero/100/clamp/geometry/change/idle: PASS\n",theme);
 }
+
+static lv_obj_t *find_chart(lv_obj_t *o){
+    if(lv_obj_check_type(o,&lv_chart_class))return o;
+    for(unsigned i=0;i<lv_obj_get_child_count(o);i++){lv_obj_t *r=find_chart(lv_obj_get_child(o,i));if(r)return r;}return NULL;
+}
+/* Compare the actual LVGL external arrays with the render contract for all
+ * four series; series traversal order is deliberately not assumed. */
+static void graph_arrays(const tab5_ui_graph_t *history,unsigned seconds){
+    lv_obj_t *chart=find_chart(lv_screen_active());assert(chart);
+    unsigned n=seconds==30?300:240;assert(lv_chart_get_point_count(chart)==n);
+    bool matched[4]={0};unsigned count=0;int32_t expected[1200],raw[1200];
+    for(lv_chart_series_t *series=lv_chart_get_series_next(chart,NULL);series;series=lv_chart_get_series_next(chart,series)){
+        int32_t *actual=lv_chart_get_series_y_array(chart,series);bool found=false;
+        for(unsigned k=0;k<4;k++){
+            assert(tab5_ui_graph_read_render(history,seconds,k,expected)==n);
+            if(seconds==120){assert(tab5_ui_graph_read(history,seconds,k,raw)==n);assert(!memcmp(raw,expected,n*sizeof(*raw)));}
+            if(!matched[k]&&!memcmp(actual,expected,n*sizeof(*actual))){matched[k]=true;found=true;break;}
+        }
+        assert(found);count++;
+    }
+    assert(count==4);
+}
+static void graph_5hz_regression(unsigned theme){
+    tab5_ui_init(action,NULL);
+    tab5_ui_state_t s={.light_theme=theme,.now_known=true,.now_us=100000000};
+    tab5_measure_config_default(&s.measurement.config);s.measurement.config.frequency_hz=5;s.measurement.config.gap_ms=20;
+    tab5_ui_graph_t history;tab5_ui_graph_reset(&history);
+    tab5_ui_update(&s);tab5_ui_graph_sample(&history,&s);nav(1);click("30 с");
+    /* Explicitly synthetic input, 5Hz replies and 100ms UI snapshots, 120s
+     * retained history. Distinct channels make series comparisons meaningful. */
+    for(unsigned tick=0;tick<=1200;tick++){
+        s.now_us=100000000+(uint64_t)tick*100000;
+        if(!(tick%2))for(unsigned j=0;j<2;j++){
+            tab5_measure_sensor_t *m=&s.measurement.sensor[j];m->valid=true;m->good++;m->timestamp_us=s.now_us;
+            m->x=1.2f+j+.35f*sinf(tick*.015f);m->y=-.4f-j+.15f*cosf(tick*.015f);
+        }
+        tab5_ui_graph_sample(&history,&s);tab5_ui_update(&s);
+        if(tick%100==0)pump();
+    }
+    pump();graph_arrays(&history,30);
+    int32_t values[1200];assert(tab5_ui_graph_read_render(&history,30,0,values)==300);
+    for(unsigned i=1;i<300;i++)assert(values[i]!=LV_CHART_POINT_NONE);
+    char name[120];const char *tag=theme?"light":"dark";
+    snprintf(name,sizeof(name),"chart_5hz_synthetic_continuous_30s_%s",tag);capture(name);
+    /* Pending half-cycle: no extrapolation, but current numerics stay visible. */
+    s.now_us+=100000;tab5_ui_graph_sample(&history,&s);tab5_ui_update(&s);pump();graph_arrays(&history,30);
+    tab5_ui_graph_read_render(&history,30,0,values);assert(values[299]==LV_CHART_POINT_NONE&&values[298]!=LV_CHART_POINT_NONE);
+    for(unsigned j=0;j<2;j++)for(unsigned axis=0;axis<2;axis++){
+        float v=axis?s.measurement.sensor[j].y:s.measurement.sensor[j].x;char text[40];
+        snprintf(text,sizeof(text),"%s%.2f°",v<0?"−":"+",fabs(v));assert(find_label(lv_screen_active(),text));
+    }
+    snprintf(name,sizeof(name),"chart_5hz_synthetic_pending_readings_%s",tag);capture(name);
+    click("2 мин");graph_arrays(&history,120);tab5_ui_graph_read_render(&history,120,0,values);
+    for(unsigned i=0;i<240;i++)assert(values[i]!=LV_CHART_POINT_NONE);
+    snprintf(name,sizeof(name),"chart_5hz_synthetic_2min_%s",tag);capture(name);click("30 с");
+    /* A failed poll retains valid last-good data, but increments errors.
+     * Recovery must not bridge that failed edge; healthy peer stays continuous. */
+    for(unsigned tick=2;tick<=4;tick++){
+        s.now_us=220000000+(uint64_t)tick*100000;
+        if(tick==2)s.measurement.sensor[0].errors++;
+        if(!(tick%2))for(unsigned j=0;j<2;j++)if(j||tick==4){s.measurement.sensor[j].good++;s.measurement.sensor[j].timestamp_us=s.now_us;}
+        tab5_ui_graph_sample(&history,&s);tab5_ui_update(&s);pump();
+    }
+    graph_arrays(&history,30);tab5_ui_graph_read_render(&history,30,0,values);
+    assert(values[299]!=LV_CHART_POINT_NONE&&values[298]==LV_CHART_POINT_NONE&&values[297]==LV_CHART_POINT_NONE&&values[296]==LV_CHART_POINT_NONE);
+    tab5_ui_graph_read_render(&history,30,2,values);for(unsigned i=1;i<300;i++)assert(values[i]!=LV_CHART_POINT_NONE);
+    snprintf(name,sizeof(name),"chart_5hz_synthetic_failed_gap_%s",tag);capture(name);
+    /* 400ms silence exceeds the 300ms cadence+jitter bridge bound. */
+    for(unsigned tick=0;tick<4;tick++){
+        s.now_us+=100000;
+        if(tick==3)for(unsigned j=0;j<2;j++){s.measurement.sensor[j].good++;s.measurement.sensor[j].timestamp_us=s.now_us;}
+        tab5_ui_graph_sample(&history,&s);tab5_ui_update(&s);pump();
+        if(tick==2){tab5_ui_graph_read_render(&history,30,2,values);assert(values[297]==LV_CHART_POINT_NONE&&values[298]==LV_CHART_POINT_NONE&&values[299]==LV_CHART_POINT_NONE);}
+    }
+    graph_arrays(&history,30);tab5_ui_graph_read_render(&history,30,2,values);assert(values[299]!=LV_CHART_POINT_NONE&&values[298]==LV_CHART_POINT_NONE);
+    /* Offline while the latest plotted cell is already empty: the array
+     * cache alone cannot detect this change, but numeric cards must clear. */
+    s.now_us+=100000;tab5_ui_graph_sample(&history,&s);tab5_ui_update(&s);pump();
+    lv_obj_t *chart=find_chart(lv_screen_active());int32_t before[4][300];unsigned index=0;
+    for(lv_chart_series_t *ser=lv_chart_get_series_next(chart,NULL);ser;ser=lv_chart_get_series_next(chart,ser)){
+        memcpy(before[index++],lv_chart_get_series_y_array(chart,ser),sizeof(before[0]));
+    }
+    char latest[40];snprintf(latest,sizeof(latest),"%s%.2f°",s.measurement.sensor[0].x<0?"−":"+",fabs(s.measurement.sensor[0].x));
+    assert(find_label(lv_screen_active(),latest));
+    nav(0);s.measurement.sensor[0].valid=false;tab5_ui_update(&s);nav(1);pump();
+    assert(!find_label(lv_screen_active(),latest));index=0;
+    for(lv_chart_series_t *ser=lv_chart_get_series_next(chart,NULL);ser;ser=lv_chart_get_series_next(chart,ser)){
+        assert(!memcmp(before[index++],lv_chart_get_series_y_array(chart,ser),sizeof(before[0])));
+    }
+    snprintf(name,sizeof(name),"chart_5hz_synthetic_offline_empty_tail_%s",tag);capture(name);
+    printf("GRAPH_5HZ_OFFLINE theme=%u unchanged empty tail clears numeric cards PASS\n",theme);
+    printf("GRAPH_5HZ theme=%u synthetic: continuous 30s / unchanged raw 2min / pending numerics / errors++ gap / 400ms silence PASS\n",theme);
+    tab5_ui_destroy();
+}
+
 int main(int argc,char **argv){
     assert(argc==2);output=argv[1];setbuf(stdout,NULL);setbuf(stderr,NULL);char path[1024];snprintf(path,sizeof(path),"%s/geometry.txt",output);report=fopen(path,"w");assert(report);setbuf(report,NULL);
     lv_init();display=lv_display_create(1280,720);lv_display_set_color_format(display,LV_COLOR_FORMAT_XRGB8888);lv_display_set_flush_cb(display,flush);lv_display_set_buffers(display,drawbuf,NULL,sizeof(drawbuf),LV_DISPLAY_RENDER_MODE_PARTIAL);
@@ -264,6 +360,7 @@ int main(int argc,char **argv){
         #undef SHOT
     }
     for(unsigned theme=0;theme<2;theme++)graph_idle_regression(theme);
+    for(unsigned theme=0;theme<2;theme++)graph_5hz_regression(theme);
     /* UI reinitialization must reuse its property, not exhaust LVGL registry. */
     unsigned props=lv_style_get_num_custom_props();
     for(unsigned i=0;i<32;i++){tab5_ui_init(action,NULL);tab5_ui_destroy();assert(lv_style_get_num_custom_props()==props);}

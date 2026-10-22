@@ -35,7 +35,7 @@ static struct {
     lv_obj_t *chart,*chart_touch,*legend[4],*ranges[3],*stats[4],*stats_mm[4],*ylabel[9],*xlabel[7],*cursor_label;
     lv_chart_series_t *series[4];int32_t plotted[4][1200];bool visible[4];unsigned range;
     int32_t ymin,ymax;tab5_ui_graph_t graph;
-    int32_t chart_scratch[1200];unsigned chart_count,chart_range;
+    int32_t chart_scratch[1200],chart_latest[4];unsigned chart_count,chart_range;
     bool chart_cached,chart_light,chart_visible[4];
     lv_obj_t *set_apply,*set_cancel,*changed,*step_value[7],*theme_btn[2],*clock_text,*panel_text,*fw_text;
     double draft[7];bool dirty,pending,settings_failed,settings_ack;tab5_measure_config_t sent;
@@ -313,7 +313,11 @@ static void chart_refresh(void){
     bool changed=!u.chart_cached||u.chart_light!=u.light||u.chart_range!=u.range||memcmp(u.chart_visible,u.visible,sizeof(u.visible));
     /* Read one series at a time into persistent storage: LVGL task stack is small. */
     for(unsigned k=0;k<4;k++){
-        n=tab5_ui_graph_read(&u.graph,seconds,k,u.chart_scratch);
+        const tab5_measure_sensor_t *current=&u.state.measurement.sensor[k/2];
+        float value=k%2?current->y:current->x;
+        int32_t latest=current->valid&&current->good&&current->timestamp_us&&isfinite(value)&&fabsf(value)<=327.66f?(int32_t)lroundf(value*100):LV_CHART_POINT_NONE;
+        if(!u.chart_cached||u.chart_latest[k]!=latest){u.chart_latest[k]=latest;changed=true;}
+        n=tab5_ui_graph_read_render(&u.graph,seconds,k,u.chart_scratch);
         size_t bytes=n*sizeof(u.chart_scratch[0]);
         if(!u.chart_cached||u.chart_count!=n||memcmp(u.plotted[k],u.chart_scratch,bytes)){
             memcpy(u.plotted[k],u.chart_scratch,bytes);changed=true;
@@ -333,7 +337,10 @@ static void chart_refresh(void){
         style_color(lv_obj_get_child(lv_obj_get_parent(u.stats[k]),0),LV_STYLE_BG_COLOR,lv_color_hex(u.sensor[k/2]),0);lv_chart_set_series_ext_y_array(u.chart,u.series[k],u.plotted[k]);lv_chart_set_series_color(u.chart,u.series[k],lv_color_hex(u.sensor[k/2]));lv_chart_hide_series(u.chart,u.series[k],!u.visible[k]);
         int32_t mn=0,mx=0,last=LV_CHART_POINT_NONE;bool found=false;
         for(unsigned i=0;i<n;i++)if(u.plotted[k][i]!=LV_CHART_POINT_NONE){int32_t v=u.plotted[k][i];if(!found)mn=mx=v;found=true;if(v<mn)mn=v;if(v>mx)mx=v;}
-        last=u.plotted[k][n-1];char s[120];if(!u.visible[k])snprintf(s,sizeof(s),"скрыт");else if(last!=LV_CHART_POINT_NONE)snprintf(s,sizeof(s),"%s%.2f°",last<0?"−":"+",fabs(last/100.0));else snprintf(s,sizeof(s),"—");text(u.stats[k],s);
+        /* The last 100ms cell can be empty between healthy 5Hz samples.
+         * Show the current real sensor value; do not extrapolate the plot tail. */
+        last=u.chart_latest[k];
+        char s[120];if(!u.visible[k])snprintf(s,sizeof(s),"скрыт");else if(last!=LV_CHART_POINT_NONE)snprintf(s,sizeof(s),"%s%.2f°",last<0?"−":"+",fabs(last/100.0));else snprintf(s,sizeof(s),"—");text(u.stats[k],s);
         if(found&&u.visible[k])snprintf(s,sizeof(s),"%.2f … %.2f · размах %.2f",mn/100.0,mx/100.0,(mx-mn)/100.0);else snprintf(s,sizeof(s),u.visible[k]?"данных нет":"включается касанием подписи");text(u.stats_mm[k],s);
     }
     for(unsigned i=0;i<9;i++){hide(u.ylabel[i],i>=ticks);if(i>=ticks)continue;double v=(u.ymax-(int)i*tick)/100.;char s[32];snprintf(s,sizeof(s),"%+.1f°",v);text(u.ylabel[i],s);lv_obj_set_y(u.ylabel[i],14+(int)(364*i/(ticks-1)));}

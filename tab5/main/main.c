@@ -218,6 +218,9 @@ static void status(tab5_service_reply_fn reply,void *ctx) {
         add_num(d,"ox",p->zero_x);add_num(d,"oy",p->zero_y);add_num(d,"roll_x",p->roll_x);add_num(d,"roll_y",p->roll_y);
         cJSON_AddBoolToObject(d,"calm_x",p->calm_x);cJSON_AddBoolToObject(d,"calm_y",p->calm_y);
         cJSON_AddNumberToObject(d,"fill",p->roll_fill_s);cJSON_AddNumberToObject(d,"ok",p->good);cJSON_AddNumberToObject(d,"err",p->errors);
+        static const char *const error_names[]={"none","timeout","crc","frame","exception","io"};
+        cJSON_AddStringToObject(d,"last_err",error_names[p->last_error<=TAB5_MEASURE_IO?p->last_error:0]);
+        cJSON_AddNumberToObject(d,"fail_streak",p->fail_streak);cJSON_AddNumberToObject(d,"sample_us",p->timestamp_us);
         if(p->good)cJSON_AddNumberToObject(d,"age",(esp_timer_get_time()-p->timestamp_us)/1000);else cJSON_AddNullToObject(d,"age");
     }
     cJSON_AddBoolToObject(j,"stable",s.stable);cJSON_AddStringToObject(j,"sd",sd.failed?"ERR":sd.recording?"REC":sd.mounted?"READY":"NOCARD");
