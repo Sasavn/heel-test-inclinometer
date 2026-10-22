@@ -104,7 +104,7 @@ int main(int argc,char **argv){
     touch=lv_indev_create();lv_indev_set_type(touch,LV_INDEV_TYPE_POINTER);lv_indev_set_read_cb(touch,read_touch);
     for(unsigned theme=0;theme<2;theme++){
         tab5_ui_init(action,NULL);tab5_ui_state_t s={0};tab5_measure_config_default(&s.measurement.config);s.measurement.config.frequency_hz=20;s.measurement.config.gap_ms=20;s.measurement.config.alpha=.2;s.measurement.config.roll_calm_deg=.5;s.measurement.config.roll_rate_hz=2;s.measurement.config.roll_hysteresis_deg=.1;
-        s.light_theme=theme;s.now_known=true;s.now_us=700000000;s.datetime_known=true;s.datetime=(tab5_ui_datetime_t){2026,10,22,14,32,5};s.clock=(tab5_ui_clock_t){.known=true,.time_valid=true};strcpy(s.clock.datetime,"22.10.2026 · 14:32:05");strcpy(s.panel,"ST7123 · определён автоматически");strcpy(s.firmware,"1.6.0-esp32");
+        s.light_theme=theme;s.now_known=true;s.now_us=700000000;s.datetime_known=true;s.datetime=(tab5_ui_datetime_t){2026,10,22,14,32,5};s.clock=(tab5_ui_clock_t){.known=true,.time_valid=true};strcpy(s.clock.datetime,"22.10.2026 · 14:32:05");strcpy(s.panel,"ST7123 · определён автоматически");strcpy(s.firmware,"1.6.1-esp32");
         s.sd=(tab5_ui_medium_t){.known=true,.mounted=true};s.usb=(tab5_ui_medium_t){.known=true};s.tcp_clients_known=true;s.tcp_clients=1;
         s.link=(tab5_ui_link_t){.known=true,.ap_started=true,.sta_connected=true,.tcp_port=5000};strcpy(s.link.ap_ip,"192.168.4.1");strcpy(s.link.sta_ip,"10.20.4.117");
         s.network=(tab5_ui_network_t){.ap_enabled=true,.sta_enabled=true};strcpy(s.network.ap_ssid,"KRENOMER-7F3A");strcpy(s.network.sta_ssid,"SAFU-Lab");strcpy(s.network.ap_password,"test-pass-123");strcpy(s.network.sta_password,"secret-pass-123");

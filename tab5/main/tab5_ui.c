@@ -303,7 +303,8 @@ static void chart_refresh(void){
     if(ticks<3){u.ymin-=tick;u.ymax+=tick;ticks+=2;}
     lv_chart_set_point_count(u.chart,n);lv_chart_set_axis_range(u.chart,LV_CHART_AXIS_PRIMARY_Y,u.ymin,u.ymax);lv_chart_set_div_line_count(u.chart,ticks,0);
     for(unsigned k=0;k<4;k++){
-        for(uint32_t c=1;c<lv_obj_get_child_count(u.legend[k]);c++)lv_obj_set_style_bg_color(lv_obj_get_child(u.legend[k],c),lv_color_hex(u.sensor[k/2]),0);lv_obj_set_style_bg_color(lv_obj_get_child(lv_obj_get_parent(u.stats[k]),0),lv_color_hex(u.sensor[k/2]),0);lv_chart_set_series_ext_y_array(u.chart,u.series[k],u.plotted[k]);lv_chart_set_series_color(u.chart,u.series[k],lv_color_hex(u.sensor[k/2]));lv_chart_hide_series(u.chart,u.series[k],!u.visible[k]);
+        for(uint32_t c=1;c<lv_obj_get_child_count(u.legend[k]);c++)lv_obj_set_style_bg_color(lv_obj_get_child(u.legend[k],c),lv_color_hex(u.sensor[k/2]),0);
+        lv_obj_set_style_bg_color(lv_obj_get_child(lv_obj_get_parent(u.stats[k]),0),lv_color_hex(u.sensor[k/2]),0);lv_chart_set_series_ext_y_array(u.chart,u.series[k],u.plotted[k]);lv_chart_set_series_color(u.chart,u.series[k],lv_color_hex(u.sensor[k/2]));lv_chart_hide_series(u.chart,u.series[k],!u.visible[k]);
         int32_t mn=0,mx=0,last=LV_CHART_POINT_NONE;bool found=false;
         for(unsigned i=0;i<n;i++)if(u.plotted[k][i]!=LV_CHART_POINT_NONE){int32_t v=u.plotted[k][i];if(!found)mn=mx=v;found=true;if(v<mn)mn=v;if(v>mx)mx=v;}
         last=u.plotted[k][n-1];char s[120];if(!u.visible[k])snprintf(s,sizeof(s),"скрыт");else if(last!=LV_CHART_POINT_NONE)snprintf(s,sizeof(s),"%s%.2f°",last<0?"−":"+",fabs(last/100.0));else snprintf(s,sizeof(s),"—");text(u.stats[k],s);
@@ -484,7 +485,8 @@ static void update_measure(void){
     if(nonzero)snprintf(b,sizeof(b),"задан %s",u.zero_time_known?u.zero_time:"—");else snprintf(b,sizeof(b),"не задан");text(u.zero_chip,b);role(u.zero_chip,nonzero?INFO:NEUTRAL);
     const tab5_ui_medium_t *media[]={&s->sd,&s->usb};for(unsigned i=0;i<2;i++){const tab5_ui_medium_t *m=media[i];text(u.storage_lines[i],i?"USB":"microSD");
         if(m->known&&m->recording)snprintf(b,sizeof(b),"%" PRIu64 " строк",m->written);else if(m->known&&m->mounted&&!m->failed&&s->capacity[i].known)snprintf(b,sizeof(b),"готов · %.1f ГБ",s->capacity[i].free_bytes/1073741824.);
-        else snprintf(b,sizeof(b),"%s",!m->known?"данных нет":m->failed?"ошибка":m->mounted?"готов":"не подключён");text(u.storage_detail[i],b);
+        else snprintf(b,sizeof(b),"%s",!m->known?"данных нет":m->failed?"ошибка":m->mounted?"готов":"не подключён");
+        text(u.storage_detail[i],b);
         lv_obj_set_style_bg_color(u.storage_dot[i],lv_color_hex(!m->known?u.muted:m->failed?u.err:m->recording?0xFF5A5F:m->mounted?u.ok:u.muted),0);}
     text(u.storage_lines[2],s->sd.recording&&s->usb.recording?"пишутся оба носителя":s->sd.recording?"пишется только SD":s->usb.recording?"пишется только USB":"запись выключена");
     snprintf(b,sizeof(b),"AP %s",s->link.known&&s->link.ap_started?s->link.ap_ip:"—");text(u.network_lines[0],b);text(u.network_lines[1],!s->link.known?"STA —":s->link.sta_connected?"STA подключено":"STA отключено");if(s->tcp_clients_known)snprintf(b,sizeof(b),"TCP %u · клиентов %u",s->link.tcp_port,s->tcp_clients);else snprintf(b,sizeof(b),"TCP %u · клиентов —",s->link.tcp_port);text(u.network_lines[2],b);hide(u.pc_chip,!s->tcp_clients_known||!s->tcp_clients);
