@@ -16,10 +16,13 @@ static lv_indev_t *touch;
 static lv_point_t point;
 static bool pressed;
 static unsigned callbacks, failures, cases;
+static uint64_t flushes,flushed_pixels,refreshes;
 static tab5_ui_action_t last;
 static FILE *report;
 static const char *output;
 static void flush(lv_display_t *d,const lv_area_t *a,uint8_t *data) {
+    flushes++;flushed_pixels+=(uint64_t)lv_area_get_width(a)*lv_area_get_height(a);
+    if(lv_display_flush_is_last(d))refreshes++;
     uint32_t *src=(uint32_t*)data;
     for(int y=a->y1;y<=a->y2;y++)for(int x=a->x1;x<=a->x2;x++)pixels[y*1280+x]=*src++;
     lv_display_flush_ready(d);
@@ -98,6 +101,57 @@ static void nav(unsigned page){tap(52,132+page*88);}
 static lv_obj_t *nth_textarea(lv_obj_t *o,unsigned *index){if(lv_obj_has_flag(o,LV_OBJ_FLAG_HIDDEN))return NULL;if(lv_obj_check_type(o,&lv_textarea_class)){if(!(*index)--)return o;}for(unsigned i=0;i<lv_obj_get_child_count(o);i++){lv_obj_t *r=nth_textarea(lv_obj_get_child(o,i),index);if(r)return r;}return NULL;}
 static lv_obj_t *textarea(unsigned n){return nth_textarea(lv_screen_active(),&n);}
 static void fresh(tab5_ui_state_t *s){s->now_us+=100000;for(unsigned i=0;i<2;i++)if(s->measurement.sensor[i].valid)s->measurement.sensor[i].timestamp_us=s->now_us;tab5_ui_update(s);pump();}
+/* Real software-renderer work, after settling initial layout/animations.
+ * Timestamp-only samples still enter graph history, but cannot repaint a
+ * visually unchanged dashboard. Counters measure actual flushed regions. */
+static void idle_regression(tab5_ui_state_t *s,unsigned theme){
+    for(unsigned mode=0;mode<2;mode++){
+        pump();flushes=flushed_pixels=refreshes=0;
+        for(unsigned tick=0;tick<20;tick++){
+            if(mode){s->now_us+=100000;for(unsigned j=0;j<2;j++)s->measurement.sensor[j].timestamp_us=s->now_us;}
+            tab5_ui_update(s);pump();
+        }
+        printf("INVALIDATION theme=%u timestamp_only=%u updates=20 flushes=%llu pixels=%llu refreshes=%llu\n",theme,mode,(unsigned long long)flushes,(unsigned long long)flushed_pixels,(unsigned long long)refreshes);
+        assert(flushes==0&&flushed_pixels==0&&refreshes==0);
+    }
+    /* Exercise the custom draw itself, including roll-only ellipse changes. */
+    static uint32_t before[1280*720];
+    tab5_ui_state_t saved=*s;
+    memcpy(before,pixels,sizeof(pixels));s->measurement.sensor[0].x+=1;fresh(s);
+    assert(flushed_pixels>0&&memcmp(before,pixels,sizeof(pixels)));
+    memcpy(before,pixels,sizeof(pixels));s->measurement.sensor[0].roll_x+=1;fresh(s);
+    assert(memcmp(before,pixels,sizeof(pixels)));
+    /* Hidden page must present latest values immediately, without a new tick. */
+    nav(2);s->measurement.sensor[0].x=3.21f;fresh(s);nav(0);
+    assert(find_label(lv_screen_active(),"+3.21°"));
+    nav(0);*s=saved;fresh(s);
+}
+/* Separate fixture so idle/missing tests cannot perturb screenshot history. */
+static void graph_idle_regression(unsigned theme){
+    tab5_ui_init(action,NULL);
+    tab5_ui_state_t s={.light_theme=theme,.now_known=true,.now_us=100000000};
+    tab5_measure_config_default(&s.measurement.config);tab5_ui_update(&s);nav(1);pump();
+    for(unsigned mode=0;mode<2;mode++){
+        flushes=flushed_pixels=refreshes=0;
+        for(unsigned i=0;i<20;i++){
+            if(mode){s.now_us+=100000;for(unsigned j=0;j<2;j++)s.measurement.sensor[j].timestamp_us=s.now_us;}
+            tab5_ui_update(&s);pump();
+        }
+        printf("GRAPH_IDLE theme=%u missing_timestamp=%u flushes=%llu pixels=%llu refreshes=%llu\n",theme,mode,(unsigned long long)flushes,(unsigned long long)flushed_pixels,(unsigned long long)refreshes);
+        assert(!flushes&&!flushed_pixels&&!refreshes);
+    }
+    /* Empty data must still refresh range, legend, and theme controls. */
+    flushes=0;click("30 с");assert(flushes);flushes=0;tap(440,52);assert(flushes);
+    flushes=0;s.light_theme=!s.light_theme;fresh(&s);assert(flushes);
+    s.measurement.sensor[0].valid=true;s.measurement.sensor[0].good=1;s.measurement.sensor[0].x=1.23f;
+    flushes=0;fresh(&s);assert(flushes);
+    static uint32_t before[1280*720];memcpy(before,pixels,sizeof(pixels));
+    s.now_us+=500000;s.measurement.sensor[0].x=2.34f;
+    s.measurement.sensor[0].timestamp_us=s.now_us;flushes=0;tab5_ui_update(&s);pump();
+    assert(flushes&&memcmp(before,pixels,sizeof(pixels)));
+    printf("GRAPH_CHANGE theme=%u range/legend/theme/fresh samples: PASS\n",theme);
+    tab5_ui_destroy();
+}
 int main(int argc,char **argv){
     assert(argc==2);output=argv[1];setbuf(stdout,NULL);setbuf(stderr,NULL);char path[1024];snprintf(path,sizeof(path),"%s/geometry.txt",output);report=fopen(path,"w");assert(report);setbuf(report,NULL);
     lv_init();display=lv_display_create(1280,720);lv_display_set_color_format(display,LV_COLOR_FORMAT_XRGB8888);lv_display_set_flush_cb(display,flush);lv_display_set_buffers(display,drawbuf,NULL,sizeof(drawbuf),LV_DISPLAY_RENDER_MODE_PARTIAL);
@@ -111,7 +165,7 @@ int main(int argc,char **argv){
         for(unsigned i=0;i<2;i++)s.measurement.sensor[i]=(tab5_measure_sensor_t){.valid=true,.x=i?-.39f:-.42f,.y=i?1.41f:1.37f,.roll_x=i?.12f:.14f,.roll_y=i?.06f:.05f,.calm_x=true,.calm_y=true,.good=1,.timestamp_us=s.now_us,.roll_fill_s=20};s.measurement.stable=true;
         fresh(&s);char name[120];const char *tag=theme?"light":"dark";
         #define SHOT(stage) do{snprintf(name,sizeof(name),"%s_%s",stage,tag);capture(name);}while(0)
-        SHOT("dashboard");assert(find_label(lv_screen_active(),"Ноль датчиков"));assert(find_label(lv_screen_active(),"14:32"));
+        SHOT("dashboard");idle_regression(&s,theme);assert(find_label(lv_screen_active(),"Ноль датчиков"));assert(find_label(lv_screen_active(),"14:32"));
         nav(1);
         for(unsigned i=0;i<250;i++){
             s.now_us+=500000;
@@ -165,5 +219,10 @@ int main(int argc,char **argv){
         tab5_ui_destroy();
         #undef SHOT
     }
+    for(unsigned theme=0;theme<2;theme++)graph_idle_regression(theme);
+    /* UI reinitialization must reuse its property, not exhaust LVGL registry. */
+    unsigned props=lv_style_get_num_custom_props();
+    for(unsigned i=0;i<32;i++){tab5_ui_init(action,NULL);tab5_ui_destroy();assert(lv_style_get_num_custom_props()==props);}
+    printf("role property lifecycle: 32 reinitializations, no registry growth\n");
     fprintf(report,"RESULT cases=%u callbacks=%u geometry_failures=%u\n",cases,callbacks,failures);fclose(report);printf("headless LVGL: %u cases, %u geometry failures\n",cases,failures);lv_display_delete(display);lv_deinit();return failures?1:0;
 }

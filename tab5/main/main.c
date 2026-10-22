@@ -47,6 +47,45 @@ static bool ui_result_success;
 static float battery = NAN;
 static char notice[160]="Прибор готов. Перед записью установите часы";
 
+/* Wall times, not CPU utilization. Display events run in the LVGL task;
+ * protocol reads/reset run in another task, hence the short critical sections. */
+typedef struct {
+    uint64_t since,render_start,flush_start,refresh_start;
+    uint64_t render_us,flush_us,refresh_us,update_us;
+    uint32_t renders,flushes,refreshes,updates,lock_misses,refresh_max_us;
+} ui_perf_t;
+static ui_perf_t ui_perf;
+static portMUX_TYPE ui_perf_lock=portMUX_INITIALIZER_UNLOCKED;
+static void display_perf(lv_event_t *event) {
+    uint64_t now=esp_timer_get_time();lv_event_code_t code=lv_event_get_code(event);
+    portENTER_CRITICAL(&ui_perf_lock);
+    if(code==LV_EVENT_RENDER_START)ui_perf.render_start=now;
+    else if(code==LV_EVENT_RENDER_READY&&ui_perf.render_start){ui_perf.render_us+=now-ui_perf.render_start;ui_perf.renders++;ui_perf.render_start=0;}
+    else if(code==LV_EVENT_FLUSH_START)ui_perf.flush_start=now;
+    else if(code==LV_EVENT_FLUSH_FINISH&&ui_perf.flush_start){ui_perf.flush_us+=now-ui_perf.flush_start;ui_perf.flushes++;ui_perf.flush_start=0;}
+    else if(code==LV_EVENT_REFR_START)ui_perf.refresh_start=now;
+    else if(code==LV_EVENT_REFR_READY&&ui_perf.refresh_start){uint64_t dt=now-ui_perf.refresh_start;ui_perf.refresh_us+=dt;ui_perf.refreshes++;if(dt>ui_perf.refresh_max_us)ui_perf.refresh_max_us=dt;ui_perf.refresh_start=0;}
+    portEXIT_CRITICAL(&ui_perf_lock);
+}
+static void ui_perf_reply(bool reset,tab5_service_reply_fn reply,void *ctx) {
+    uint64_t now=esp_timer_get_time();ui_perf_t p;
+    portENTER_CRITICAL(&ui_perf_lock);
+    if(reset){ui_perf=(ui_perf_t){.since=now};}
+    p=ui_perf;portEXIT_CRITICAL(&ui_perf_lock);
+    char out[640];snprintf(out,sizeof(out),
+        "{\"elapsed_ms\":%llu,\"updates\":%lu,\"update_us\":%llu,\"renders\":%lu,\"render_us\":%llu,\"flushes\":%lu,\"flush_us\":%llu,\"refreshes\":%lu,\"refresh_us\":%llu,\"refresh_max_us\":%lu,\"lock_misses\":%lu,\"ppa\":%s,\"reset_reason\":%d}",
+        (unsigned long long)((now-p.since)/1000),(unsigned long)p.updates,(unsigned long long)p.update_us,
+        (unsigned long)p.renders,(unsigned long long)p.render_us,(unsigned long)p.flushes,(unsigned long long)p.flush_us,
+        (unsigned long)p.refreshes,(unsigned long long)p.refresh_us,(unsigned long)p.refresh_max_us,(unsigned long)p.lock_misses,
+#if CONFIG_LVGL_PORT_ENABLE_PPA
+        "true"
+#else
+        "false"
+#endif
+        ,(int)esp_reset_reason()
+    );reply(ctx,out);reply(ctx,"OK ui perf");
+}
+
 static void boot_failed(void) {
     esp_ota_img_states_t state;
     if(esp_ota_get_state_partition(esp_ota_get_running_partition(),&state)==ESP_OK && state==ESP_OTA_IMG_PENDING_VERIFY)
@@ -170,6 +209,7 @@ static void command(void *unused,const char *line,tab5_service_reply_fn reply,vo
     tab5_measure_snapshot_t s;tab5_measure_snapshot(&s);
     if(strcmp(line,"ver")==0){char version[160];snprintf(version,sizeof(version),"BWM427 inclinometer firmware v%s, board=tab5 chip=esp32p4 proto=2",FW_VERSION);reply(ctx,version);reply(ctx,"OK");}
     else if(strcmp(line,"status")==0 || strcmp(line,"diag")==0)status(reply,ctx);
+    else if(strcmp(line,"ui perf")==0 || strcmp(line,"ui perf reset")==0)ui_perf_reply(strcmp(line,"ui perf reset")==0,reply,ctx);
     else if(strcmp(line,"zero")==0 || strcmp(line,"zero reset")==0){tab5_measure_zero(strcmp(line,"zero reset")==0);reply(ctx,"OK zero");}
     else if(strcmp(line,"rec on")==0 || strcmp(line,"rec off")==0){reply(ctx,set_recording(strcmp(line,"rec on")==0)==ESP_OK?"OK recording":"ERR recording unavailable");}
     else if(strcmp(line,"samples on")==0 || strcmp(line,"samples off")==0){samples_on=strcmp(line,"samples on")==0;reply(ctx,samples_on?"OK samples on, dropped 0":"OK samples off, dropped 0");}
@@ -260,10 +300,10 @@ void app_main(void) {
     if(xTaskCreate(usb_task,"protocol_usb",16384,NULL,4,NULL)!=pdPASS){boot_failed();return;}
     const bsp_display_cfg_t display_cfg={
         .lvgl_port_cfg=ESP_LVGL_PORT_INIT_CONFIG(),
-        .buffer_size=BSP_LCD_H_RES*32,.double_buffer=true,
+        .buffer_size=BSP_LCD_H_RES*128,.double_buffer=true,
         .flags={.buff_dma=false,.buff_spiram=true,.sw_rotate=true}};
     lv_display_t *display=bsp_display_start_with_config(&display_cfg);if(!display || !tab5_panel_ready()){boot_failed();return;}
-    if(bsp_display_lock(2000)){bsp_display_rotate(display,LV_DISPLAY_ROTATION_90);tab5_ui_init(ui_callback,NULL);bsp_display_unlock();}else {boot_failed();return;}
+    if(bsp_display_lock(2000)){ui_perf.since=esp_timer_get_time();lv_display_add_event_cb(display,display_perf,LV_EVENT_ALL,NULL);bsp_display_rotate(display,LV_DISPLAY_ROTATION_90);tab5_ui_init(ui_callback,NULL);bsp_display_unlock();}else {boot_failed();return;}
     bsp_display_brightness_set(60);persist();
     if(services_result!=ESP_OK){boot_failed();return;}
     bool trial_confirmed=false;
@@ -333,11 +373,12 @@ void app_main(void) {
         ui.tcp_clients_known=true;ui.tcp_clients=(uint16_t)net.clients;
         snprintf(ui.link.ap_ip,sizeof(ui.link.ap_ip),"%s",net.ap_ip);snprintf(ui.link.sta_ip,sizeof(ui.link.sta_ip),"%s",net.sta_ip);
         xSemaphoreGive(app_mutex);
-        if(now-last_ui>=100000){last_ui=now;if(bsp_display_lock(20)){tab5_ui_update(&ui);bsp_display_unlock();
+        if(now-last_ui>=100000){last_ui=now;if(bsp_display_lock(20)){uint64_t update_start=esp_timer_get_time();tab5_ui_update(&ui);
+            uint64_t update_elapsed=esp_timer_get_time()-update_start;portENTER_CRITICAL(&ui_perf_lock);ui_perf.updates++;ui_perf.update_us+=update_elapsed;portEXIT_CRITICAL(&ui_perf_lock);bsp_display_unlock();
             if(!trial_confirmed && now>=2000000 && esp_get_free_heap_size()>16384){
                 esp_err_t health=tab5_services_confirm_boot();
                 trial_confirmed=health==ESP_OK || health==ESP_ERR_NOT_FOUND;
-            }}}
+            }}else {portENTER_CRITICAL(&ui_perf_lock);ui_perf.lock_misses++;portEXIT_CRITICAL(&ui_perf_lock);}}
         vTaskDelay(pdMS_TO_TICKS(10));
     }
 }
