@@ -1,12 +1,12 @@
 {
   "version": "1.6.5-esp32",
-  "hardware_flashed": false,
-  "tuning_applied": false,
-  "blocker": "COM11 first busy, then device absent from USB on remote host",
+  "hardware_flashed": true,
+  "tuning_applied": true,
+  "blocker": null,
   "last_verified_live_config": {
-    "firmware": "1.6.4-esp32",
-    "frequency_hz": 5,
-    "alpha": 0.15,
+    "firmware": "1.6.5-esp32",
+    "frequency_hz": 10,
+    "alpha": 0.5,
     "recording": false
   },
   "proposed_live_config": {
@@ -43,5 +43,175 @@
     "tab5/main/tab5_ui_graph.h": "ed8f9bca3d6292be29d891df7299e3906e91834686489c9e44006a95ee24509a",
     "tab5/main/tab5_measure.c": "9fb2cf37a959a0808be44c0bdf759808114c24136ad18746e3f647e1c87e4f88",
     "tab5/main/main.c": "b14a11b02acf7d78b54a252fa0a4ed7f1dd9b2acb1d8fe77d1e783a1f1818cca"
+  },
+  "hardware_proof": {
+    "version": "1.6.5-esp32",
+    "app_sha256": "19ecc54d5b89ca3cd4ce0b2188728772f1201a2e45ca879f34fe28a25207d0dd",
+    "chip_revision": 103,
+    "boot_confirmed": true,
+    "verified_parts": 4,
+    "task_removed": true,
+    "samples": [
+      {
+        "up": 18,
+        "cpu": 40,
+        "memory": {
+          "ram_used": 399320,
+          "ram_total": 434455,
+          "psram_used": 2553632,
+          "psram_total": 33554432
+        },
+        "freq": 10,
+        "theme": "dark",
+        "sensors": [
+          {
+            "addr": 2,
+            "st": "OK",
+            "ok": 183,
+            "err": 0
+          },
+          {
+            "addr": 3,
+            "st": "OK",
+            "ok": 181,
+            "err": 1
+          }
+        ],
+        "sd": "READY",
+        "rec_sw": false,
+        "alpha": 0.5
+      },
+      {
+        "up": 20,
+        "cpu": 44,
+        "memory": {
+          "ram_used": 399320,
+          "ram_total": 434455,
+          "psram_used": 2553632,
+          "psram_total": 33554432
+        },
+        "freq": 10,
+        "theme": "dark",
+        "sensors": [
+          {
+            "addr": 2,
+            "st": "OK",
+            "ok": 198,
+            "err": 0
+          },
+          {
+            "addr": 3,
+            "st": "OK",
+            "ok": 186,
+            "err": 11
+          }
+        ],
+        "sd": "READY",
+        "rec_sw": false,
+        "alpha": 0.5
+      },
+      {
+        "up": 22,
+        "cpu": 44,
+        "memory": {
+          "ram_used": 399320,
+          "ram_total": 434455,
+          "psram_used": 2553632,
+          "psram_total": 33554432
+        },
+        "freq": 10,
+        "theme": "dark",
+        "sensors": [
+          {
+            "addr": 2,
+            "st": "OK",
+            "ok": 213,
+            "err": 0
+          },
+          {
+            "addr": 3,
+            "st": "OK",
+            "ok": 201,
+            "err": 11
+          }
+        ],
+        "sd": "READY",
+        "rec_sw": false,
+        "alpha": 0.5
+      },
+      {
+        "up": 23,
+        "cpu": 42,
+        "memory": {
+          "ram_used": 399320,
+          "ram_total": 434455,
+          "psram_used": 2553632,
+          "psram_total": 33554432
+        },
+        "freq": 10,
+        "theme": "dark",
+        "sensors": [
+          {
+            "addr": 2,
+            "st": "OK",
+            "ok": 226,
+            "err": 1
+          },
+          {
+            "addr": 3,
+            "st": "OK",
+            "ok": 215,
+            "err": 11
+          }
+        ],
+        "sd": "READY",
+        "rec_sw": false,
+        "alpha": 0.5
+      },
+      {
+        "up": 25,
+        "cpu": 23,
+        "memory": {
+          "ram_used": 400152,
+          "ram_total": 434455,
+          "psram_used": 2555300,
+          "psram_total": 33554432
+        },
+        "freq": 10,
+        "theme": "dark",
+        "sensors": [
+          {
+            "addr": 2,
+            "st": "OK",
+            "ok": 241,
+            "err": 1
+          },
+          {
+            "addr": 3,
+            "st": "OK",
+            "ok": 230,
+            "err": 11
+          }
+        ],
+        "sd": "READY",
+        "rec_sw": false,
+        "alpha": 0.5
+      }
+    ],
+    "perf": {
+      "elapsed_ms": 7866,
+      "updates": 71,
+      "update_us": 191646,
+      "renders": 71,
+      "render_us": 5921808,
+      "flushes": 373,
+      "flush_us": 1488692,
+      "refreshes": 71,
+      "refresh_us": 5927810,
+      "refresh_max_us": 277393,
+      "lock_misses": 3,
+      "ppa": true,
+      "reset_reason": 11
+    }
   }
 }
