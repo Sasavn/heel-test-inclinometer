@@ -92,7 +92,7 @@ typedef struct {
 } tab5_ui_state_t;
 /* All calls require BSP LVGL lock (or the LVGL thread). Display already started
  * and rotated to 1280x720 by main. No task or display created here; a short-lived stepper repeat timer is UI-owned.
- * Generated font_tab5_16/20/24/28/40/64 and tab5_ui_graph/time must be linked. */
+ * Generated font_tab5_16/16m/20/20m/24/32/40/64 and tab5_ui_graph/time must be linked. */
 void tab5_ui_init(tab5_ui_action_cb_t callback, void *user);
 void tab5_ui_update(const tab5_ui_state_t *state);
 void tab5_ui_destroy(void);

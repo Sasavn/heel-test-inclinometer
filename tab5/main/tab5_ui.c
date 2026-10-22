@@ -9,13 +9,15 @@
 #include <string.h>
 #include <inttypes.h>
 #include <time.h>
-LV_FONT_DECLARE(font_tab5_16);LV_FONT_DECLARE(font_tab5_20);
-LV_FONT_DECLARE(font_tab5_24);LV_FONT_DECLARE(font_tab5_28);
+LV_FONT_DECLARE(font_tab5_16);LV_FONT_DECLARE(font_tab5_16m);LV_FONT_DECLARE(font_tab5_20);LV_FONT_DECLARE(font_tab5_20m);
+LV_FONT_DECLARE(font_tab5_24);LV_FONT_DECLARE(font_tab5_32);
 LV_FONT_DECLARE(font_tab5_40);LV_FONT_DECLARE(font_tab5_64);
 #define F16 (&font_tab5_16)
+#define F16M (&font_tab5_16m)
 #define F20 (&font_tab5_20)
+#define F20M (&font_tab5_20m)
 #define F24 (&font_tab5_24)
-#define F28 (&font_tab5_28)
+#define F32 (&font_tab5_32)
 #define F40 (&font_tab5_40)
 #define F64 (&font_tab5_64)
 enum {BG,CARD,ALT,FRAME,TEXT,DIM,MUTED,NAV,NAVSEL,NAVTEXT,NAVMUTED,PRIMARY,ORANGE,RED,OUTLINE,GHOST,OK,WARN,ERR,INFO,NEUTRAL,LINE,STYLE_COUNT};
@@ -28,7 +30,7 @@ static struct {
     uint32_t bg,card,alt,frame,border,text,dim,muted,navc,navsel,action,actiontext,ok,warn,err,info,okbg,warnbg,errbg,infobg,sensor[2];
     lv_obj_t *hero,*hero_date,*hero_title,*hero_sub,*hero_dot,*hero_kpi[2],*hero_key[2],*start[2];
     lv_obj_t *sensor_card[2],*angle[2][2],*health[2],*lost[2],*lost_text[2],*level[2],*level_nodata[2],*roll_bar[2][2],*roll_mark[2][2],*roll_value[2][2],*roll_chip[2][2];
-    lv_obj_t *zero_chip,*storage_lines[3],*network_lines[3],*power_lines[3],*pc_chip;
+    lv_obj_t *zero_chip,*storage_lines[3],*storage_dot[2],*storage_detail[2],*network_lines[3],*power_lines[3],*pc_chip;
     lv_obj_t *rec_chip,*capacity_text[2],*capacity_bar[2],*media_chip[2],*media_detail[2],*history,*history_note,*history_rows[5][6];
     lv_obj_t *chart,*chart_touch,*legend[4],*ranges[3],*stats[4],*stats_mm[4],*ylabel[9],*xlabel[7],*cursor_label;
     lv_chart_series_t *series[4];int32_t plotted[4][1200];bool visible[4];unsigned range;
@@ -59,11 +61,11 @@ static lv_obj_t *box(lv_obj_t *parent,int x,int y,int w,int h,int r){
 static lv_obj_t *label(lv_obj_t *parent,const char *s,int x,int y,int w,int h,const lv_font_t *f,int r){
     lv_obj_t *o=lv_label_create(parent);lv_obj_remove_style_all(o);role(o,r);lv_obj_set_style_text_font(o,f,0);lv_obj_set_pos(o,x,y);lv_obj_set_size(o,w,h);lv_label_set_long_mode(o,LV_LABEL_LONG_DOT);text(o,s);return o;
 }
-static lv_obj_t *chip(lv_obj_t *parent,const char *s,int x,int y,int w,int r){lv_obj_t *o=label(parent,s,x,y,w,32,F16,r);lv_obj_set_style_text_align(o,LV_TEXT_ALIGN_CENTER,0);lv_obj_set_style_pad_top(o,6,0);return o;}
+static lv_obj_t *chip(lv_obj_t *parent,const char *s,int x,int y,int w,int r){lv_obj_t *o=label(parent,s,x,y,w,32,F16M,r);lv_obj_set_style_text_align(o,LV_TEXT_ALIGN_CENTER,0);lv_obj_set_style_pad_top(o,6,0);return o;}
 static void event(lv_event_t *e);
 static lv_obj_t *button(lv_obj_t *parent,const char *s,int x,int y,int w,int h,int r,int id){
     lv_obj_t *o=lv_button_create(parent);lv_obj_remove_style_all(o);role(o,r);lv_obj_set_pos(o,x,y);lv_obj_set_size(o,w,h);lv_obj_remove_flag(o,LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_t *l=label(o,s,0,0,w,h,F24,TEXT);lv_obj_set_style_text_align(l,LV_TEXT_ALIGN_CENTER,0);lv_obj_set_height(l,lv_font_get_line_height(F24));lv_obj_center(l);
+    lv_obj_t *l=label(o,s,0,0,w,h,F24,TEXT);lv_obj_set_style_text_align(l,LV_TEXT_ALIGN_CENTER,0);lv_obj_set_height(l,LV_SIZE_CONTENT);lv_obj_center(l);
     /* Text follows the button's role, including dark actionText. */
     lv_obj_remove_style(l,&u.style[TEXT],0);
     lv_obj_add_event_cb(o,event,LV_EVENT_CLICKED,(void*)(intptr_t)id);return o;
@@ -92,11 +94,18 @@ static void palette(bool light){
         else if(r==INFO){bg=u.infobg;fg=u.info;}else if(r==NEUTRAL){bg=u.alt;fg=u.dim;bw=1;}
         else {fill=false;fg=r==MUTED?u.muted:r==DIM?u.dim:r==NAVTEXT?(light?0xEDF2FC:0xE6EDFA):r==NAVMUTED?(light?0x9EB5DB:0x8CA1C7):u.text;}
         lv_style_set_bg_color(s,lv_color_hex(bg));lv_style_set_bg_opa(s,fill?255:0);lv_style_set_text_color(s,lv_color_hex(fg));lv_style_set_border_width(s,bw);lv_style_set_border_color(s,lv_color_hex(br));lv_style_set_radius(s,radius);lv_style_set_pad_all(s,0);lv_style_set_text_font(s,F20);
+        lv_style_set_shadow_width(s,r==CARD?8:0);lv_style_set_shadow_offset_y(s,2);lv_style_set_shadow_color(s,lv_color_hex(light?0x1A294D:0x000000));lv_style_set_shadow_opa(s,light?22:70);
     }
     u.styles_ready=true;lv_obj_report_style_change(NULL);
 }
 static void draw_line(lv_layer_t *layer,float x1,float y1,float x2,float y2,uint32_t color,int width,int dash){
     lv_draw_line_dsc_t d;lv_draw_line_dsc_init(&d);d.p1=(lv_point_precise_t){x1,y1};d.p2=(lv_point_precise_t){x2,y2};d.color=lv_color_hex(color);d.width=width;if(dash){d.dash_width=dash;d.dash_gap=dash;}lv_draw_line(layer,&d);
+}
+static void arc(lv_layer_t *layer,int x,int y,int radius,int a1,int a2,uint32_t color,int width,int opa){
+    lv_draw_arc_dsc_t d;lv_draw_arc_dsc_init(&d);d.center=(lv_point_t){x,y};d.radius=radius;d.start_angle=a1;d.end_angle=a2;d.color=lv_color_hex(color);d.width=width;d.opa=opa;d.rounded=1;lv_draw_arc(layer,&d);
+}
+static void tri(lv_layer_t *layer,float x1,float y1,float x2,float y2,float x3,float y3,uint32_t color){
+    lv_draw_triangle_dsc_t d;lv_draw_triangle_dsc_init(&d);d.p[0]=(lv_point_precise_t){x1,y1};d.p[1]=(lv_point_precise_t){x2,y2};d.p[2]=(lv_point_precise_t){x3,y3};d.color=lv_color_hex(color);d.opa=255;lv_draw_triangle(layer,&d);
 }
 static void circle(lv_layer_t *layer,int x,int y,int radius,uint32_t color,int width,bool fill,int opa){
     lv_draw_rect_dsc_t d;lv_draw_rect_dsc_init(&d);d.radius=LV_RADIUS_CIRCLE;d.bg_color=lv_color_hex(color);d.bg_opa=fill?opa:0;d.border_color=lv_color_hex(color);d.border_width=width;d.border_opa=opa;lv_area_t a={x-radius,y-radius,x+radius,y+radius};lv_draw_rect(layer,&d,&a);
@@ -108,17 +117,37 @@ static void icon_draw(lv_event_t *e){
     #define L(x1,y1,x2,y2) draw_line(l,x+(x1)*k,y+(y1)*k,x+(x2)*k,y+(y2)*k,c,2,0)
     if(id==0){circle(l,x+16*k,y+16*k,11*k,c,2,false,255);L(16,3,16,10);L(16,22,16,29);L(3,16,10,16);L(22,16,29,16);circle(l,x+19*k,y+13*k,2*k,c,1,true,255);}
     else if(id==1){L(3,26,29,26);L(4,20,9,12);L(9,12,16,23);L(16,23,23,11);L(23,11,28,17);}
-    else if(id==2 || id==6){L(6,4,26,4);L(6,4,6,28);L(26,4,26,28);L(6,28,26,28);L(10,4,10,11);L(10,11,22,11);L(22,11,22,4);if(id==2)circle(l,x+16*k,y+20*k,4*k,c,1,true,255);}
+    else if(id==2){L(6,4,26,4);L(6,4,6,28);L(26,4,26,28);L(6,28,26,28);L(10,4,10,11);L(10,11,22,11);L(22,11,22,4);circle(l,x+16*k,y+20*k,4*k,c,1,true,255);}
+    else if(id==6){L(12,3,25,3);L(25,3,25,29);L(25,29,7,29);L(7,29,7,8);L(7,8,12,3);L(13,8,13,13);L(17,8,17,13);L(21,8,21,13);}
+    else if(id==11){L(16,4,16,22);L(10,10,16,4);L(16,4,22,10);L(6,17,6,27);L(6,27,26,27);L(26,27,26,17);}
+    else if(id==12){arc(l,x+16*k,y+34*k,24*k,236,304,c,2,255);arc(l,x+16*k,y-2*k,24*k,56,124,c,2,255);circle(l,x+16*k,y+16*k,4*k,c,2,false,255);}
+    else if(id==10){L(3,25,29,25);arc(l,x+15*k,y+25*k,11*k,180,360,c,2,140);L(15,25,25,9);circle(l,x+15*k,y+25*k,2.5f*k,c,1,true,255);}
     else if(id==3){L(4,9,28,9);L(4,23,28,23);circle(l,x+20*k,y+9*k,3*k,c,2,true,255);circle(l,x+12*k,y+23*k,3*k,c,2,true,255);}
-    else if(id==4){for(int r=0;r<3;r++){L(4+r*4,11+r*5,11+r*2,7+r*5);L(11+r*2,7+r*5,21-r*2,7+r*5);L(21-r*2,7+r*5,28-r*4,11+r*5);}circle(l,x+16*k,y+27*k,2*k,c,1,true,255);}
+    else if(id==4){for(int r=0;r<3;r++)arc(l,x+16*k,y+27*k,(22-r*7)*k,228,312,c,2,255);circle(l,x+16*k,y+27*k,2*k,c,1,true,255);}
     else if(id==5){circle(l,x+16*k,y+16*k,11*k,c,2,false,255);L(5,16,27,16);}
-    else if(id==7){L(5,19,16,4);L(16,4,14,15);L(14,15,26,15);L(26,15,13,30);L(13,30,16,19);L(16,19,5,19);}
+    else if(id==7){
+        /* Молния макета (12,2 5,12 10,12 9,20 16,10 11,10 в сетке 22) — закрашенная. */
+        float q=32.f/22*k;
+        #define P(a,b) x+(a)*q,y+(b)*q
+        tri(l,P(12,2),P(5,12),P(10,12),c);tri(l,P(12,2),P(10,12),P(11,10),c);
+        tri(l,P(10,12),P(9,20),P(16,10),c);tri(l,P(10,12),P(16,10),P(11,10),c);
+        #undef P
+    }
     else if(id==8){L(3,5,29,5);L(3,5,3,23);L(29,5,29,23);L(3,23,29,23);L(16,23,16,29);L(10,29,22,29);}
     else {L(5,9,27,9);L(5,16,23,16);L(5,23,18,23);}
     #undef L
 }
 static lv_obj_t *icon(lv_obj_t *p,int id,int x,int y,int size,int r){lv_obj_t *o=box(p,x,y,size,size,r);lv_obj_add_event_cb(o,icon_draw,LV_EVENT_DRAW_MAIN,(void*)(intptr_t)id);return o;}
-static void heading(lv_obj_t *p,int id,const char *s){icon(p,id,20,20,22,MUTED);lv_point_t size;lv_text_get_size(&size,s,F20,0,0,LV_COORD_MAX,LV_TEXT_FLAG_NONE);lv_obj_update_layout(p);int w=lv_obj_get_width(p)-72;if(size.x<w)w=size.x+1;label(p,s,52,20,w,30,F20,TEXT);}
+static void heading(lv_obj_t *p,int id,const char *s){icon(p,id,20,20,22,MUTED);lv_point_t size;lv_text_get_size(&size,s,F20M,0,0,LV_COORD_MAX,LV_TEXT_FLAG_NONE);lv_obj_update_layout(p);int w=lv_obj_get_width(p)-72;if(size.x<w)w=size.x+1;label(p,s,52,19,w,30,F20M,TEXT);}
+/* Заголовок страницы 32 Bold; возвращает x, с которого можно ставить чип состояния. */
+static int page_title(lv_obj_t *p,const char *s){lv_point_t z;lv_text_get_size(&z,s,F32,0,0,LV_COORD_MAX,LV_TEXT_FLAG_NONE);label(p,s,0,15,z.x+2,44,F32,TEXT);return z.x+20;}
+static void fit_chip(lv_obj_t *o){lv_obj_set_width(o,LV_SIZE_CONTENT);lv_obj_set_style_pad_hor(o,14,0);}
+/* Декор баннера: дуги-«шкала кренометра» справа и тонкие горизонтали, как в макете. */
+static void hero_draw(lv_event_t *e){
+    lv_obj_t *o=lv_event_get_target(e);lv_area_t a;lv_obj_get_coords(o,&a);lv_layer_t *l=lv_event_get_layer(e);
+    for(int i=0;i<3;i++)arc(l,a.x1+1120,a.y1+128,300-i*60,180,270,0xFFFFFF,2,40);
+    for(int i=1;i<=3;i++){lv_draw_line_dsc_t d;lv_draw_line_dsc_init(&d);d.p1=(lv_point_precise_t){a.x1,a.y1+i*32};d.p2=(lv_point_precise_t){a.x2,a.y1+i*32};d.color=lv_color_white();d.width=1;d.opa=i==3?20:12;lv_draw_line(l,&d);}
+}
 static void level_draw(lv_event_t *e){
     unsigned i=(intptr_t)lv_event_get_user_data(e);lv_obj_t *o=lv_event_get_target(e);lv_area_t a;lv_obj_get_coords(o,&a);lv_layer_t *l=lv_event_get_layer(e);int x=a.x1+100,y=a.y1+100;
     circle(l,x,y,96,u.alt,1,true,255);circle(l,x,y,96,u.border,1,false,255);
@@ -138,7 +167,7 @@ static bool net_equal(const tab5_ui_network_t *a,const tab5_ui_network_t *b){ret
 static void dispatch(int kind){tab5_ui_action_t a={.kind=kind,.config=u.state.measurement.config,.light_theme=u.state.light_theme,.network=u.state.network};if(u.cb)u.cb(&a,u.user);}
 static void refresh_settings(void){
     double actual[7];config_values(&u.state.measurement.config,actual);unsigned n=0;
-    for(unsigned i=0;i<7;i++){bool changed=fabs(u.draft[i]-actual[i])>.0001;n+=changed;char s[40];snprintf(s,sizeof(s),i==2||i==4||i==6?"%.2f%s%s":"%.0f%s%s",u.draft[i],units[i][0]?" ":"",units[i]);caption(u.step_value[i],s);role(u.step_value[i],changed?INFO:FRAME);}
+    for(unsigned i=0;i<7;i++){bool changed=fabs(u.draft[i]-actual[i])>.0001;n+=changed;char s[40];snprintf(s,sizeof(s),i==2||i==4||i==6?"%.2f%s%s":"%.0f%s%s",u.draft[i],units[i][0]&&strcmp(units[i],"°")?" ":"",units[i]);caption(u.step_value[i],s);role(u.step_value[i],changed?INFO:FRAME);}
     u.dirty=n>0||u.settings_failed;char s[64];snprintf(s,sizeof(s),u.pending?"ожидает подтверждения":u.settings_failed?"не сохранено · повторите":"изменено: %u",n);text(u.changed,s);hide(u.changed,!u.dirty&&!u.pending);enabled(u.set_apply,u.dirty&&!u.pending);enabled(u.set_cancel,u.dirty&&!u.pending);
 }
 static void close_modal(void){if(u.veil)lv_obj_delete(u.veil);u.veil=u.dialog=u.keyboard=u.text_field=NULL;u.modal_kind=0;}
@@ -153,7 +182,7 @@ static bool apply_network(void){
 static void ask_navigation(unsigned page){
     if(page==u.page)return;
     if((u.page==SETTINGS&&u.dirty&&!u.pending)||(u.page==NETWORK&&u.net_dirty&&!u.net_pending)){
-        u.pending_page=page;open_modal(300,220,680,280,3);label(u.dialog,"Есть неприменённые изменения",24,24,632,40,F28,TEXT);
+        u.pending_page=page;open_modal(300,220,680,280,3);label(u.dialog,"Есть неприменённые изменения",24,24,632,40,F32,TEXT);
         button(u.dialog,"Применить",24,104,200,64,PRIMARY,A_APPLY);button(u.dialog,"Отбросить",240,104,200,64,OUTLINE,A_DISCARD);button(u.dialog,"Остаться",456,104,200,64,GHOST,A_STAY);
     }else show_page(page);
 }
@@ -166,7 +195,7 @@ static void number_refresh(void){
 }
 static void open_number(unsigned i){
     u.edit_index=i;snprintf(u.num,sizeof(u.num),(i==0||i==1||i==3||i==5)?"%.0f":"%.2f",u.draft[i]);open_modal(340,52,600,616,1);
-    label(u.dialog,param_name[i],28,24,544,36,F28,TEXT);char s[128];snprintf(s,sizeof(s),"допустимо %.2f–%.2f %s · сейчас %.2f",lo[i],hi[i],units[i],u.draft[i]);label(u.dialog,s,28,66,544,28,F16,MUTED);
+    label(u.dialog,param_name[i],28,24,544,36,F32,TEXT);char s[128];snprintf(s,sizeof(s),"допустимо %.2f–%.2f %s · сейчас %.2f",lo[i],hi[i],units[i],u.draft[i]);label(u.dialog,s,28,66,544,28,F16,MUTED);
     u.number_frame=box(u.dialog,28,98,544,80,FRAME);lv_obj_set_style_border_width(u.number_frame,2,0);u.number=label(u.number_frame,u.num,12,10,444,58,F40,TEXT);lv_obj_set_style_text_align(u.number,LV_TEXT_ALIGN_RIGHT,0);label(u.number_frame,units[i],464,26,72,36,F24,MUTED);
     u.number_error=label(u.dialog,"",28,186,544,28,F16,ERR);lv_obj_set_style_bg_opa(u.number_error,0,0);
     const char *keys[]={"7","8","9","⌫","4","5","6","±","1","2","3","C","0",".","было"};
@@ -192,7 +221,7 @@ static void keyboard_style(lv_obj_t *k){
 }
 static void keyboard_done(lv_event_t *e){if(u.modal_kind==2){if(lv_event_get_code(e)==LV_EVENT_READY)event(e);else close_modal();}}
 static void open_text(unsigned i){
-    u.edit_index=i;open_modal(120,24,1144,300,2);const char *names[]={"AP: имя сети","AP: пароль","STA: имя сети","STA: пароль"};label(u.dialog,names[i],24,20,780,40,F28,TEXT);
+    u.edit_index=i;open_modal(120,24,1144,300,2);const char *names[]={"AP: имя сети","AP: пароль","STA: имя сети","STA: пароль"};label(u.dialog,names[i],24,20,780,40,F32,TEXT);
     u.lang=button(u.dialog,russian?"РУС → EN":"EN → РУС",904,16,216,56,OUTLINE,A_LANG);
     u.text_field=lv_textarea_create(u.dialog);lv_obj_set_pos(u.text_field,24,84);lv_obj_set_size(u.text_field,1096,64);lv_textarea_set_one_line(u.text_field,true);lv_textarea_set_max_length(u.text_field,i%2?63:32);lv_obj_set_style_text_font(u.text_field,F24,0);lv_obj_set_style_pad_top(u.text_field,14,0);lv_obj_set_style_pad_bottom(u.text_field,14,0);lv_obj_set_style_bg_color(u.text_field,lv_color_hex(u.frame),0);lv_obj_set_style_text_color(u.text_field,lv_color_hex(u.text),0);
     const char *v[]={u.net_draft.ap_ssid,u.net_draft.ap_password,u.net_draft.sta_ssid,u.net_draft.sta_password};lv_textarea_set_text(u.text_field,v[i]);lv_textarea_set_password_mode(u.text_field,i%2&&!u.unmasked);
@@ -211,7 +240,7 @@ static lv_obj_t *time_done;
 static void date_edited(lv_event_t *e){(void)e;tab5_ui_datetime_t t;bool valid=date_valid(&t);enabled(time_done,valid);text(u.time_error,valid?"":"✗ Проверьте календарную дату и время (2000–2099)");}
 static void date_focus(lv_event_t *e){if(u.keyboard)lv_keyboard_set_textarea(u.keyboard,lv_event_get_target(e));}
 static void open_time(void){
-    open_modal(140,24,1000,316,5);label(u.dialog,"Дата и время",24,16,952,40,F28,TEXT);
+    open_modal(140,24,1000,316,5);label(u.dialog,"Дата и время",24,16,952,40,F32,TEXT);
     const char *names[]={"Год","Месяц","День","Час","Минута","Секунда"};tab5_ui_datetime_t t=u.state.datetime;unsigned v[]={t.year,t.month,t.day,t.hour,t.minute,t.second};
     for(int i=0;i<6;i++){int x=24+i*160;label(u.dialog,names[i],x,64,144,24,F16,MUTED);u.date_fields[i]=lv_textarea_create(u.dialog);lv_obj_set_pos(u.date_fields[i],x,94);lv_obj_set_size(u.date_fields[i],144,56);lv_textarea_set_one_line(u.date_fields[i],true);lv_textarea_set_accepted_chars(u.date_fields[i],"0123456789");lv_textarea_set_max_length(u.date_fields[i],i?2:4);lv_obj_set_style_text_font(u.date_fields[i],F24,0);lv_obj_set_style_pad_top(u.date_fields[i],14,0);lv_obj_set_style_pad_bottom(u.date_fields[i],14,0);lv_obj_set_style_bg_color(u.date_fields[i],lv_color_hex(u.frame),0);lv_obj_set_style_text_color(u.date_fields[i],lv_color_hex(u.text),0);char s[16];snprintf(s,sizeof(s),"%u",v[i]);lv_textarea_set_text(u.date_fields[i],u.state.datetime_known?s:"");lv_obj_add_event_cb(u.date_fields[i],date_focus,LV_EVENT_FOCUSED,NULL);}
     u.time_error=label(u.dialog,"",24,166,952,32,F16,ERR);lv_obj_set_style_bg_opa(u.time_error,0,0);
@@ -222,7 +251,7 @@ static void open_time(void){
 }
 static void refresh_network(void){
     const char *v[]={u.net_draft.ap_ssid,u.net_draft.ap_password,u.net_draft.sta_ssid,u.net_draft.sta_password};
-    for(unsigned i=0;i<4;i++){char masked[64];if(i%2&&!u.unmasked){size_t n=strlen(v[i]);if(n>20)n=20;memset(masked,'*',n);masked[n]=0;text(lv_obj_get_child(u.net_fields[i],1),masked);}else text(lv_obj_get_child(u.net_fields[i],1),v[i]);}
+    for(unsigned i=0;i<4;i++){char masked[64];if(i%2&&!u.unmasked){size_t n=strlen(v[i]);if(n>20)n=20;for(size_t q=0;q<n;q++)memcpy(masked+q*3,"\xE2\x80\xA2",3);masked[n*3]=0;text(lv_obj_get_child(u.net_fields[i],1),masked);}else text(lv_obj_get_child(u.net_fields[i],1),v[i]);}
     if(u.net_draft.ap_enabled)lv_obj_add_state(u.net_switch[0],LV_STATE_CHECKED);else lv_obj_remove_state(u.net_switch[0],LV_STATE_CHECKED);
     if(u.net_draft.sta_enabled)lv_obj_add_state(u.net_switch[1],LV_STATE_CHECKED);else lv_obj_remove_state(u.net_switch[1],LV_STATE_CHECKED);
     u.net_dirty=!net_equal(&u.net_draft,&u.state.network)||u.network_failed;enabled(u.net_apply,u.net_dirty&&!u.net_pending);caption(u.reveal,u.unmasked?"Скрыть пароли":"Показать пароли");
@@ -274,7 +303,7 @@ static void chart_refresh(void){
     if(ticks<3){u.ymin-=tick;u.ymax+=tick;ticks+=2;}
     lv_chart_set_point_count(u.chart,n);lv_chart_set_axis_range(u.chart,LV_CHART_AXIS_PRIMARY_Y,u.ymin,u.ymax);lv_chart_set_div_line_count(u.chart,ticks,0);
     for(unsigned k=0;k<4;k++){
-        lv_obj_set_style_bg_color(lv_obj_get_child(u.legend[k],1),lv_color_hex(u.sensor[k/2]),0);lv_obj_set_style_bg_color(lv_obj_get_child(lv_obj_get_parent(u.stats[k]),0),lv_color_hex(u.sensor[k/2]),0);lv_chart_set_series_ext_y_array(u.chart,u.series[k],u.plotted[k]);lv_chart_set_series_color(u.chart,u.series[k],lv_color_hex(u.sensor[k/2]));lv_chart_hide_series(u.chart,u.series[k],!u.visible[k]);
+        for(uint32_t c=1;c<lv_obj_get_child_count(u.legend[k]);c++)lv_obj_set_style_bg_color(lv_obj_get_child(u.legend[k],c),lv_color_hex(u.sensor[k/2]),0);lv_obj_set_style_bg_color(lv_obj_get_child(lv_obj_get_parent(u.stats[k]),0),lv_color_hex(u.sensor[k/2]),0);lv_chart_set_series_ext_y_array(u.chart,u.series[k],u.plotted[k]);lv_chart_set_series_color(u.chart,u.series[k],lv_color_hex(u.sensor[k/2]));lv_chart_hide_series(u.chart,u.series[k],!u.visible[k]);
         int32_t mn=0,mx=0,last=LV_CHART_POINT_NONE;bool found=false;
         for(unsigned i=0;i<n;i++)if(u.plotted[k][i]!=LV_CHART_POINT_NONE){int32_t v=u.plotted[k][i];if(!found)mn=mx=v;found=true;if(v<mn)mn=v;if(v>mx)mx=v;}
         last=u.plotted[k][n-1];char s[120];if(!u.visible[k])snprintf(s,sizeof(s),"скрыт");else if(last!=LV_CHART_POINT_NONE)snprintf(s,sizeof(s),"%s%.2f°",last<0?"−":"+",fabs(last/100.0));else snprintf(s,sizeof(s),"—");text(u.stats[k],s);
@@ -288,17 +317,17 @@ static void chart_refresh(void){
 
 static void build_measure(void){
     lv_obj_t *p=u.pages[MEASURE];u.hero=box(p,0,0,1144,128,NAV);lv_obj_set_style_radius(u.hero,18,0);
-    lv_obj_set_style_bg_grad_dir(u.hero,LV_GRAD_DIR_HOR,0);lv_obj_set_style_bg_grad_color(u.hero,lv_color_hex(u.navsel),0);
-    u.hero_date=label(u.hero,"—",28,16,520,24,F16,NAVTEXT);
-    u.hero_dot=box(u.hero,28,54,18,18,ORANGE);lv_obj_set_style_radius(u.hero_dot,9,0);
+    lv_obj_set_style_bg_grad_dir(u.hero,LV_GRAD_DIR_HOR,0);lv_obj_set_style_bg_grad_color(u.hero,lv_color_hex(u.navsel),0);lv_obj_add_event_cb(u.hero,hero_draw,LV_EVENT_DRAW_MAIN,NULL);
+    u.hero_date=label(u.hero,"—",28,16,520,24,F16,NAVTEXT);lv_obj_set_style_text_color(u.hero_date,lv_color_hex(0xC9D6EE),0);
+    u.hero_dot=box(u.hero,28,54,18,18,ORANGE);lv_obj_set_style_radius(u.hero_dot,9,0);lv_obj_set_style_outline_width(u.hero_dot,6,0);lv_obj_set_style_outline_opa(u.hero_dot,70,0);lv_obj_set_style_outline_pad(u.hero_dot,0,0);
     u.hero_title=label(u.hero,"Накопление",60,40,494,56,F40,NAVTEXT);
-    u.hero_sub=label(u.hero,"",28,96,1096,28,F16,NAVTEXT);
-    for(int i=0;i<2;i++){u.hero_key[i]=label(u.hero,i?"Д2 − Д3 по Y":"Д2 − Д3 по X",560+i*128,24,126,24,F16,NAVTEXT);u.hero_kpi[i]=label(u.hero,"—",560+i*128,50,126,48,F28,NAVTEXT);}
+    u.hero_sub=label(u.hero,"",28,96,830,28,F16,NAVTEXT);lv_obj_set_style_text_color(u.hero_sub,lv_color_hex(0xDCE5F5),0);
+    for(int i=0;i<2;i++){u.hero_key[i]=label(u.hero,i?"Д2 − Д3 по Y":"Д2 − Д3 по X",560+i*128,24,126,24,F16,NAVTEXT);u.hero_kpi[i]=label(u.hero,"—",560+i*128,48,126,48,F32,NAVTEXT);lv_obj_set_style_text_color(u.hero_key[i],lv_color_hex(0xC9D6EE),0);}
     u.start[0]=button(u.hero,"● Старт записи",880,24,244,80,ORANGE,A_START);
     for(unsigned i=0;i<2;i++){
         lv_obj_t *c=u.sensor_card[i]=box(p,i*580,144,564,376,CARD);
         lv_obj_t *dot=box(c,20,26,14,14,ALT);lv_obj_set_style_radius(dot,7,0);lv_obj_set_style_bg_color(dot,lv_color_hex(u.sensor[i]),0);
-        label(c,i?"Датчик 3":"Датчик 2",44,18,132,34,F24,TEXT);label(c,i?"адрес 3 · RS485":"адрес 2 · RS485",176,24,178,26,F16,MUTED);
+        {lv_point_t z;lv_text_get_size(&z,"Датчик 2",F24,0,0,LV_COORD_MAX,LV_TEXT_FLAG_NONE);label(c,i?"Датчик 3":"Датчик 2",44,17,z.x+4,34,F24,TEXT);label(c,i?"адрес 3 · RS485":"адрес 2 · RS485",56+z.x,22,180,26,F16,MUTED);}
         u.health[i]=chip(c,"✓ На связи",364,16,180,OK);
         label(c,"X",20,100,30,36,F24,MUTED);label(c,"Y",20,192,30,36,F24,MUTED);
         for(int a=0;a<2;a++)u.angle[i][a]=label(c,"—",48,66+a*92,294,84,F64,TEXT);
@@ -319,14 +348,15 @@ static void build_measure(void){
     lv_obj_t *c=box(p,0,536,336,152,CARD);heading(c,5,"Ноль датчиков");u.zero_chip=chip(c,"не задан",224,16,90,NEUTRAL);lv_obj_set_style_text_letter_space(u.zero_chip,-1,0);
     button(c,"Обнулить",20,70,152,64,PRIMARY,A_ZERO);button(c,"Сбросить",184,70,132,64,OUTLINE,A_RESET);
     c=box(p,352,536,272,152,CARD);heading(c,6,"Носители");
-    for(int i=0;i<3;i++)u.storage_lines[i]=label(c,"—",20,62+i*26,232,26,F16,i==2?MUTED:TEXT);
+    for(int i=0;i<3;i++)u.storage_lines[i]=label(c,"—",i<2?38:20,62+i*26,i<2?80:232,26,F16,i==2?MUTED:TEXT);
+    for(int i=0;i<2;i++){u.storage_dot[i]=box(c,20,70+i*26,10,10,MUTED);lv_obj_set_style_radius(u.storage_dot[i],5,0);lv_obj_set_style_bg_opa(u.storage_dot[i],255,0);u.storage_detail[i]=label(c,"—",112,63+i*26,140,26,F16,MUTED);lv_obj_set_style_text_align(u.storage_detail[i],LV_TEXT_ALIGN_RIGHT,0);}
     c=box(p,640,536,256,152,CARD);heading(c,4,"Сеть");u.pc_chip=chip(c,"ПК",188,18,48,OK);
     for(int i=0;i<3;i++)u.network_lines[i]=label(c,"—",20,62+i*26,216,26,F16,i==2?MUTED:TEXT);
     c=box(p,912,536,232,152,CARD);heading(c,7,"Питание");for(int i=0;i<3;i++)u.power_lines[i]=label(c,"—",20,62+i*26,192,26,F16,i?MUTED:TEXT);
 }
 static void build_graph(void){
-    lv_obj_t *p=u.pages[GRAPH];label(p,"График",0,18,148,44,F28,TEXT);
-    const char *names[]={"Д2 · X","Д2 · Y","Д3 · X","Д3 · Y"};for(int i=0;i<4;i++){u.legend[i]=button(p,names[i],154+i*114,8,104,56,NEUTRAL,600+i);lv_obj_set_style_text_font(lv_obj_get_child(u.legend[i],0),F16,0);lv_obj_set_style_radius(u.legend[i],28,0);u.visible[i]=true;lv_obj_t *swatch=box(u.legend[i],12,27,20,3,ORANGE);lv_obj_set_style_bg_color(swatch,lv_color_hex(u.sensor[i/2]),0);lv_obj_t *ll=lv_obj_get_child(u.legend[i],0);lv_obj_set_align(ll,LV_ALIGN_TOP_LEFT);lv_obj_set_pos(ll,38,18);lv_obj_set_width(ll,62);lv_obj_set_style_text_align(ll,LV_TEXT_ALIGN_LEFT,0);}
+    lv_obj_t *p=u.pages[GRAPH];page_title(p,"График");
+    const char *names[]={"Д2 · X","Д2 · Y","Д3 · X","Д3 · Y"};for(int i=0;i<4;i++){u.legend[i]=button(p,names[i],154+i*114,8,104,56,NEUTRAL,600+i);lv_obj_set_style_text_font(lv_obj_get_child(u.legend[i],0),F16M,0);lv_obj_set_style_radius(u.legend[i],28,0);u.visible[i]=true;for(int k=0;k<(i%2?2:1);k++){lv_obj_t *swatch=box(u.legend[i],12+k*12,27,i%2?8:20,3,ORANGE);lv_obj_set_style_bg_color(swatch,lv_color_hex(u.sensor[i/2]),0);}lv_obj_t *ll=lv_obj_get_child(u.legend[i],0);lv_obj_set_align(ll,LV_ALIGN_TOP_LEFT);lv_obj_set_pos(ll,38,18);lv_obj_set_width(ll,62);lv_obj_set_style_text_align(ll,LV_TEXT_ALIGN_LEFT,0);}
     const char *ranges[]={"30 с","2 мин","10 мин"};for(int i=0;i<3;i++){u.ranges[i]=button(p,ranges[i],878+i*88,8,88,56,FRAME,610+i);lv_obj_set_style_text_font(lv_obj_get_child(u.ranges[i],0),F20,0);}
     u.range=1;lv_obj_t *card=box(p,0,88,1144,440,CARD);
     u.chart=lv_chart_create(card);lv_obj_remove_style_all(u.chart);lv_obj_set_pos(u.chart,76,24);lv_obj_set_size(u.chart,1040,364);lv_obj_set_style_line_width(u.chart,1,LV_PART_MAIN);lv_obj_set_style_line_color(u.chart,lv_color_hex(u.border),LV_PART_MAIN);lv_obj_set_style_line_width(u.chart,2,LV_PART_ITEMS);lv_obj_set_style_size(u.chart,0,0,LV_PART_INDICATOR);lv_obj_set_style_pad_all(u.chart,0,0);lv_obj_remove_flag(u.chart,LV_OBJ_FLAG_SCROLLABLE);
@@ -337,43 +367,43 @@ static void build_graph(void){
     for(int i=0;i<9;i++)u.ylabel[i]=label(card,"",8,14+i*45,58,22,F16,MUTED);
     for(int i=0;i<7;i++){u.xlabel[i]=label(card,"",36+i*173,400,80,24,F16,MUTED);lv_obj_set_style_text_align(u.xlabel[i],LV_TEXT_ALIGN_CENTER,0);}
     u.cursor_label=label(card,"Коснитесь графика для отсчёта",90,2,1000,22,F16,MUTED);
-    for(int i=0;i<4;i++){card=box(p,i*290,544,274,144,CARD);lv_obj_t *dot=box(card,20,27,12,12,ORANGE);lv_obj_set_style_radius(dot,6,0);lv_obj_set_style_bg_color(dot,lv_color_hex(u.sensor[i/2]),0);label(card,names[i],42,20,212,28,F20,TEXT);u.stats[i]=label(card,"—",20,58,234,48,F28,TEXT);u.stats_mm[i]=label(card,"данных нет",20,108,234,28,F16,MUTED);}
+    for(int i=0;i<4;i++){card=box(p,i*290,544,274,144,CARD);lv_obj_t *dot=box(card,20,27,12,12,ORANGE);lv_obj_set_style_radius(dot,6,0);lv_obj_set_style_bg_color(dot,lv_color_hex(u.sensor[i/2]),0);label(card,names[i],42,20,212,28,F20,TEXT);u.stats[i]=label(card,"—",20,58,234,48,F32,TEXT);u.stats_mm[i]=label(card,"данных нет",20,108,234,28,F16,MUTED);}
 }
 static void build_record(void){
-    lv_obj_t *p=u.pages[RECORD];label(p,"Запись",0,18,124,44,F28,TEXT);u.rec_chip=chip(p,"остановлена",124,20,270,NEUTRAL);u.start[1]=button(p,"● Старт записи",884,4,260,64,ORANGE,A_START);
-    for(int i=0;i<2;i++){lv_obj_t *c=box(p,i*580,88,564,236,CARD);heading(c,i?6:2,i?"Флешка USB":"Карта microSD");u.media_chip[i]=chip(c,"—",364,16,180,NEUTRAL);
-        u.capacity_text[i]=label(c,"свободно — из —",20,68,524,28,F20,TEXT);u.capacity_bar[i]=lv_bar_create(c);lv_obj_set_pos(u.capacity_bar[i],20,98);lv_obj_set_size(u.capacity_bar[i],524,12);lv_bar_set_range(u.capacity_bar[i],0,1000);lv_obj_set_style_bg_color(u.capacity_bar[i],lv_color_hex(u.alt),0);lv_obj_set_style_bg_color(u.capacity_bar[i],lv_color_hex(u.action),LV_PART_INDICATOR);
+    lv_obj_t *p=u.pages[RECORD];int tx=page_title(p,"Запись");u.rec_chip=chip(p,"остановлена",tx,22,270,NEUTRAL);fit_chip(u.rec_chip);u.start[1]=button(p,"● Старт записи",884,4,260,64,ORANGE,A_START);
+    for(int i=0;i<2;i++){lv_obj_t *c=box(p,i*580,88,564,236,CARD);heading(c,i?11:6,i?"Флешка USB":"Карта microSD");u.media_chip[i]=chip(c,"—",364,16,180,NEUTRAL);
+        u.capacity_text[i]=label(c,"свободное место: нет данных",20,68,524,28,F20,TEXT);u.capacity_bar[i]=lv_bar_create(c);lv_obj_set_pos(u.capacity_bar[i],20,98);lv_obj_set_size(u.capacity_bar[i],524,12);lv_bar_set_range(u.capacity_bar[i],0,1000);lv_obj_set_style_bg_color(u.capacity_bar[i],lv_color_hex(u.alt),0);lv_obj_set_style_bg_color(u.capacity_bar[i],lv_color_hex(u.action),LV_PART_INDICATOR);
         u.media_detail[i]=label(c,"данных нет",20,130,524,82,F16,MUTED);
     }
     u.history=box(p,0,340,1144,348,CARD);heading(u.history,9,"Последние записи");u.history_note=label(u.history,"файлы: программа ПК → «Файлы прибора»",566,22,558,28,F16,MUTED);
     const char *cols[]={"Файл","Начало","Длительность","Строк","Носители","Состояние"};int x[]={20,280,480,630,760,910},w[]={250,190,140,120,140,214};
     for(int j=0;j<6;j++)label(u.history,cols[j],x[j],70,w[j],24,F16,MUTED);
     for(int i=0;i<4;i++){line(u.history,0,96+i*56,1144);for(int j=0;j<6;j++)u.history_rows[i][j]=label(u.history,"",x[j],112+i*56,w[j],32,F16,TEXT);}
-    u.history_rows[4][0]=label(u.history,"данных нет",20,118,1104,48,F24,MUTED);
+    u.history_rows[4][0]=label(u.history,"данных нет",20,222,1104,30,F20,MUTED);lv_obj_set_style_text_align(u.history_rows[4][0],LV_TEXT_ALIGN_CENTER,0);
 }
 static void stepper(lv_obj_t *c,unsigned i,int y){
-    label(c,param_name[i],20,y+8,258,30,F20,TEXT);label(c,limits[i],20,y+38,258,24,F16,MUTED);
+    label(c,param_name[i],20,y+7,258,30,F20M,TEXT);label(c,limits[i],20,y+38,258,24,F16,MUTED);
     lv_obj_t *b=button(c,"−",286,y,56,56,OUTLINE,200+i*2);lv_obj_set_style_radius(b,12,0);lv_obj_add_event_cb(b,step_press,LV_EVENT_PRESSED,(void*)(intptr_t)(200+i*2));lv_obj_add_event_cb(b,step_press,LV_EVENT_RELEASED,NULL);lv_obj_add_event_cb(b,step_press,LV_EVENT_PRESS_LOST,NULL);
     u.step_value[i]=button(c,"",350,y,128,56,FRAME,300+i);lv_obj_set_style_radius(u.step_value[i],12,0);
     b=button(c,"+",486,y,56,56,OUTLINE,201+i*2);lv_obj_set_style_radius(b,12,0);lv_obj_add_event_cb(b,step_press,LV_EVENT_PRESSED,(void*)(intptr_t)(201+i*2));lv_obj_add_event_cb(b,step_press,LV_EVENT_RELEASED,NULL);lv_obj_add_event_cb(b,step_press,LV_EVENT_PRESS_LOST,NULL);
 }
 static void build_settings(void){
-    lv_obj_t *p=u.pages[SETTINGS];label(p,"Настройки",0,18,184,44,F28,TEXT);u.changed=chip(p,"изменено: 0",184,20,278,INFO);
+    lv_obj_t *p=u.pages[SETTINGS];int tx=page_title(p,"Настройки");u.changed=chip(p,"изменено: 0",tx,22,278,INFO);fit_chip(u.changed);
     u.set_cancel=button(p,"Отменить",732,8,180,56,GHOST,A_CANCEL);u.set_apply=button(p,"Применить",924,8,220,56,PRIMARY,A_APPLY);
     lv_obj_t *c=box(p,0,88,564,600,CARD);heading(c,7,"Опрос датчиков");stepper(c,0,68);line(c,20,132,524);stepper(c,1,144);line(c,20,208,524);stepper(c,2,220);
-    icon(c,1,20,310,22,MUTED);label(c,"Качка и покой",52,310,460,32,F20,TEXT);stepper(c,3,356);line(c,20,420,524);stepper(c,4,432);
+    icon(c,1,20,310,22,MUTED);label(c,"Качка и покой",52,309,460,32,F20M,TEXT);stepper(c,3,356);line(c,20,420,524);stepper(c,4,432);
     c=box(p,580,88,564,268,CARD);heading(c,1,"Качка — дополнительно");stepper(c,5,68);line(c,20,132,524);stepper(c,6,144);
-    c=box(p,580,372,564,316,CARD);heading(c,8,"Прибор");label(c,"Тема",20,88,200,32,F20,TEXT);
-    u.theme_btn[0]=button(c,"Светлая",332,66,106,56,FRAME,A_LIGHT);u.theme_btn[1]=button(c,"Тёмная",442,66,100,56,FRAME,A_DARK);for(int i=0;i<2;i++)lv_obj_set_style_text_font(lv_obj_get_child(u.theme_btn[i],0),F16,0);
-    line(c,20,132,524);label(c,"Дата и время",20,150,320,28,F20,TEXT);u.clock_text=label(c,"—",20,178,350,24,F16,MUTED);lv_obj_t *b=button(c,"Изменить",392,144,150,56,OUTLINE,A_TIME);lv_obj_set_style_text_font(lv_obj_get_child(b,0),F16,0);
-    line(c,20,208,524);label(c,"Экран и прошивка",20,226,524,28,F20,TEXT);u.panel_text=label(c,"—",20,254,524,24,F16,MUTED);u.fw_text=label(c,"—",20,278,524,24,F16,MUTED);
+    c=box(p,580,372,564,316,CARD);heading(c,8,"Прибор");label(c,"Тема",20,79,200,32,F20M,TEXT);
+    lv_obj_t *seg=box(c,316,62,228,64,FRAME);lv_obj_set_style_radius(seg,12,0);u.theme_btn[0]=button(seg,"Светлая",4,4,108,56,FRAME,A_LIGHT);u.theme_btn[1]=button(seg,"Тёмная",114,4,108,56,FRAME,A_DARK);for(int i=0;i<2;i++){lv_obj_set_style_text_font(lv_obj_get_child(u.theme_btn[i],0),F20M,0);lv_obj_set_style_radius(u.theme_btn[i],9,0);}
+    line(c,20,132,524);label(c,"Дата и время",20,150,320,28,F20M,TEXT);u.clock_text=label(c,"—",20,178,350,24,F16,MUTED);lv_obj_t *b=button(c,"Изменить",392,144,150,56,OUTLINE,A_TIME);lv_obj_set_style_text_font(lv_obj_get_child(b,0),F20M,0);
+    line(c,20,208,524);label(c,"Экран и прошивка",20,226,524,28,F20M,TEXT);u.panel_text=label(c,"—",20,254,524,24,F16,MUTED);u.fw_text=label(c,"—",20,278,524,24,F16,MUTED);
 }
 static void build_network(void){
-    lv_obj_t *p=u.pages[NETWORK];label(p,"Сеть",0,18,300,44,F28,TEXT);u.reveal=button(p,"Показать пароли",692,8,220,56,GHOST,A_REVEAL);lv_obj_set_style_text_font(lv_obj_get_child(u.reveal,0),F20,0);u.net_apply=button(p,"Применить",924,8,220,56,PRIMARY,A_NET_APPLY);
+    lv_obj_t *p=u.pages[NETWORK];page_title(p,"Сеть");u.reveal=button(p,"Показать пароли",692,8,220,56,GHOST,A_REVEAL);lv_obj_set_style_text_font(lv_obj_get_child(u.reveal,0),F20M,0);u.net_apply=button(p,"Применить",924,8,220,56,PRIMARY,A_NET_APPLY);
     for(int i=0;i<2;i++){
         lv_obj_t *c=box(p,i*580,88,564,380,CARD);heading(c,4,i?"Подключение к Wi-Fi":"Точка доступа прибора");
         u.net_switch[i]=lv_switch_create(c);lv_obj_set_pos(u.net_switch[i],470,12);lv_obj_set_size(u.net_switch[i],72,40);lv_obj_set_ext_click_area(u.net_switch[i],8);lv_obj_add_event_cb(u.net_switch[i],switch_changed,LV_EVENT_VALUE_CHANGED,NULL);
-        for(int j=0;j<2;j++){unsigned k=i*2+j;lv_obj_t *b=u.net_fields[k]=button(c,"",20,70+j*68,524,56,FRAME,500+k);lv_obj_delete(lv_obj_get_child(b,0));label(b,j?"Пароль":i?"Сеть":"Имя сети",16,17,96,24,F16,MUTED);lv_obj_t *v=label(b,"",122,14,382,30,F20,TEXT);lv_label_set_long_mode(v,LV_LABEL_LONG_SCROLL_CIRCULAR);}
+        for(int j=0;j<2;j++){unsigned k=i*2+j;lv_obj_t *b=u.net_fields[k]=button(c,"",20,70+j*68,524,56,FRAME,500+k);lv_obj_delete(lv_obj_get_child(b,0));label(b,j?"Пароль":i?"Сеть":"Имя сети",16,17,96,24,F16,MUTED);lv_obj_t *v=label(b,"",122,14,j?340:382,30,F20,TEXT);lv_label_set_long_mode(v,LV_LABEL_LONG_SCROLL_CIRCULAR);if(j)icon(b,12,478,15,26,MUTED);}
         lv_obj_t *row=box(c,20,206,524,56,FRAME);label(row,"Адрес",16,17,96,24,F16,MUTED);u.net_address[i]=label(row,"—",122,14,254,30,F20,TEXT);u.net_chip[i]=chip(row,"—",382,12,126,NEUTRAL);
         label(c,i?"пароль пустой или 8–63 символа · без Wi-Fi прибор работает через точку доступа":"пароль точки доступа служит ключом для программы ПК · 8–63 символа",20,326,524,44,F16,MUTED);
     }
@@ -387,11 +417,11 @@ void tab5_ui_init(tab5_ui_action_cb_t cb,void *user){
     if(u.root)tab5_ui_destroy();
     memset(&u,0,sizeof(u));u.cb=cb;u.user=user;palette(true);
     u.root=box(lv_screen_active(),0,0,1280,720,BG);u.rail=box(u.root,0,0,104,720,NAV);
-    icon(u.rail,0,35,20,34,NAVTEXT);label(u.rail,"КРЕНОМЕР",5,57,94,24,F16,NAVMUTED);
+    icon(u.rail,10,35,18,34,NAVTEXT);{lv_obj_t *t=label(u.rail,"КРЕНОМЕР",0,58,104,20,F16M,NAVMUTED);lv_obj_set_style_text_align(t,LV_TEXT_ALIGN_CENTER,0);lv_obj_set_style_text_letter_space(t,1,0);}box(u.rail,0,87,104,1,NAVSEL);
     const char *names[]={"Измерения","График","Запись","Настройки","Сеть"};
     for(unsigned i=0;i<5;i++){u.nav[i]=button(u.rail,"",0,88+i*88,104,88,NAV,100+i);lv_obj_delete(lv_obj_get_child(u.nav[i],0));icon(u.nav[i],i,36,16,32,NAVTEXT);lv_obj_t *l=label(u.nav[i],names[i],0,56,104,24,F16,NAVTEXT);lv_obj_set_style_text_align(l,LV_TEXT_ALIGN_CENTER,0);u.selected[i]=box(u.nav[i],0,14,5,60,ORANGE);lv_obj_set_style_radius(u.selected[i],3,0);}
     u.badge=box(u.nav[0],68,14,12,12,RED);lv_obj_set_style_radius(u.badge,6,0);
-    u.rail_time=label(u.rail,"—",0,654,104,34,F24,NAVTEXT);lv_obj_set_style_text_align(u.rail_time,LV_TEXT_ALIGN_CENTER,0);u.rail_power=label(u.rail,"—",0,690,104,24,F16,NAVMUTED);lv_obj_set_style_text_align(u.rail_power,LV_TEXT_ALIGN_CENTER,0);
+    u.rail_time=label(u.rail,"—",0,654,104,34,F24,NAVTEXT);lv_obj_set_style_text_align(u.rail_time,LV_TEXT_ALIGN_CENTER,0);u.rail_power=label(u.rail,"—",32,690,70,24,F16,NAVMUTED);icon(u.rail,7,13,692,18,NAVMUTED);box(u.rail,0,640,104,1,NAVSEL);
     for(unsigned i=0;i<5;i++)u.pages[i]=box(u.root,120,16,1144,688,TEXT);
     build_measure();build_graph();build_record();build_settings();build_network();show_page(MEASURE);
     tab5_ui_state_t s={.light_theme=true};tab5_measure_config_default(&s.measurement.config);tab5_ui_update(&s);
@@ -405,7 +435,7 @@ static void update_record(void){
     const tab5_ui_medium_t *m[]={&u.state.sd,&u.state.usb};
     for(int i=0;i<2;i++){
         const tab5_ui_capacity_t *c=&u.state.capacity[i];text(u.media_chip[i],medium_status(m[i]));role(u.media_chip[i],!m[i]->known?NEUTRAL:m[i]->failed?ERR:m[i]->recording?ERR:m[i]->mounted?OK:WARN);
-        if(c->known&&c->total_bytes){snprintf(s,sizeof(s),"свободно %.2f ГБ из %.2f ГБ",c->free_bytes/1073741824.,c->total_bytes/1073741824.);lv_bar_set_value(u.capacity_bar[i],(int32_t)(1000.0*(c->total_bytes-fmin((double)c->free_bytes,(double)c->total_bytes))/c->total_bytes),LV_ANIM_OFF);}else snprintf(s,sizeof(s),"свободно — из —");text(u.capacity_text[i],s);hide(u.capacity_bar[i],!c->known||!c->total_bytes);
+        if(c->known&&c->total_bytes){snprintf(s,sizeof(s),"свободно %.2f ГБ из %.2f ГБ",c->free_bytes/1073741824.,c->total_bytes/1073741824.);lv_bar_set_value(u.capacity_bar[i],(int32_t)(1000.0*(c->total_bytes-fmin((double)c->free_bytes,(double)c->total_bytes))/c->total_bytes),LV_ANIM_OFF);}else snprintf(s,sizeof(s),"свободное место: нет данных");text(u.capacity_text[i],s);hide(u.capacity_bar[i],!c->known||!c->total_bytes);
         char estimate[64];if(c->estimate_known)snprintf(estimate,sizeof(estimate),"примерно %u ч записи",(unsigned)(c->remaining_s/3600));else snprintf(estimate,sizeof(estimate),"оценка времени: данных нет");
         if(m[i]->known&&!m[i]->mounted)snprintf(s,sizeof(s),"Подключите носитель FAT32.\nДостаточно одного исправного носителя.\n%s",estimate);
         else snprintf(s,sizeof(s),"файловая система: %s\nпапка: %s\n%s",c->details_known?c->filesystem:"—",c->details_known?c->folder:"—",estimate);
@@ -420,7 +450,7 @@ static void update_record(void){
         if(r->start_known){time_t t=(time_t)r->start_unix;struct tm *tm=localtime(&t);if(tm)strftime(s,sizeof(s),"%d.%m %H:%M:%S",tm);else snprintf(s,sizeof(s),"—");}else snprintf(s,sizeof(s),"—");text(u.history_rows[i][1],s);
         elapsed(s,sizeof(s),r->duration_s);text(u.history_rows[i][2],s);snprintf(s,sizeof(s),"%" PRIu64,r->rows);text(u.history_rows[i][3],s);text(u.history_rows[i][4],r->media_mask==3?"SD · USB":r->media_mask==1?"SD":r->media_mask==2?"USB":"—");text(u.history_rows[i][5],r->closed_ok?"✓ закрыт":"⚠ не закрыт");role(u.history_rows[i][5],r->closed_ok?OK:WARN);
     }
-    hide(u.history_rows[4][0],u.state.recent_known&&count>0);text(u.history_rows[4][0],u.state.recent_known?"Записей в текущем сеансе нет":"— / данных истории нет");
+    hide(u.history_rows[4][0],u.state.recent_known&&count>0);text(u.history_rows[4][0],u.state.recent_known?"Записей в текущем сеансе пока нет":"История записей появится после подключения носителя");
 }
 static void update_measure(void){
     const tab5_ui_state_t *s=&u.state;char b[360],d[40];bool any=s->measurement.sensor[0].valid||s->measurement.sensor[1].valid,both=s->measurement.sensor[0].valid&&s->measurement.sensor[1].valid;
@@ -430,13 +460,13 @@ static void update_measure(void){
     if(!any){text(u.hero_title,"Нет датчиков");text(u.hero_sub,"проверьте питание и RS485");}
     else if(s->recording){elapsed(d,sizeof(d),duration());snprintf(b,sizeof(b),"Запись · %s",s->rec_known?d:"—");text(u.hero_title,b);snprintf(b,sizeof(b),"%s · %" PRIu64 " строк · %s",s->rec_known?s->rec_file:"файл —",s->sd.recording?s->sd.written:s->usb.written,s->sd.recording&&s->usb.recording?"SD и USB":s->sd.recording?"SD":s->usb.recording?"USB":"носители —");text(u.hero_sub,b);}
     else {text(u.hero_title,s->measurement.stable?"Покой":fill<s->measurement.config.roll_window_s?"Накопление":"Качка");snprintf(b,sizeof(b),"%s · размах %.2f° · порог %.2f° · окно %u/%u с",s->measurement.stable?"можно снимать отсчёт":"дождитесь покоя",(double)roll,(double)s->measurement.config.roll_calm_deg,fill,s->measurement.config.roll_window_s);text(u.hero_sub,b);}
-    lv_obj_set_style_bg_color(u.hero_dot,lv_color_hex(!any?u.err:s->recording?0xFF5A5F:s->measurement.stable?0xB8E039:u.warn),0);
+    {uint32_t dc=!any?u.err:s->recording?0xFF5A5F:s->measurement.stable?0xB8E039:0xF2B84B;lv_obj_set_style_bg_color(u.hero_dot,lv_color_hex(dc),0);lv_obj_set_style_outline_color(u.hero_dot,lv_color_hex(dc),0);}
     for(unsigned i=0;i<2;i++){
         hide(u.hero_kpi[i],s->recording&&i==1);hide(u.hero_key[i],s->recording&&i==1);
         text(u.hero_key[i],s->recording?"Состояние":i?"Д2 − Д3 по Y":"Д2 − Д3 по X");
         if(s->recording)snprintf(b,sizeof(b),s->measurement.stable?"ПОКОЙ":"КАЧКА %.2f°",(double)roll);
         else if(both){float v=i?s->measurement.sensor[0].y-s->measurement.sensor[1].y:s->measurement.sensor[0].x-s->measurement.sensor[1].x;snprintf(b,sizeof(b),"%s%.2f°",v<0?"−":"+",fabsf(v));}else snprintf(b,sizeof(b),"—");
-        lv_point_t kp;lv_text_get_size(&kp,b,F28,0,0,LV_COORD_MAX,LV_TEXT_FLAG_NONE);lv_obj_set_style_text_font(u.hero_kpi[i],!s->recording&&kp.x>126?F20:F28,0);text(u.hero_kpi[i],b);lv_obj_set_width(u.hero_kpi[i],s->recording?292:126);
+        lv_point_t kp;lv_text_get_size(&kp,b,F32,0,0,LV_COORD_MAX,LV_TEXT_FLAG_NONE);lv_obj_set_style_text_font(u.hero_kpi[i],!s->recording&&kp.x>126?F20:F32,0);text(u.hero_kpi[i],b);lv_obj_set_width(u.hero_kpi[i],s->recording?292:126);
     }
     const char *errors[]={"нет","таймаут","CRC","кадр","исключение","ввод-вывод"};
     for(unsigned i=0;i<2;i++){
@@ -452,7 +482,10 @@ static void update_measure(void){
     for(int i=0;i<4;i++){nonzero|=fabsf(zero[i])>.000001;changed|=fabsf(zero[i]-u.zero[i])>.000001;u.zero[i]=zero[i];}
     if(u.zero_seen&&changed){u.zero_time_known=s->datetime_known;if(u.zero_time_known)snprintf(u.zero_time,sizeof(u.zero_time),"%02u:%02u",s->datetime.hour,s->datetime.minute);}u.zero_seen=true;
     if(nonzero)snprintf(b,sizeof(b),"задан %s",u.zero_time_known?u.zero_time:"—");else snprintf(b,sizeof(b),"не задан");text(u.zero_chip,b);role(u.zero_chip,nonzero?INFO:NEUTRAL);
-    const tab5_ui_medium_t *media[]={&s->sd,&s->usb};for(unsigned i=0;i<2;i++){if(media[i]->known&&media[i]->recording)snprintf(b,sizeof(b),"%s · %" PRIu64 " строк",i?"USB":"microSD",media[i]->written);else if(s->capacity[i].known)snprintf(b,sizeof(b),"%s · %.2f ГБ",i?"USB":"microSD",s->capacity[i].free_bytes/1073741824.);else snprintf(b,sizeof(b),"%s · %s",i?"USB":"microSD",medium_status(media[i]));text(u.storage_lines[i],b);}
+    const tab5_ui_medium_t *media[]={&s->sd,&s->usb};for(unsigned i=0;i<2;i++){const tab5_ui_medium_t *m=media[i];text(u.storage_lines[i],i?"USB":"microSD");
+        if(m->known&&m->recording)snprintf(b,sizeof(b),"%" PRIu64 " строк",m->written);else if(m->known&&m->mounted&&!m->failed&&s->capacity[i].known)snprintf(b,sizeof(b),"готов · %.1f ГБ",s->capacity[i].free_bytes/1073741824.);
+        else snprintf(b,sizeof(b),"%s",!m->known?"данных нет":m->failed?"ошибка":m->mounted?"готов":"не подключён");text(u.storage_detail[i],b);
+        lv_obj_set_style_bg_color(u.storage_dot[i],lv_color_hex(!m->known?u.muted:m->failed?u.err:m->recording?0xFF5A5F:m->mounted?u.ok:u.muted),0);}
     text(u.storage_lines[2],s->sd.recording&&s->usb.recording?"пишутся оба носителя":s->sd.recording?"пишется только SD":s->usb.recording?"пишется только USB":"запись выключена");
     snprintf(b,sizeof(b),"AP %s",s->link.known&&s->link.ap_started?s->link.ap_ip:"—");text(u.network_lines[0],b);text(u.network_lines[1],!s->link.known?"STA —":s->link.sta_connected?"STA подключено":"STA отключено");if(s->tcp_clients_known)snprintf(b,sizeof(b),"TCP %u · клиентов %u",s->link.tcp_port,s->tcp_clients);else snprintf(b,sizeof(b),"TCP %u · клиентов —",s->link.tcp_port);text(u.network_lines[2],b);hide(u.pc_chip,!s->tcp_clients_known||!s->tcp_clients);
     if(!s->clock.known)snprintf(b,sizeof(b),"данных нет");else if(s->clock.battery_present&&isfinite(s->clock.battery_v))snprintf(b,sizeof(b),"батарея %.2f В",(double)s->clock.battery_v);else snprintf(b,sizeof(b),"внешнее питание");text(u.power_lines[0],b);lv_obj_set_style_text_letter_space(u.power_lines[1],-1,0);text(u.power_lines[1],!s->clock.known?"—":s->clock.battery_present?"":"аккумулятора нет");text(u.power_lines[2],!s->clock.known?"часы: —":s->clock.time_valid?"часы установлены":"установите часы");
@@ -494,7 +527,7 @@ void tab5_ui_update(const tab5_ui_state_t *s){
     if(!u.net_dirty&&!u.net_pending&&u.modal_kind!=2)u.net_draft=state.network;
     refresh_settings();refresh_network();
     for(unsigned i=0;i<2;i++){
-        role(u.theme_btn[i],state.light_theme==(i==0)?PRIMARY:FRAME);
+        role(u.theme_btn[i],state.light_theme==(i==0)?PRIMARY:DIM);
         lv_obj_set_style_bg_color(u.net_switch[i],lv_color_hex(u.action),LV_PART_INDICATOR|LV_STATE_CHECKED);lv_obj_set_style_bg_color(u.net_switch[i],lv_color_hex(u.light?0xFFFFFF:0x0B1733),LV_PART_KNOB);
         text(u.net_address[i],!state.link.known?"—":i?(state.link.sta_connected?state.link.sta_ip:"—"):(state.link.ap_started?state.link.ap_ip:"—"));bool on=state.link.known&&(i?state.link.sta_connected:state.link.ap_started);text(u.net_chip[i],on?(i?"✓ подключено":"✓ работает"):"—");role(u.net_chip[i],on?OK:NEUTRAL);
     }

@@ -119,7 +119,7 @@ int main(int argc,char **argv){
             tab5_ui_update(&s);
         }
         SHOT("chart");
-        for(unsigned j=0;j<2;j++){s.measurement.sensor[j].x=j?-.39f:-.42f;s.measurement.sensor[j].y=j?1.41f:1.37f;}fresh(&s);nav(2);SHOT("recording");assert(find_label(lv_screen_active(),"— / данных истории нет"));nav(3);SHOT("settings");nav(4);SHOT("network");
+        for(unsigned j=0;j<2;j++){s.measurement.sensor[j].x=j?-.39f:-.42f;s.measurement.sensor[j].y=j?1.41f:1.37f;}fresh(&s);nav(2);SHOT("recording");assert(find_label(lv_screen_active(),"История записей появится после подключения носителя"));nav(3);SHOT("settings");nav(4);SHOT("network");
         printf("Five native pages ready: %s\n",tag);
         nav(3);unsigned hold_before=callbacks;point=(lv_point_t){635,200};pressed=true;for(unsigned hold=0;hold<5;hold++)pump();pressed=false;pump();assert(callbacks==hold_before);tap(1140,52);assert(last.kind==TAB5_UI_SETTINGS&&last.config.frequency_hz>21);s.measurement.config=last.config;fresh(&s);SHOT("settings_longpress");
         click(theme?"Тёмная":"Светлая");assert(last.kind==TAB5_UI_SETTINGS&&last.light_theme!=s.light_theme);s.light_theme=last.light_theme;fresh(&s);click(theme?"Светлая":"Тёмная");s.light_theme=last.light_theme;fresh(&s);
