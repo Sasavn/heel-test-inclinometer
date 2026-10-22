@@ -152,6 +152,50 @@ static void graph_idle_regression(unsigned theme){
     printf("GRAPH_CHANGE theme=%u range/legend/theme/fresh samples: PASS\n",theme);
     tab5_ui_destroy();
 }
+/* Check actual font advances and flushes, not only label strings. */
+static void resource_labels(const char *cpu,const char *ram,const char *ps){
+    const char *expected[]={cpu,ram,ps};
+    for(unsigned i=0;i<3;i++){
+        lv_obj_t *o=find_label(lv_screen_active(),expected[i]);assert(o);
+        lv_area_t a;lv_obj_get_coords(o,&a);
+        assert(a.x1==2&&a.x2==101&&a.y1==550+(int)i*28&&a.y2==573+(int)i*28);
+        assert(lv_obj_get_style_text_align(o,0)==LV_TEXT_ALIGN_CENTER);
+        const lv_font_t *f=lv_obj_get_style_text_font(o,0);assert(f->line_height<=24);
+        lv_point_t size;lv_text_get_size(&size,expected[i],f,0,0,LV_COORD_MAX,LV_TEXT_FLAG_NONE);
+        assert(size.x<=lv_obj_get_width(o)&&size.y<=lv_obj_get_height(o));
+        fprintf(report,"RESOURCE %s bounds=(%d,%d)-(%d,%d) glyph=%dx%d\n",expected[i],a.x1,a.y1,a.x2,a.y2,size.x,size.y);
+    }
+}
+static void resources_regression(tab5_ui_state_t *s,unsigned theme){
+    char name[80];const char *tag=theme?"light":"dark";
+    expect_rect(0,654,104,34);expect_rect(32,690,70,24);
+    resource_labels("ЦП —","ОЗУ —","PS —");
+    snprintf(name,sizeof(name),"resources_unknown_%s",tag);capture(name);
+    s->cpu_known=s->resources_known=true;s->cpu_load_pct=100;
+    s->ram_used_bytes=s->ram_total_bytes=UINT32_MAX;
+    s->psram_used_bytes=s->psram_total_bytes=UINT32_MAX;
+    pump();flushes=flushed_pixels=refreshes=0;tab5_ui_update(s);pump();assert(flushes&&flushed_pixels);
+    resource_labels("ЦП 100%","ОЗУ 100%","PS 100%");
+    snprintf(name,sizeof(name),"resources_100_%s",tag);capture(name);
+    flushes=flushed_pixels=refreshes=0;
+    for(unsigned i=0;i<20;i++){tab5_ui_update(s);pump();}
+    assert(!flushes&&!flushed_pixels&&!refreshes);
+    /* Different byte counts with the same displayed percent also stay idle. */
+    s->ram_total_bytes=1000;s->ram_used_bytes=1000;tab5_ui_update(s);pump();assert(!flushes);
+    s->cpu_load_pct=255;s->ram_used_bytes=2000;tab5_ui_update(s);pump();assert(!flushes);
+    s->cpu_known=false;s->ram_total_bytes=0;tab5_ui_update(s);pump();
+    resource_labels("ЦП —","ОЗУ —","PS 100%");
+    s->cpu_known=true;s->resources_known=false;s->cpu_load_pct=0;tab5_ui_update(s);pump();
+    resource_labels("ЦП 0%","ОЗУ —","PS —");
+    s->resources_known=true;s->cpu_load_pct=12;s->ram_total_bytes=1000;s->ram_used_bytes=480;
+    s->psram_total_bytes=1000;s->psram_used_bytes=80;
+    flushes=0;tab5_ui_update(s);pump();assert(flushes);resource_labels("ЦП 12%","ОЗУ 48%","PS 8%");
+    snprintf(name,sizeof(name),"resources_dashboard_%s",tag);capture(name);
+    flushes=flushed_pixels=refreshes=0;
+    for(unsigned i=0;i<20;i++){tab5_ui_update(s);pump();}
+    assert(!flushes&&!flushed_pixels&&!refreshes);
+    printf("RESOURCES theme=%u unknown/zero/100/clamp/geometry/change/idle: PASS\n",theme);
+}
 int main(int argc,char **argv){
     assert(argc==2);output=argv[1];setbuf(stdout,NULL);setbuf(stderr,NULL);char path[1024];snprintf(path,sizeof(path),"%s/geometry.txt",output);report=fopen(path,"w");assert(report);setbuf(report,NULL);
     lv_init();display=lv_display_create(1280,720);lv_display_set_color_format(display,LV_COLOR_FORMAT_XRGB8888);lv_display_set_flush_cb(display,flush);lv_display_set_buffers(display,drawbuf,NULL,sizeof(drawbuf),LV_DISPLAY_RENDER_MODE_PARTIAL);
@@ -165,7 +209,7 @@ int main(int argc,char **argv){
         for(unsigned i=0;i<2;i++)s.measurement.sensor[i]=(tab5_measure_sensor_t){.valid=true,.x=i?-.39f:-.42f,.y=i?1.41f:1.37f,.roll_x=i?.12f:.14f,.roll_y=i?.06f:.05f,.calm_x=true,.calm_y=true,.good=1,.timestamp_us=s.now_us,.roll_fill_s=20};s.measurement.stable=true;
         fresh(&s);char name[120];const char *tag=theme?"light":"dark";
         #define SHOT(stage) do{snprintf(name,sizeof(name),"%s_%s",stage,tag);capture(name);}while(0)
-        SHOT("dashboard");idle_regression(&s,theme);assert(find_label(lv_screen_active(),"Ноль датчиков"));assert(find_label(lv_screen_active(),"14:32"));
+        resources_regression(&s,theme);SHOT("dashboard");idle_regression(&s,theme);assert(find_label(lv_screen_active(),"Ноль датчиков"));assert(find_label(lv_screen_active(),"14:32"));
         nav(1);
         for(unsigned i=0;i<250;i++){
             s.now_us+=500000;

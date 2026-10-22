@@ -25,7 +25,7 @@ enum {MEASURE,GRAPH,RECORD,SETTINGS,NETWORK};
 enum {A_START=1,A_ZERO,A_RESET,A_APPLY,A_CANCEL,A_REVEAL,A_NET_APPLY,A_LIGHT,A_DARK,A_TIME,A_NUM_OK,A_MODAL_CANCEL,A_CONFIRM,A_DISCARD,A_STAY,A_LANG,A_TEXT_OK,A_TIME_OK,A_NOTICE_CLOSE};
 static struct {
     lv_obj_t *notice,*notice_text;char last_notice[160];
-    lv_obj_t *root,*rail,*pages[5],*nav[5],*selected[5],*badge,*rail_time,*rail_power;
+    lv_obj_t *root,*rail,*pages[5],*nav[5],*selected[5],*badge,*rail_time,*rail_power,*rail_resources[3];
     lv_style_t style[STYLE_COUNT];bool styles_ready,light;
     uint32_t bg,card,alt,frame,border,text,dim,muted,navc,navsel,action,actiontext,ok,warn,err,info,okbg,warnbg,errbg,infobg,sensor[2];
     lv_obj_t *hero,*hero_date,*hero_title,*hero_sub,*hero_dot,*hero_kpi[2],*hero_key[2],*start[2];
@@ -448,6 +448,11 @@ void tab5_ui_init(tab5_ui_action_cb_t cb,void *user){
     const char *names[]={"Измерения","График","Запись","Настройки","Сеть"};
     for(unsigned i=0;i<5;i++){u.nav[i]=button(u.rail,"",0,88+i*88,104,88,NAV,100+i);lv_obj_delete(lv_obj_get_child(u.nav[i],0));icon(u.nav[i],i,36,16,32,NAVTEXT);lv_obj_t *l=label(u.nav[i],names[i],0,56,104,24,F16,NAVTEXT);lv_obj_set_style_text_align(l,LV_TEXT_ALIGN_CENTER,0);u.selected[i]=box(u.nav[i],0,14,5,60,ORANGE);lv_obj_set_style_radius(u.selected[i],3,0);}
     u.badge=box(u.nav[0],68,14,12,12,RED);lv_obj_set_style_radius(u.badge,6,0);
+    const char *resources[]={"ЦП —","ОЗУ —","PS —"};
+    for(unsigned i=0;i<3;i++){
+        u.rail_resources[i]=label(u.rail,resources[i],2,550+i*28,100,24,F16,NAVMUTED);
+        lv_obj_set_style_text_align(u.rail_resources[i],LV_TEXT_ALIGN_CENTER,0);
+    }
     u.rail_time=label(u.rail,"—",0,654,104,34,F24,NAVTEXT);lv_obj_set_style_text_align(u.rail_time,LV_TEXT_ALIGN_CENTER,0);u.rail_power=label(u.rail,"—",32,690,70,24,F16,NAVMUTED);icon(u.rail,7,13,692,18,NAVMUTED);box(u.rail,0,640,104,1,NAVSEL);
     for(unsigned i=0;i<5;i++)u.pages[i]=box(u.root,120,16,1144,688,TEXT);
     build_measure();build_graph();build_record();build_settings();build_network();show_page(MEASURE);
@@ -571,6 +576,19 @@ void tab5_ui_update(const tab5_ui_state_t *s){
     char b[240];if(state.tcp_peer_known)snprintf(b,sizeof(b),"✓ клиент %s",state.tcp_peer);else if(state.tcp_clients_known)snprintf(b,sizeof(b),"клиентов %u · адрес —",state.tcp_clients);else snprintf(b,sizeof(b),"клиент: данных нет");text(u.tcp_chip,b);role(u.tcp_chip,state.tcp_clients_known&&state.tcp_clients?OK:NEUTRAL);
     if(state.link.known)snprintf(b,sizeof(b),"%s : %u",state.link.sta_connected?state.link.sta_ip:state.link.ap_started?state.link.ap_ip:"—",state.link.tcp_port);else snprintf(b,sizeof(b),"—");text(u.tcp_address,b);
     text(u.clock_text,state.clock.known&&state.clock.time_valid?state.clock.datetime:"Установите часы");text(u.panel_text,state.panel[0]?state.panel:"Экран: автоматический выбор");snprintf(b,sizeof(b),"Прошивка: %s",state.firmware[0]?state.firmware:"—");text(u.fw_text,b);
+    if(state.cpu_known)snprintf(b,sizeof(b),"ЦП %u%%",state.cpu_load_pct>100?100u:(unsigned)state.cpu_load_pct);
+    else snprintf(b,sizeof(b),"ЦП —");
+    text(u.rail_resources[0],b);
+    const uint32_t used[]={state.ram_used_bytes,state.psram_used_bytes};
+    const uint32_t total[]={state.ram_total_bytes,state.psram_total_bytes};
+    const char *resource_names[]={"ОЗУ","PS"};
+    for(unsigned i=0;i<2;i++){
+        if(state.resources_known&&total[i]){
+            unsigned pct=used[i]>=total[i]?100u:(unsigned)((uint64_t)used[i]*100/total[i]);
+            snprintf(b,sizeof(b),"%s %u%%",resource_names[i],pct);
+        }else snprintf(b,sizeof(b),"%s —",resource_names[i]);
+        text(u.rail_resources[i+1],b);
+    }
     if(state.datetime_known)snprintf(b,sizeof(b),"%02u:%02u",state.datetime.hour,state.datetime.minute);else snprintf(b,sizeof(b),"—");text(u.rail_time,b);text(u.rail_power,!state.clock.known?"—":state.clock.battery_present?"батарея":"внешнее");
     for(unsigned i=0;i<2;i++){caption(u.start[i],state.recording?"■ Стоп записи":"● Старт записи");role(u.start[i],state.recording?RED:ORANGE);}
     uint64_t now=state.now_known?state.now_us:(uint64_t)lv_tick_get()*1000;if(!u.rendered||now<u.render_us||now-u.render_us>=100000){update_measure();if(u.page==RECORD)update_record();if(u.page==GRAPH)chart_refresh();u.rendered=true;u.render_us=now;}

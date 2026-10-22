@@ -4,6 +4,7 @@
 #include "tab5_services.h"
 #include "tab5_panel.h"
 #include "tab5_time.h"
+#include "tab5_resources.h"
 #include "bsp/esp-bsp.h"
 #include "driver/usb_serial_jtag.h"
 #include "esp_chip_info.h"
@@ -13,6 +14,7 @@
 #include "esp_system.h"
 #include "esp_ota_ops.h"
 #include "esp_timer.h"
+#include "esp_heap_caps.h"
 #include "nvs_flash.h"
 #include "nvs.h"
 #include "cJSON.h"
@@ -46,6 +48,33 @@ static tab5_ui_action_kind_t ui_result_kind;
 static bool ui_result_success;
 static float battery = NAN;
 static char notice[160]="Прибор готов. Перед записью установите часы";
+
+static struct {
+    bool known,cpu_known;
+    unsigned cpu;
+    uint32_t idle[configNUMBER_OF_CORES];
+    uint64_t at;
+    size_t ram_used,ram_total,psram_used,psram_total;
+} resources;
+/* Main and status hold app_mutex. No task enumeration or per-update allocation. */
+static void resources_refresh(uint64_t now) {
+    uint64_t dt=now-resources.at;
+    if(resources.known&&dt<1000000)return;
+    uint64_t idle_delta=0;
+    for(unsigned core=0;core<configNUMBER_OF_CORES;core++){
+        uint32_t idle=(uint32_t)ulTaskGetIdleRunTimeCounterForCore(core);
+        idle_delta+=(uint32_t)(idle-resources.idle[core]);resources.idle[core]=idle;
+    }
+    resources.cpu_known=resources.known&&dt>0&&dt<=UINT32_MAX;
+    if(resources.cpu_known)resources.cpu=tab5_cpu_busy_pct(dt,idle_delta,configNUMBER_OF_CORES);
+    resources.ram_total=heap_caps_get_total_size(MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT);
+    size_t free_ram=heap_caps_get_free_size(MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT);
+    resources.ram_used=free_ram<resources.ram_total?resources.ram_total-free_ram:0;
+    resources.psram_total=heap_caps_get_total_size(MALLOC_CAP_SPIRAM);
+    size_t free_psram=heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
+    resources.psram_used=free_psram<resources.psram_total?resources.psram_total-free_psram:0;
+    resources.at=now;resources.known=true;
+}
 
 /* Wall times, not CPU utilization. Display events run in the LVGL task;
  * protocol reads/reset run in another task, hence the short critical sections. */
@@ -177,7 +206,10 @@ static void status(tab5_service_reply_fn reply,void *ctx) {
     cJSON_AddNumberToObject(j,"gap",s.config.gap_ms);cJSON_AddStringToObject(j,"theme",light_theme?"light":"dark");
     cJSON_AddNumberToObject(j,"rollwin",s.config.roll_window_s);cJSON_AddNumberToObject(j,"rollhz",s.config.roll_rate_hz);
     cJSON_AddNumberToObject(j,"rollcalm",s.config.roll_calm_deg);cJSON_AddNumberToObject(j,"rollhyst",s.config.roll_hysteresis_deg);
-    cJSON_AddNullToObject(j,"cpu");cJSON_AddNullToObject(j,"rate");
+    if(resources.cpu_known)cJSON_AddNumberToObject(j,"cpu",resources.cpu);else cJSON_AddNullToObject(j,"cpu");
+    cJSON_AddNullToObject(j,"rate");
+    cJSON *memory=cJSON_AddObjectToObject(j,"memory");
+    if(resources.known){cJSON_AddNumberToObject(memory,"ram_used",resources.ram_used);cJSON_AddNumberToObject(memory,"ram_total",resources.ram_total);cJSON_AddNumberToObject(memory,"psram_used",resources.psram_used);cJSON_AddNumberToObject(memory,"psram_total",resources.psram_total);}
     cJSON *a=cJSON_AddArrayToObject(j,"sens");
     for(unsigned i=0;i<2;i++){
         const tab5_measure_sensor_t *p=&s.sensor[i];cJSON *d=cJSON_CreateObject();cJSON_AddItemToArray(a,d);
@@ -334,9 +366,12 @@ void app_main(void) {
                 ui_result_success=false;ui_result_kind=a.kind;ui_result_serial++;
                 if(tab5_services_network_configure(&next)==ESP_OK){network=next;ui_result_success=persist();
                     if(ui_result_success)snprintf(notice,sizeof(notice),"Настройки сети применены");}else snprintf(notice,sizeof(notice),"Настройки сети не применены");}}
-        uint64_t now=esp_timer_get_time();if(now-last_battery>=1000000){battery=tab5_board_battery();last_battery=now;
+        uint64_t now=esp_timer_get_time();resources_refresh(now);if(now-last_battery>=1000000){battery=tab5_board_battery();last_battery=now;
             xSemaphoreTake(route_mutex,portMAX_DELAY);route_battery=battery;xSemaphoreGive(route_mutex);}
         tab5_ui_state_t ui={.recording=recording,.light_theme=light_theme};tab5_measure_snapshot(&ui.measurement);
+        ui.resources_known=resources.known;ui.cpu_known=resources.cpu_known;ui.cpu_load_pct=resources.cpu;
+        ui.ram_used_bytes=resources.ram_used;ui.ram_total_bytes=resources.ram_total;
+        ui.psram_used_bytes=resources.psram_used;ui.psram_total_bytes=resources.psram_total;
         ui.action_result_known=ui_result_serial!=0;ui.action_result_serial=ui_result_serial;
         ui.action_result_kind=ui_result_kind;ui.action_result_success=ui_result_success;
         ui.now_known=true;ui.now_us=now;ui.rec_known=true;ui.rec_started_us=record_start_us;

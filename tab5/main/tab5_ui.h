@@ -89,6 +89,12 @@ typedef struct {
     uint32_t action_result_serial;
     tab5_ui_action_kind_t action_result_kind;
     bool action_result_success;
+    /* CPU: backend average across both cores, 0..100. Memory: internal heap
+     * and PSRAM separately. A zero total is unknown even when resources_known. */
+    bool resources_known, cpu_known;
+    uint8_t cpu_load_pct;
+    uint32_t ram_used_bytes, ram_total_bytes;
+    uint32_t psram_used_bytes, psram_total_bytes;
 } tab5_ui_state_t;
 /* All calls require BSP LVGL lock (or the LVGL thread). Display already started
  * and rotated to 1280x720 by main. No task or display created here; a short-lived stepper repeat timer is UI-owned.

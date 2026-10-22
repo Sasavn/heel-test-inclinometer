@@ -1,13 +1,11 @@
-# Tab5: ускорение 22.10.2026
+# Tab5: индикаторы ресурсов 22.10.2026
 
-Firmware **1.6.3-esp32** записана на P4 revision103/ST7121 через USB.
-ROM MD5:4/4, NVS сохранена, boot_confirmed=true, uptime167с.
-Главная страница: средний измеренный refresh **116.2 → 15.3мс**;
-подготовка UI **18.1 → 2.7мс**. PPA и performance optimization включены;
-повторные invalidation dashboard/graph устранены.76 native-снимков без отличий.
-RTC и AP работают; реальные измерения и запись пока не подтверждены.
-Два IDF-профиля и28 actual-image mock-прогонов прошли; аппаратно проверен103.
+Firmware **1.6.4-esp32** прошита на P4revision103/ST7121.
+ЦП/ОЗУ/PS внизу слева, обновление1Гц; CPU по idle runtime обоих ядер,
+внутренний heap и PSRAM раздельно. Аппаратные значения получены по USB,
+uptime75→81с, boot_confirmed=true,4/4 ROM-MD5.
+Частота5Гц/темаdark сохранены; оба датчика отвечают, SD READY, запись не включалась.
+82 native-сценария/0 geometry errors, оба IDF-профиля и28 actual-image mock-прогонов PASS.
 
-[Замеры и ограничения](PERFORMANCE_2026-10-22.md),
-[первый аппаратный запуск](HARDWARE_2026-10-22.md).
-STM32, PC production, математика и services не изменены. Публикации не было.
+[Ресурсы](RESOURCES_2026-10-22.md), [ускорение1.6.3](PERFORMANCE_2026-10-22.md),
+[первый запуск](HARDWARE_2026-10-22.md). Публикации не было.

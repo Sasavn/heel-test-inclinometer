@@ -1,0 +1,198 @@
+{
+  "version": "1.6.4-esp32",
+  "app_sha256": "c34447f12447960e3afd4d4f370ea3693779339cfca317988af6dfedcc9ca387",
+  "chip_revision": 103,
+  "boot_confirmed": true,
+  "verified_parts": 4,
+  "task_removed": true,
+  "samples": [
+    {
+      "up": 75,
+      "cpu": 27,
+      "memory": {
+        "ram_used": 405460,
+        "ram_total": 435111,
+        "psram_used": 2586156,
+        "psram_total": 33554432
+      },
+      "freq": 5,
+      "theme": "dark",
+      "sensors": [
+        {
+          "addr": 2,
+          "st": "OK",
+          "ok": 363,
+          "err": 10
+        },
+        {
+          "addr": 3,
+          "st": "OK",
+          "ok": 368,
+          "err": 5
+        }
+      ],
+      "sd": "REC",
+      "rec_sw": true
+    },
+    {
+      "up": 77,
+      "cpu": 28,
+      "memory": {
+        "ram_used": 405252,
+        "ram_total": 435111,
+        "psram_used": 2586156,
+        "psram_total": 33554432
+      },
+      "freq": 5,
+      "theme": "dark",
+      "sensors": [
+        {
+          "addr": 2,
+          "st": "OK",
+          "ok": 371,
+          "err": 10
+        },
+        {
+          "addr": 3,
+          "st": "OK",
+          "ok": 376,
+          "err": 5
+        }
+      ],
+      "sd": "REC",
+      "rec_sw": true
+    },
+    {
+      "up": 78,
+      "cpu": 27,
+      "memory": {
+        "ram_used": 405252,
+        "ram_total": 435111,
+        "psram_used": 2586156,
+        "psram_total": 33554432
+      },
+      "freq": 5,
+      "theme": "dark",
+      "sensors": [
+        {
+          "addr": 2,
+          "st": "OK",
+          "ok": 379,
+          "err": 10
+        },
+        {
+          "addr": 3,
+          "st": "OK",
+          "ok": 384,
+          "err": 5
+        }
+      ],
+      "sd": "REC",
+      "rec_sw": true
+    },
+    {
+      "up": 80,
+      "cpu": 29,
+      "memory": {
+        "ram_used": 405460,
+        "ram_total": 435111,
+        "psram_used": 2586156,
+        "psram_total": 33554432
+      },
+      "freq": 5,
+      "theme": "dark",
+      "sensors": [
+        {
+          "addr": 2,
+          "st": "OK",
+          "ok": 387,
+          "err": 10
+        },
+        {
+          "addr": 3,
+          "st": "OK",
+          "ok": 392,
+          "err": 5
+        }
+      ],
+      "sd": "REC",
+      "rec_sw": true
+    },
+    {
+      "up": 81,
+      "cpu": 27,
+      "memory": {
+        "ram_used": 405460,
+        "ram_total": 435111,
+        "psram_used": 2586156,
+        "psram_total": 33554432
+      },
+      "freq": 5,
+      "theme": "dark",
+      "sensors": [
+        {
+          "addr": 2,
+          "st": "OK",
+          "ok": 395,
+          "err": 10
+        },
+        {
+          "addr": 3,
+          "st": "OK",
+          "ok": 399,
+          "err": 5
+        }
+      ],
+      "sd": "REC",
+      "rec_sw": true
+    }
+  ],
+  "perf": {
+    "elapsed_ms": 7869,
+    "updates": 66,
+    "update_us": 194934,
+    "renders": 67,
+    "render_us": 5098859,
+    "flushes": 515,
+    "flush_us": 1988074,
+    "refreshes": 67,
+    "refresh_us": 5103828,
+    "refresh_max_us": 157173,
+    "lock_misses": 8,
+    "ppa": true,
+    "reset_reason": 11
+  },
+  "packages": [
+    {
+      "version": "1.6.4-esp32",
+      "sha256": "c34447f12447960e3afd4d4f370ea3693779339cfca317988af6dfedcc9ca387",
+      "size": 1704144,
+      "revision_min": 100,
+      "revision_max": 199
+    },
+    {
+      "version": "1.6.4-esp32",
+      "sha256": "80a962ace1774846674c33c04fa3263600afc5f0f9a4e6cedeac5a26ae576473",
+      "size": 1706272,
+      "revision_min": 300,
+      "revision_max": 399
+    }
+  ],
+  "native_ui": {
+    "cases": 82,
+    "callbacks": 30,
+    "geometry_failures": 0
+  },
+  "metric_definitions": {
+    "cpu": "one-second mean busy percentage over both cores, FreeRTOS idle runtime deltas",
+    "ram": "allocated INTERNAL|8BIT heap; excludes static non-heap regions",
+    "psram": "allocated SPIRAM heap"
+  },
+  "source_sha256": {
+    "tab5/main/main.c": "259660f7bc4dd4a52815ed14311e08eb437647301f76baf5700d2eae79266f5a",
+    "tab5/main/tab5_ui.c": "0ff57fc2eaab27353f21143935004ba5152efd8b234a13e1bf26d2071c3eb9c1",
+    "tab5/main/tab5_ui.h": "a0d05fc3f2579c6b7cd738d29c1b933a03f48a604d075f5e8eed302b438184c7",
+    "tab5/main/tab5_resources.h": "c6c661d04c10b34975c3af5656c6648d23ad10a4f2607e372acd040b634bc691",
+    "tab5/sdkconfig.defaults": "34e253a8fa95a989a7186743a13e17c19aa9b4181508021d78aae7486ebc1bdb"
+  }
+}
