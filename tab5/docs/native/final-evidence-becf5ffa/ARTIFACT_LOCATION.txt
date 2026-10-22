@@ -1,0 +1,2 @@
+C:\Projects\ClaudeExp\diplom_project_tab5\.tools\native-opt\final-pack\20261022-231053-becf5ffae692
+Run verify_final_pack.py in the original artifact directory; source/captures stay there.

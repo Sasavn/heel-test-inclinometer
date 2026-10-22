@@ -3,12 +3,16 @@
 The frozen snapshot's run_ui_test.py belongs to the LVGL reference suite.
 The working tree's legacy test entry points delegate to this native suite.
 This entry point compiles main/native/native_ui.c, production UI and real fonts.
-Default outputs and object cache live under ignored .tools/native-after.
+Optimization outputs/cache live under ignored .tools/native-opt/after.
+Accepted native v1 is immutable; all 98 decoded RGB frames must match exactly.
+Use --opt-group for isolated probes; full suite runs are reserved for gates.
 
 Usage: python tab5/tests/run_native_ui_test.py [--baseline BASELINE_FRAMES]
 Use --prepare-reference once to emit and validate exact reference manifests
 from the frozen 369c7fc snapshot, without editing that snapshot. Default runs
-automatically use this probe only when its validation/hash matches.
+use the separately frozen accepted native v1 geometry and immutable RGB frames.
+--counter-mode equivalence runs diagnostic fine1 and release fine0 sequentially;
+both disable primitive timing and must pass the same 98-state fidelity gate.
 Baseline PNG names must match the original suite. Optional geometry_points.tsv
 uses rows: case,path,type,x1,y1,x2,y2,font,line_height,base_line,text_w,text_h,text_hex.
 textarea_points.tsv supplies actual semantic content records under /@text;
@@ -31,11 +35,81 @@ import time
 from PIL import Image, ImageChops, ImageDraw, ImageStat
 
 ROOT = Path(__file__).resolve().parents[2]
+PRIMARY_NATIVE_V1 = Path("C:/Projects/ClaudeExp/tab5-feedback/2026-10-22-native-opt/native-v1-reference/captures/native")
+
+
+def compare_native_v1(out, baseline, captures):
+    """Delivered immutable PNG hashes identify reference files; RGB bytes gate parity."""
+    index = baseline.parents[1] / "tab5/docs/native/frames.json"
+    if not index.exists():
+        raise ValueError(f"Missing immutable native v1 frame index: {index}")
+    manifest = json.loads(index.read_text(encoding="utf-8"))
+    expected = {r["name"]: r for r in manifest["frames"]}
+    if manifest["count"] != 98 or len(expected) != 98:
+        raise ValueError("Native v1 must contain the 98 accepted states")
+    actual = {p.name: p for p in captures}
+    result = {"reference": str(baseline), "reference_index_sha256": hashlib.sha256(index.read_bytes()).hexdigest(),
+              "accepted_commit": "c4cf2cf0410d89e588b908525a2ea288e18ebec1", "frames": [],
+              "missing": sorted(expected.keys()-actual.keys()), "unexpected": sorted(actual.keys()-expected.keys())}
+    for name, entry in expected.items():
+        ref = baseline / name
+        if hashlib.sha256(ref.read_bytes()).hexdigest() != entry["sha256"]:
+            raise ValueError(f"Immutable reference PNG changed: {name}")
+        if name not in actual:
+            continue
+        with Image.open(ref) as a, Image.open(actual[name]) as b:
+            a, b = a.convert("RGB"), b.convert("RGB")
+            row = {"name": name, "accepted_rgb_sha256": hashlib.sha256(a.tobytes()).hexdigest(),
+                   "optimized_rgb_sha256": hashlib.sha256(b.tobytes()).hexdigest()}
+            row["equal"] = a.size == b.size and row["accepted_rgb_sha256"] == row["optimized_rgb_sha256"]
+            if a.size == b.size and not row["equal"]:
+                delta = ImageChops.difference(a, b)
+                row["changed_pixels"] = sum(v != (0, 0, 0) for v in delta.getdata())
+                row["difference_bbox"] = delta.getbbox()
+                row["mean_absolute_channel_error"] = sum(ImageStat.Stat(delta).mean)/3
+            result["frames"].append(row)
+    result["status"] = "PASS" if not result["missing"] and not result["unexpected"] and len(result["frames"]) == 98 and all(r["equal"] for r in result["frames"]) else "FAIL"
+    (out / "native_v1_pixel_diff.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
+    return result
+
+
+def counter_mode_equivalence(args, out, baseline):
+    """Two real production renderer builds, identical fixture inputs and source hashes."""
+    statuses = {}
+    for mode in ("diagnostic", "release"):
+        command = [sys.executable, str(Path(__file__).resolve()), "--counter-mode", mode,
+                   "--out", str(out / mode), "--baseline", str(baseline),
+                   "--native-v1", str(args.native_v1.resolve()), "--benchmark-gate", str(args.benchmark_gate.resolve())]
+        if args.baseline_points:
+            command += ["--baseline-points", str(args.baseline_points.resolve())]
+        statuses[mode] = subprocess.run(command, check=False).returncode
+        if statuses[mode] != 0:
+            (out / "counter_mode_equivalence.json").write_text(json.dumps({"status": "FAIL", "runs": statuses}, indent=2), encoding="utf-8")
+            return statuses[mode]
+    runs = {mode: json.loads((out / mode / "run.json").read_text(encoding="utf-8")) for mode in statuses}
+    stable = runs["diagnostic"]["source_sha256"] == runs["release"]["source_sha256"] and runs["diagnostic"]["header_sha256"] == runs["release"]["header_sha256"]
+    names = set(runs["diagnostic"]["captures"]) | set(runs["release"]["captures"])
+    frames = []
+    for name in sorted(names):
+        paths = [out / mode / name for mode in statuses]
+        hashes = []
+        for path in paths:
+            with Image.open(path) as im:
+                hashes.append(hashlib.sha256(im.convert("RGB").tobytes()).hexdigest())
+        frames.append({"name": name, "diagnostic_rgb_sha256": hashes[0], "release_rgb_sha256": hashes[1], "equal": hashes[0] == hashes[1]})
+    v1_exact = all(r["native_v1_exact_rgb"] == "PASS" for r in runs.values())
+    passed = stable and v1_exact and len(frames) == 98 and all(r["equal"] for r in frames)
+    report = {"status": "PASS" if passed else "FAIL", "source_closure_identical": stable, "frames": frames,
+              "diagnostic_flags": runs["diagnostic"]["flags"], "release_flags": runs["release"]["flags"],
+              "both_modes_native_v1_exact_rgb": v1_exact}
+    (out / "counter_mode_equivalence.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
+    print(f"COUNTER MODE EQUIVALENCE {report['status']}: diagnostic fine1 / release fine0, timing0, {len(frames)} frames, identical source closure={stable}")
+    return 0 if passed else 1
 
 
 def compare_input_contracts(out):
     actual_path = out / "input_contracts.jsonl"
-    files = {kind: ROOT / f".tools/native-baseline/{kind}-defaults.json" for kind in ("keyboard", "textarea")}
+    files = {kind: ROOT / f".tools/accepted-v1/{kind}-defaults.json" for kind in ("keyboard", "textarea")}
     if not actual_path.exists() or any(not p.exists() for p in files.values()):
         return {"status": "unavailable", "missing": [str(p) for p in [actual_path, *files.values()] if not p.exists()]}
     records = [json.loads(line) for line in actual_path.read_text(encoding="utf-8").splitlines() if line.strip()]
@@ -132,7 +206,7 @@ static bool lv_buttonmatrix_get_button_area(lv_obj_t *k,unsigned i,lv_area_t *ou
     print(f"Frozen reference verified: {len(files)} exact captures; manifest {manifest}")
 
 
-def compare(out, baseline, captures, baseline_points=None, suite_returncode=0):
+def compare(out, baseline, captures, baseline_points=None, suite_returncode=0, native_v1=None):
     result = {"baseline": str(baseline), "captures": [], "missing_baseline": [],
               "missing_native": [], "geometry": {"status": "unavailable"},
               "suite_returncode": suite_returncode}
@@ -249,11 +323,15 @@ def compare(out, baseline, captures, baseline_points=None, suite_returncode=0):
                                                for (left, right), count in text_groups.most_common()]
     result["input_contracts"] = compare_input_contracts(out)
     result["automated_contracts_pass"] = suite_returncode == 0 and bool(result["captures"]) and not result["missing_baseline"] and not result["missing_native"] and all(c["status"] != "size_mismatch" for c in result["captures"]) and result["geometry"]["status"] == "equal" and result["input_contracts"]["status"] == "equal"
+    if native_v1 is not None:
+        result["native_v1_exact_rgb"] = native_v1["status"]
+        result["automated_contracts_pass"] = result["automated_contracts_pass"] and native_v1["status"] == "PASS"
     result["pixel_exact"] = bool(result["captures"]) and all(c["status"] == "equal" for c in result["captures"])
     result["exact_parity"] = result["automated_contracts_pass"] and result["pixel_exact"]
     result["automated_status"] = "PASS" if result["automated_contracts_pass"] else "FAIL"
-    result["manual_acceptance"] = {"status": "external_review", "automatic": False,
-        "policy": "Parent reviews visible differences and documented AA rounding. Numeric RGB diff is evidence, not a zero-pixel automated threshold."}
+    result["manual_acceptance"] = ({"status": "not_a_substitute_for_native_v1_exact_rgb", "automatic": False,
+        "policy": "Optimization stage requires exact decoded RGB vs accepted c4cf2cf v1. No new AA/manual waiver."} if native_v1 is not None else
+        {"status": "external_review", "automatic": False, "policy": "Legacy LVGL comparison is informational; optimization gate separately requires native v1 exact RGB."})
     result["exact_geometry_difference_count"] = len(result["geometry"].get("differences", [])) if result["geometry"]["status"] in ("equal", "different") else None
     (out / "pixel_diff.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
     lines = ["# Native RGB565 comparison", "", f"Baseline: {baseline}",
@@ -265,7 +343,8 @@ def compare(out, baseline, captures, baseline_points=None, suite_returncode=0):
              f"AUTOMATED CONTRACTS: {result['automated_status']}",
              f"Exact semantic geometry differences: {result['exact_geometry_difference_count']}",
              f"Pixel-exact identity (informational): {result['pixel_exact']}",
-             "Manual raster/AA acceptance: external parent review; never inferred from a numeric threshold", "",
+             f"Accepted native v1 exact RGB gate: {result.get('native_v1_exact_rgb', 'not checked in this diagnostic comparison')}",
+             "No manual/AA waiver applies to optimization-stage native v1 differences.", "",
              "| Capture | Changed pixels | Mean absolute channel error |", "|---|---:|---:|"]
     for item in result["captures"]:
         lines.append(f"| {item['name']} | {item.get('changed_pixels', item['status'])} | {item.get('mean_absolute_channel_error', '-')} |")
@@ -282,21 +361,36 @@ def compare(out, baseline, captures, baseline_points=None, suite_returncode=0):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--out", type=Path, default=ROOT / ".tools/native-after")
-    parser.add_argument("--baseline", type=Path, default=ROOT / ".tools/native-baseline/frames")
+    parser.add_argument("--out", type=Path, default=ROOT / ".tools/native-opt/after")
+    parser.add_argument("--baseline", type=Path, default=ROOT / ".tools/accepted-v1/frames", help="Frozen accepted native semantic/geometry reference; old LVGL baseline stays separate")
+    parser.add_argument("--native-v1", type=Path, default=PRIMARY_NATIVE_V1, help="Primary immutable delivered v1 captures; all 98 decoded RGB frames must match exactly")
+    parser.add_argument("--opt-group", choices=["press", "dirty", "cache-state", "lifetime", "cache-budget", "all"], help="Run isolated real renderer optimization probes instead of the full 98-state gate")
+    parser.add_argument("--benchmark-gate", type=Path, default=ROOT / ".tools/native-opt/BENCHMARK_GATE", help="If this marker exists, refuse build/run; parent owns timing gate")
+    parser.add_argument("--counter-mode", choices=["diagnostic", "release", "equivalence"], default="diagnostic", help="Explicit fine1 functional/probe assertions, fine0 release captures, or both exact-equivalence 98-state gates; detailed timing always OFF")
     parser.add_argument("--baseline-points", type=Path, help="Exact 13-column geometry/font manifest from frozen reference diagnostic probe")
     parser.add_argument("--prepare-reference", action="store_true", help="Generate geometry/font probe outside frozen snapshot and verify its 98 PNGs against baseline; does not build native")
     parser.add_argument("--bench-only", action="store_true")
     parser.add_argument("--rgb565", action="store_true", help="Compatibility flag: native always uses production RGB565")
     parser.add_argument("--compare-only", action="store_true", help="Compare existing captures; never compiles or executes")
-    parser.add_argument("--require-parity", action="store_true", help="Compatibility flag: exact geometry/semantic/input contracts are always required; RGB numeric differences remain separate manual evidence")
+    parser.add_argument("--require-parity", action="store_true", help="Compatibility flag: native-v1 exact RGB and exact geometry/semantic/input contracts are mandatory for this optimization stage")
     args = parser.parse_args()
     out, baseline = args.out.resolve(), args.baseline.resolve()
+    if args.benchmark_gate.exists() and not args.compare_only:
+        parser.error(f"Benchmark gate active: {args.benchmark_gate}; no build or test process started")
     if out == baseline or out.is_relative_to(baseline):
         parser.error("Output must be outside the frozen baseline")
+    for protected in (ROOT / ".tools/accepted-v1", ROOT / ".tools/native-baseline", args.native_v1.resolve().parents[1]):
+        if out == protected.resolve() or out.is_relative_to(protected.resolve()):
+            parser.error(f"Output must not modify immutable reference: {protected}")
     out.mkdir(parents=True, exist_ok=True)
+    if args.counter_mode == "equivalence":
+        if args.opt_group or args.bench_only or args.compare_only or args.prepare_reference:
+            parser.error("Counter equivalence is an explicit two-mode full gate, not an isolated probe/benchmark")
+        return counter_mode_equivalence(args, out, baseline)
+    if args.counter_mode == "release" and args.opt_group:
+        parser.error("Optimization primitive/cache probes require diagnostic fine1; release mode is capture equivalence only")
     if args.prepare_reference:
-        prepare_reference(out, baseline)
+        prepare_reference(out, ROOT / ".tools/native-baseline/frames")
         return 0
     if args.baseline_points is None and baseline == (ROOT / ".tools/native-baseline/frames").resolve():
         probe_dir = ROOT / ".tools/native-after/reference"
@@ -319,9 +413,14 @@ def main():
         sources += [ROOT / "tab5/main" / name for name in
                     ("tab5_ui.c", "tab5_measure.c", "tab5_ui_graph.c", "tab5_time.c", "tab5_plot.c", "tab5_level.c")]
         sources += sorted((ROOT / "tab5/main").glob("font_tab5_*.c"))
-        flags = ["-std=c11", "-O2", "-DNUI_COLOR_DEPTH=16", "-I"+str(ROOT / "tab5/main")]
+        flags = ["-std=c11", "-O2", "-DNUI_COLOR_DEPTH=16", "-DNUI_PROFILE_PRIMITIVE_TIMING=0",
+                 "-DNUI_PROFILE_FINE_COUNTERS="+("0" if args.counter_mode == "release" else "1"), "-I"+str(ROOT / "tab5/main")]
+        if args.counter_mode == "release":
+            flags.append("-DTAB5_RELEASE_CAPTURE_BUILD=1")
         if "nui_native_textarea_get_text_bounds" in native.with_suffix(".h").read_text(encoding="utf-8"):
             flags.append("-DNUI_TEST_HAS_TEXTAREA_BOUNDS=1")
+        if "shadow_cache_capacity_bytes" in native.with_suffix(".h").read_text(encoding="utf-8"):
+            flags.append("-DNUI_TEST_HAS_OPT_CACHE_STATS=1")
         headers = sorted((ROOT / "tab5/main").rglob("*.h"))
         source_hashes = {str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest() for p in sources}
         header_hashes = {p: hashlib.sha256(p.read_bytes()).hexdigest() for p in headers}
@@ -345,13 +444,17 @@ def main():
         subprocess.run([compiler, "@"+str(rsp)], check=True)
         if any(hashlib.sha256((ROOT / name).read_bytes()).hexdigest() != digest for name, digest in source_hashes.items()) or any(hashlib.sha256(path.read_bytes()).hexdigest() != digest for path, digest in header_hashes.items()):
             parser.error("Production sources changed during build; rerun once the renderer edits settle")
+        if args.benchmark_gate.exists():
+            parser.error("Benchmark gate became active during build; test executable was not started")
         env = os.environ.copy()
-        env.update(TAB5_TEST_RGB565="1", TAB5_TEST_BENCH_ONLY="1" if args.bench_only else "0")
+        env.update(TAB5_TEST_RGB565="1", TAB5_TEST_BENCH_ONLY="1" if args.bench_only else "0", TAB5_OPT_GROUP=args.opt_group or "")
         started = time.time_ns()
         result = subprocess.run([str(exe), str(out)], env=env, stdout=subprocess.PIPE,
                                 stderr=subprocess.STDOUT, timeout=180, check=False)
         (out / "native.log").write_bytes(result.stdout)
         print(result.stdout.decode("utf-8", errors="replace"), end="")
+        if any(hashlib.sha256((ROOT / name).read_bytes()).hexdigest() != digest for name, digest in source_hashes.items()) or any(hashlib.sha256(path.read_bytes()).hexdigest() != digest for path, digest in header_hashes.items()):
+            parser.error("Sources changed during execution; captures cannot certify the current source closure")
         status = result.returncode
         captures = sorted(p for p in out.glob("*.ppm") if p.stat().st_mtime_ns >= started)
         for ppm in captures:
@@ -359,9 +462,14 @@ def main():
                 im.save(ppm.with_suffix(".png"))
             capture_names.append(ppm.with_suffix(".png").name)
         (out / "run.json").write_text(json.dumps({"status": ("benchmark_passed" if args.bench_only else "actions_passed_fidelity_pending") if status == 0 else "failed", "renderer": "production native RGB565", "returncode": status,
-                    "captures": capture_names, "compiler": compiler, "flags": flags,
+                    "captures": capture_names, "compiler": compiler, "flags": flags, "counter_mode": args.counter_mode,
                     "source_sha256": source_hashes,
                     "header_sha256": {str(p.relative_to(ROOT)): digest for p, digest in header_hashes.items()}}, indent=2), encoding="utf-8")
+        if args.opt_group:
+            (out / "optimization_probes.json").write_text(json.dumps({"group": args.opt_group,
+                "status": "PASS" if status == 0 else "FAIL", "returncode": status,
+                "source_sha256": source_hashes, "log": "native.log"}, indent=2), encoding="utf-8")
+            return status
     else:
         runfile = out / "run.json"
         if runfile.exists():
@@ -383,16 +491,18 @@ def main():
                 sheet.paste(im, (x, y)); draw.text((x+4, y+219), path.stem, fill="#1a1d24")
         sheet.save(out / "contact_sheet.png")
     if not args.bench_only:
+        native_v1 = compare_native_v1(out, args.native_v1.resolve(), captures)
         report = compare(out, baseline, captures,
-                         args.baseline_points.resolve() if args.baseline_points else None, status)
-        print(f"Functional suite returncode={report['suite_returncode']}; AUTOMATED CONTRACTS {report['automated_status']}; captures={len(captures)}, exact geometry={report['geometry']['status']}, exact differences={report['exact_geometry_difference_count']}; pixel-exact={report['pixel_exact']}; raster acceptance=external parent review")
+                         args.baseline_points.resolve() if args.baseline_points else None, status, native_v1)
+        print(f"Functional suite returncode={report['suite_returncode']}; OPTIMIZATION GATE {report['automated_status']}; captures={len(captures)}, exact geometry={report['geometry']['status']}, exact differences={report['exact_geometry_difference_count']}; NATIVE V1 EXACT RGB {native_v1['status']}")
         if not report["automated_contracts_pass"]:
             status = status or 1
         runfile = out / "run.json"
         run = json.loads(runfile.read_text(encoding="utf-8"))
         run.pop("fidelity_status", None)  # Superseded zero-RGB policy is not a current acceptance verdict.
-        run.update(status="automated_contracts_passed_manual_review_pending" if report["automated_contracts_pass"] else "automated_contracts_failed",
+        run.update(status="optimization_gate_passed" if report["automated_contracts_pass"] else "optimization_gate_failed",
                    automated_status=report["automated_status"], manual_acceptance=report["manual_acceptance"], overall_returncode=status,
+                   native_v1_exact_rgb=native_v1["status"],
                    exact_geometry_difference_count=report["exact_geometry_difference_count"])
         runfile.write_text(json.dumps(run, indent=2), encoding="utf-8")
     return status

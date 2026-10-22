@@ -195,7 +195,16 @@ static void close_modal(void){if(u.veil)nui_obj_delete(u.veil);u.veil=u.dialog=u
 static void open_modal(int x,int y,int w,int h,int kind){close_modal();u.modal_kind=kind;u.veil=box(u.root,0,0,1280,720,BG);style_color(u.veil,NUI_STYLE_BG_COLOR,nui_color_hex(0x080E1E),0);nui_obj_set_style_bg_opa(u.veil,140,0);nui_obj_add_flag(u.veil,NUI_OBJ_FLAG_CLICKABLE);u.dialog=box(u.veil,x,y,w,h,CARD);nui_obj_set_style_radius(u.dialog,20,0);}
 static void update_measure(void);
 static void update_record(void);
-static void show_page(unsigned page){u.page=page;for(unsigned i=0;i<5;i++){hide(u.pages[i],page!=i);role(u.nav[i],page==i?NAVSEL:NAV);hide(u.selected[i],page!=i);}if(page==MEASURE)update_measure();else if(page==RECORD)update_record();nui_obj_invalidate(u.root);}
+static void show_page(unsigned page){
+    /* Page drawing is clipped to its container. Preserve the old extent before
+     * hiding it; nav style/marker changes invalidate their own old/new extents. */
+    bool bounded=page<5&&u.page<5&&u.root&&u.pages[page]&&u.pages[u.page]&&
+        nui_obj_get_parent(u.pages[page])==u.root&&nui_obj_get_parent(u.pages[u.page])==u.root;
+    if(bounded)nui_obj_invalidate(u.pages[u.page]);
+    u.page=page;for(unsigned i=0;i<5;i++){hide(u.pages[i],page!=i);role(u.nav[i],page==i?NAVSEL:NAV);hide(u.selected[i],page!=i);}
+    if(page==MEASURE)update_measure();else if(page==RECORD)update_record();
+    if(bounded)nui_obj_invalidate(u.pages[page]);else nui_obj_invalidate(u.root);
+}
 static bool apply_settings(void){tab5_ui_action_t a={.kind=TAB5_UI_SETTINGS,.config=draft_config(),.light_theme=u.state.light_theme};u.sent=a.config;u.pending=true;u.settings_ack=false;if(u.cb)u.cb(&a,u.user);refresh_settings();return true;}
 static bool apply_network(void){
     size_t ap=strlen(u.net_draft.ap_password),sta=strlen(u.net_draft.sta_password);
@@ -521,7 +530,7 @@ void tab5_ui_init(tab5_ui_action_cb_t cb,void *user){
     u.root=box(nui_screen_active(),0,0,1280,720,BG);u.rail=box(u.root,0,0,104,720,NAV);
     icon(u.rail,10,35,18,34,NAVTEXT);{nui_obj_t *t=label(u.rail,"КРЕНОМЕР",0,58,104,20,F16M,NAVMUTED);nui_obj_set_style_text_align(t,NUI_TEXT_ALIGN_CENTER,0);style_num(t,NUI_STYLE_TEXT_LETTER_SPACE,1,0);}box(u.rail,0,87,104,1,NAVSEL);
     const char *names[]={"Измерения","График","Запись","Настройки","Сеть"};
-    for(unsigned i=0;i<5;i++){u.nav[i]=button(u.rail,"",0,88+i*88,104,88,NAV,100+i);nui_obj_delete(nui_obj_get_child(u.nav[i],0));icon(u.nav[i],i,36,16,32,NAVTEXT);nui_obj_t *l=label(u.nav[i],names[i],0,56,104,24,F16,NAVTEXT);nui_obj_set_style_text_align(l,NUI_TEXT_ALIGN_CENTER,0);u.selected[i]=box(u.nav[i],0,14,5,60,ORANGE);nui_obj_set_style_radius(u.selected[i],3,0);}
+    for(unsigned i=0;i<5;i++){u.nav[i]=button(u.rail,"",0,88+i*88,104,88,NAV,100+i);nui_obj_add_flag(u.nav[i],NUI_OBJ_FLAG_PRESSED_PAINT_INERT);nui_obj_delete(nui_obj_get_child(u.nav[i],0));icon(u.nav[i],i,36,16,32,NAVTEXT);nui_obj_t *l=label(u.nav[i],names[i],0,56,104,24,F16,NAVTEXT);nui_obj_set_style_text_align(l,NUI_TEXT_ALIGN_CENTER,0);u.selected[i]=box(u.nav[i],0,14,5,60,ORANGE);nui_obj_set_style_radius(u.selected[i],3,0);}
     u.badge=box(u.nav[0],68,14,12,12,RED);nui_obj_set_style_radius(u.badge,6,0);
     const char *resources[]={"ЦП —","ОЗУ —","PS —"};
     for(unsigned i=0;i<3;i++){

@@ -1,5 +1,6 @@
 /* Independent retained renderer, written for the Tab5 UI contract. */
 #include "native_ui.h"
+#include "native_gradient.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -14,12 +15,19 @@
 #define PI 3.14159265358979323846
 #define MAX_DIRTY 48
 #define MAX_KEYS 96
+#if NUI_PROFILE_FINE_COUNTERS
+#define FINE_COUNT(statement) do { statement; } while(0)
+#else
+#define FINE_COUNT(statement) do { } while(0)
+#endif
 #define MIN(a,b) ((a)<(b)?(a):(b))
 #define MAX(a,b) ((a)>(b)?(a):(b))
 struct nui_style_entry {nui_style_prop_t prop;nui_style_selector_t selector;nui_style_value_t value;struct nui_style_entry *next;};
 typedef struct style_ref {const nui_style_t *style;nui_style_selector_t selector;struct style_ref *next;} style_ref;
 typedef struct handler {nui_event_cb_t cb;nui_event_code_t code;void *user;struct handler *next;} handler;
 struct nui_obj {
+    uint64_t coords_epoch;uint64_t coords_style_epoch;nui_area_t coords_cache;
+    uint64_t cache_epoch;uint32_t cache_state,cache_part;uint64_t cache_valid;nui_style_value_t main_cache[34];
     const nui_obj_class_t *class_p;struct nui_obj *parent,*first,*last,*next,*prev,*garbage_next;
     int32_t x,y,w,h,ext;bool center_x,center_y,deleted;uint32_t flags,state;
     nui_style_entry_t *local;style_ref *styles;handler *handlers;
@@ -54,7 +62,7 @@ static uint64_t now_us(void){
 static nui_obj_t *draw_source;
 static void event_send(nui_obj_t*,nui_event_code_t,void*,nui_layer_t*);
 static uint64_t profile_begin(nui_primitive_t type){
-    n.stats.primitive[type].calls++;
+    FINE_COUNT(n.stats.primitive[type].calls++);
     if(draw_source&&(draw_source->flags&NUI_OBJ_FLAG_SEND_DRAW_TASK_EVENTS)){
         static const nui_draw_task_type_t types[]={NUI_DRAW_TASK_TYPE_FILL,NUI_DRAW_TASK_TYPE_BORDER,NUI_DRAW_TASK_TYPE_LABEL,NUI_DRAW_TASK_TYPE_IMAGE,NUI_DRAW_TASK_TYPE_LINE,NUI_DRAW_TASK_TYPE_ARC,NUI_DRAW_TASK_TYPE_TRIANGLE,NUI_DRAW_TASK_TYPE_BOX_SHADOW};
         nui_draw_task_t task={types[type]};event_send(draw_source,NUI_EVENT_DRAW_TASK_ADDED,&task,NULL);
@@ -76,27 +84,40 @@ static bool area_intersect(nui_area_t *out,nui_area_t a,nui_area_t b){*out=(nui_
 static bool area_contains(nui_area_t a,nui_area_t b){return a.x1<=b.x1&&a.y1<=b.y1&&a.x2>=b.x2&&a.y2>=b.y2;}
 int32_t nui_area_get_width(const nui_area_t *a){return a->x2-a->x1+1;}
 int32_t nui_area_get_height(const nui_area_t *a){return a->y2-a->y1+1;}
+static uint64_t style_epoch=1,layout_epoch=1;
+/* Cache payload is embedded in each retained object and already included in allocations. */
+#define OBJECT_CACHE_BYTES (offsetof(nui_obj_t,class_p))
+static size_t cache_objects,cache_objects_peak;
 static bool inherited(nui_style_prop_t p){return p==NUI_STYLE_TEXT_COLOR||p==NUI_STYLE_TEXT_FONT||p==NUI_STYLE_TEXT_LETTER_SPACE||p==NUI_STYLE_TEXT_LINE_SPACE||p==NUI_STYLE_TEXT_ALIGN;}
 static nui_style_value_t default_prop(nui_style_prop_t p){nui_style_value_t v={0};if(p==NUI_STYLE_TEXT_FONT)v.ptr=NUI_FONT_DEFAULT;else if(p==NUI_STYLE_TEXT_COLOR||p==NUI_STYLE_LINE_COLOR)v.color=0xffffff;else if(p==NUI_STYLE_OPA||p==NUI_STYLE_IMAGE_OPA||p==NUI_STYLE_LINE_OPA||p==NUI_STYLE_SHADOW_OPA||p==NUI_STYLE_OUTLINE_OPA)v.num=255;else if(p==NUI_STYLE_LINE_WIDTH)v.num=1;return v;}
 static bool entry_find(nui_style_entry_t *e,nui_style_prop_t p,nui_style_selector_t sel,nui_style_value_t *out,bool exact){int score=-1;bool found=false;for(;e;e=e->next){if(e->prop!=p)continue;if(exact){if(e->selector!=sel)continue;}else if((e->selector&0xffff0000)!=(sel&0xffff0000)||(e->selector&0xffff&~sel))continue;unsigned bits=e->selector&0xffff;int s=0;while(bits){s+=bits&1;bits>>=1;}if(s>score){*out=e->value;score=s;found=true;}}return found;}
 static bool prop_find(const nui_obj_t *o,nui_style_prop_t p,nui_style_selector_t part,nui_style_value_t *v){if(!o)return false;nui_style_selector_t sel=(part&0xffff0000)|o->state|(part&0xffff);if(entry_find(o->local,p,sel,v,false))return true;int best=-1;bool found=false;for(style_ref *r=o->styles;r;r=r->next){if((r->selector&0xffff0000)!=(sel&0xffff0000)||(r->selector&0xffff&~sel))continue;int score=0;unsigned bits=r->selector&0xffff;while(bits){score+=bits&1;bits>>=1;}nui_style_value_t value;if(score>best&&entry_find(r->style->entries,p,0,&value,true)){*v=value;best=score;found=true;}}if(found)return true;if(inherited(p)&&o->parent)return prop_find(o->parent,p,NUI_PART_MAIN,v);return false;}
-nui_style_value_t nui_obj_get_style_prop(const nui_obj_t *o,nui_style_selector_t part,nui_style_prop_t p){nui_style_value_t v;if(!prop_find(o,p,part,&v))v=default_prop(p);return v;}
+nui_style_value_t nui_obj_get_style_prop(const nui_obj_t *o,nui_style_selector_t part,nui_style_prop_t p){
+    nui_obj_t *mutable=(nui_obj_t*)o;
+    if(o&&p>0&&p<34){
+        if(o->cache_epoch!=style_epoch||o->cache_state!=o->state||o->cache_part!=part){if(o->cache_valid)FINE_COUNT(n.stats.style_cache_evictions++);mutable->cache_epoch=style_epoch;mutable->cache_state=o->state;mutable->cache_part=part;mutable->cache_valid=0;}
+        if(o->cache_valid&(UINT64_C(1)<<p)){FINE_COUNT(n.stats.style_cache_hits++);return o->main_cache[p];}
+        nui_style_value_t v;if(!prop_find(o,p,part,&v))v=default_prop(p);
+        mutable->main_cache[p]=v;mutable->cache_valid|=UINT64_C(1)<<p;FINE_COUNT(n.stats.style_cache_misses++);return v;
+    }
+    nui_style_value_t v;if(!prop_find(o,p,part,&v))v=default_prop(p);return v;
+}
 static int32_t num(const nui_obj_t *o,nui_style_prop_t p,unsigned part){return nui_obj_get_style_prop(o,part,p).num;}
 static nui_color_t color(const nui_obj_t *o,nui_style_prop_t p,unsigned part){return nui_obj_get_style_prop(o,part,p).color;}
 static const nui_font_t *font(const nui_obj_t *o,unsigned part){const nui_font_t *f=nui_obj_get_style_prop(o,part,NUI_STYLE_TEXT_FONT).ptr;return f?f:NUI_FONT_DEFAULT;}
 static void entries_free(nui_style_entry_t *e){while(e){nui_style_entry_t *next=e->next;mem_free(e);e=next;}}
-static bool entry_set(nui_style_entry_t **head,nui_style_prop_t p,nui_style_selector_t sel,nui_style_value_t v){for(nui_style_entry_t *e=*head;e;e=e->next)if(e->prop==p&&e->selector==sel){if(!memcmp(&e->value,&v,sizeof(v)))return false;e->value=v;return true;}nui_style_entry_t *e=mem_alloc(sizeof(*e));if(!e)return false;*e=(nui_style_entry_t){p,sel,v,*head};*head=e;return true;}
+static bool entry_set(nui_style_entry_t **head,nui_style_prop_t p,nui_style_selector_t sel,nui_style_value_t v){for(nui_style_entry_t *e=*head;e;e=e->next)if(e->prop==p&&e->selector==sel){if(!memcmp(&e->value,&v,sizeof(v)))return false;e->value=v;style_epoch++;return true;}nui_style_entry_t *e=mem_alloc(sizeof(*e));if(!e)return false;*e=(nui_style_entry_t){p,sel,v,*head};*head=e;style_epoch++;return true;}
 void nui_style_init(nui_style_t *s){s->entries=NULL;}
-void nui_style_reset(nui_style_t *s){if(s){entries_free(s->entries);s->entries=NULL;}}
+void nui_style_reset(nui_style_t *s){if(s){entries_free(s->entries);s->entries=NULL;style_epoch++;}}
 void nui_style_set_prop(nui_style_t *s,nui_style_prop_t p,nui_style_value_t v){if(s)entry_set(&s->entries,p,0,v);}
 nui_style_prop_t nui_style_register_prop(unsigned flags){(void)flags;return 1024+(++n.props);}
 unsigned nui_style_get_num_custom_props(void){return n.props;}
 int nui_obj_get_local_style_prop(const nui_obj_t *o,nui_style_prop_t p,nui_style_value_t *v,nui_style_selector_t sel){return o&&entry_find(o->local,p,sel,v,true)?NUI_STYLE_RES_FOUND:NUI_STYLE_RES_NOT_FOUND;}
 void nui_obj_set_local_style_prop(nui_obj_t *o,nui_style_prop_t p,nui_style_value_t v,nui_style_selector_t sel){if(o&&!o->deleted&&entry_set(&o->local,p,sel,v)){nui_obj_invalidate(o);}}
-void nui_obj_add_style(nui_obj_t *o,const nui_style_t *s,nui_style_selector_t sel){if(!o||!s)return;for(style_ref *r=o->styles;r;r=r->next)if(r->style==s&&r->selector==sel)return;style_ref *r=mem_alloc(sizeof(*r));if(r){*r=(style_ref){s,sel,o->styles};o->styles=r;nui_obj_invalidate(o);}}
-void nui_obj_remove_style(nui_obj_t *o,const nui_style_t *s,nui_style_selector_t sel){if(!o)return;style_ref **r=&o->styles;while(*r){if((!s||(*r)->style==s)&&(*r)->selector==sel){style_ref *dead=*r;*r=dead->next;mem_free(dead);nui_obj_invalidate(o);}else r=&(*r)->next;}}
-void nui_obj_remove_style_all(nui_obj_t *o){if(!o)return;entries_free(o->local);o->local=NULL;while(o->styles){style_ref *r=o->styles;o->styles=r->next;mem_free(r);}nui_obj_invalidate(o);}
-void nui_obj_report_style_change(const nui_style_t *s){(void)s;if(n.root)nui_obj_invalidate(n.root);}
+void nui_obj_add_style(nui_obj_t *o,const nui_style_t *s,nui_style_selector_t sel){if(!o||!s)return;for(style_ref *r=o->styles;r;r=r->next)if(r->style==s&&r->selector==sel)return;style_ref *r=mem_alloc(sizeof(*r));if(r){*r=(style_ref){s,sel,o->styles};o->styles=r;style_epoch++;nui_obj_invalidate(o);}}
+void nui_obj_remove_style(nui_obj_t *o,const nui_style_t *s,nui_style_selector_t sel){if(!o)return;style_ref **r=&o->styles;while(*r){if((!s||(*r)->style==s)&&(*r)->selector==sel){style_ref *dead=*r;*r=dead->next;mem_free(dead);style_epoch++;nui_obj_invalidate(o);}else r=&(*r)->next;}}
+void nui_obj_remove_style_all(nui_obj_t *o){if(!o)return;entries_free(o->local);o->local=NULL;while(o->styles){style_ref *r=o->styles;o->styles=r->next;mem_free(r);}style_epoch++;nui_obj_invalidate(o);}
+void nui_obj_report_style_change(const nui_style_t *s){(void)s;style_epoch++;if(n.root)nui_obj_invalidate(n.root);}
 void nui_style_set_bg_color(nui_style_t *s,nui_color_t v){nui_style_value_t val={0};val.color=v;nui_style_set_prop(s,NUI_STYLE_BG_COLOR,val);}
 void nui_obj_set_style_bg_color(nui_obj_t *o,nui_color_t v,nui_style_selector_t sel){nui_style_value_t val={0};val.color=v;nui_obj_set_local_style_prop(o,NUI_STYLE_BG_COLOR,val,sel);}
 nui_color_t nui_obj_get_style_bg_color(const nui_obj_t *o,nui_style_selector_t sel){return nui_obj_get_style_prop(o,sel,NUI_STYLE_BG_COLOR).color;}
@@ -222,15 +243,15 @@ static bool is_kind(const nui_obj_t *o,unsigned kind){return o&&!o->deleted&&o->
 static void content_size(const nui_obj_t *o,int *w,int *h){nui_point_t size={0,0};if(is_kind(o,1)||is_kind(o,4)){nui_text_get_size(&size,o->text?o->text:"",font(o,0),num(o,NUI_STYLE_TEXT_LETTER_SPACE,0),num(o,NUI_STYLE_TEXT_LINE_SPACE,0),o->w>0?MAX(1,o->w-num(o,NUI_STYLE_PAD_LEFT,0)-num(o,NUI_STYLE_PAD_RIGHT,0)):NUI_COORD_MAX,(o->w==NUI_SIZE_CONTENT||o->one_line)?NUI_TEXT_FLAG_EXPAND:0);}else if(is_kind(o,7)&&o->image){size.x=o->image->header.w;size.y=o->image->header.h;}else{for(nui_obj_t *c=o->first;c;c=c->next){size.x=MAX(size.x,c->x+nui_obj_get_width(c));size.y=MAX(size.y,c->y+nui_obj_get_height(c));}}*w=size.x+num(o,NUI_STYLE_PAD_LEFT,0)+num(o,NUI_STYLE_PAD_RIGHT,0)+2*num(o,NUI_STYLE_BORDER_WIDTH,0);*h=size.y+num(o,NUI_STYLE_PAD_TOP,0)+num(o,NUI_STYLE_PAD_BOTTOM,0)+2*num(o,NUI_STYLE_BORDER_WIDTH,0);}
 int32_t nui_obj_get_width(const nui_obj_t *o){if(!o||o->deleted)return 0;if(o->w!=NUI_SIZE_CONTENT)return MAX(0,o->w);int w,h;content_size(o,&w,&h);return w;}
 int32_t nui_obj_get_height(const nui_obj_t *o){if(!o||o->deleted)return 0;if(o->h!=NUI_SIZE_CONTENT)return MAX(0,o->h);int w,h;content_size(o,&w,&h);return h;}
-void nui_obj_get_coords(const nui_obj_t *o,nui_area_t *a){if(!a)return;if(!o||o->deleted){*a=(nui_area_t){0,0,-1,-1};return;}int w=nui_obj_get_width(o),h=nui_obj_get_height(o),x=o->x,y=o->y;if(o->parent){nui_area_t p;nui_obj_get_coords(o->parent,&p);int border=num(o->parent,NUI_STYLE_BORDER_WIDTH,0),left=num(o->parent,NUI_STYLE_PAD_LEFT,0),top=num(o->parent,NUI_STYLE_PAD_TOP,0);
+void nui_obj_get_coords(const nui_obj_t *o,nui_area_t *a){if(!a)return;if(!o||o->deleted){*a=(nui_area_t){0,0,-1,-1};return;}if(o->coords_epoch==layout_epoch&&o->coords_style_epoch==style_epoch){*a=o->coords_cache;FINE_COUNT(n.stats.layout_cache_hits++);return;}if(o->coords_epoch)FINE_COUNT(n.stats.layout_cache_evictions++);int w=nui_obj_get_width(o),h=nui_obj_get_height(o),x=o->x,y=o->y;if(o->parent){nui_area_t p;nui_obj_get_coords(o->parent,&p);int border=num(o->parent,NUI_STYLE_BORDER_WIDTH,0),left=num(o->parent,NUI_STYLE_PAD_LEFT,0),top=num(o->parent,NUI_STYLE_PAD_TOP,0);
 if(o->center_x)x=(nui_obj_get_width(o->parent)-2*border-left-num(o->parent,NUI_STYLE_PAD_RIGHT,0)-w)/2;
 if(o->center_y)y=(nui_obj_get_height(o->parent)-2*border-top-num(o->parent,NUI_STYLE_PAD_BOTTOM,0)-h)/2;
-x+=p.x1+border+left;y+=p.y1+border+top;}*a=(nui_area_t){x,y,x+w-1,y+h-1};}
+x+=p.x1+border+left;y+=p.y1+border+top;}*a=(nui_area_t){x,y,x+w-1,y+h-1};((nui_obj_t*)o)->coords_cache=*a;((nui_obj_t*)o)->coords_epoch=layout_epoch;((nui_obj_t*)o)->coords_style_epoch=style_epoch;FINE_COUNT(n.stats.layout_cache_misses++);}
 bool nui_obj_is_visible(const nui_obj_t *o){if(!o)return false;for(;o;o=o->parent)if(o->deleted||(o->flags&NUI_OBJ_FLAG_HIDDEN))return false;return true;}
 static nui_area_t object_visual(const nui_obj_t *o){nui_area_t a;nui_obj_get_coords(o,&a);int ext=MAX(num(o,NUI_STYLE_SHADOW_WIDTH,0)+abs(num(o,NUI_STYLE_SHADOW_OFFSET_Y,0)),num(o,NUI_STYLE_OUTLINE_WIDTH,0)+num(o,NUI_STYLE_OUTLINE_PAD,0));a.x1-=ext;a.y1-=ext;a.x2+=ext;a.y2+=ext;return a;}
 void nui_native_invalidate(const nui_area_t *area){if(!n.fb||!area)return;nui_area_t a;if(!area_intersect(&a,*area,(nui_area_t){0,0,n.width-1,n.height-1}))return;for(size_t i=0;i<n.dirty_count;){nui_area_t existing=n.dirty[i],isect;if(area_contains(existing,a))return;if(area_intersect(&isect,a,existing)||area_contains(a,existing)){a=(nui_area_t){MIN(a.x1,existing.x1),MIN(a.y1,existing.y1),MAX(a.x2,existing.x2),MAX(a.y2,existing.y2)};n.dirty[i]=n.dirty[--n.dirty_count];i=0;}else i++;}if(n.dirty_count==MAX_DIRTY){n.dirty_count=1;n.dirty[0]=(nui_area_t){0,0,n.width-1,n.height-1};}else n.dirty[n.dirty_count++]=a;}
 void nui_obj_invalidate(nui_obj_t *o){if(!nui_obj_is_visible(o))return;nui_area_t a=object_visual(o);for(nui_obj_t *p=o->parent;p;p=p->parent){nui_area_t bounds;nui_obj_get_coords(p,&bounds);if(!area_intersect(&a,a,bounds))return;}nui_native_invalidate(&a);}
-static nui_obj_t *object_new(nui_obj_t *parent,const nui_obj_class_t *cls){nui_obj_t *o=mem_alloc(sizeof(*o));if(!o)return NULL;o->class_p=cls;o->text_epoch=o->blink_epoch=n.ticks;o->w=100;o->h=50;o->max_length=1024;o->point_count=2;o->bar_max=100;o->ymax=100;o->key_pressed=-1;o->flags=NUI_OBJ_FLAG_CLICKABLE;if(cls==&nui_label_class||cls==&nui_image_class)o->flags=0;if(cls==&nui_label_class){o->w=o->h=NUI_SIZE_CONTENT;}if(cls==&nui_switch_class){o->w=72;o->h=40;}if(cls==&nui_keyboard_class){o->w=1280;o->h=360;}o->parent=parent;if(parent){o->prev=parent->last;if(parent->last)parent->last->next=o;else parent->first=o;parent->last=o;}nui_obj_invalidate(o);return o;}
+static nui_obj_t *object_new(nui_obj_t *parent,const nui_obj_class_t *cls){nui_obj_t *o=mem_alloc(sizeof(*o));if(!o)return NULL;cache_objects++;if(cache_objects>cache_objects_peak)cache_objects_peak=cache_objects;o->class_p=cls;o->text_epoch=o->blink_epoch=n.ticks;o->w=100;o->h=50;o->max_length=1024;o->point_count=2;o->bar_max=100;o->ymax=100;o->key_pressed=-1;o->flags=NUI_OBJ_FLAG_CLICKABLE;if(cls==&nui_label_class||cls==&nui_image_class)o->flags=0;if(cls==&nui_label_class){o->w=o->h=NUI_SIZE_CONTENT;}if(cls==&nui_switch_class){o->w=72;o->h=40;}if(cls==&nui_keyboard_class){o->w=1280;o->h=360;}layout_epoch++;o->parent=parent;if(parent){o->prev=parent->last;if(parent->last)parent->last->next=o;else parent->first=o;parent->last=o;}nui_obj_invalidate(o);return o;}
 nui_obj_t *nui_obj_create(nui_obj_t *p){return object_new(p,&nui_obj_class);}
 nui_obj_t *nui_label_create(nui_obj_t *p){return object_new(p,&nui_label_class);}
 nui_obj_t *nui_button_create(nui_obj_t *p){return object_new(p,&nui_button_class);}
@@ -251,16 +272,16 @@ nui_obj_t *nui_chart_create(nui_obj_t *p){return object_new(p,&nui_chart_class);
 nui_obj_t *nui_image_create(nui_obj_t *p){return object_new(p,&nui_image_class);}
 nui_obj_t *nui_bar_create(nui_obj_t *p){return object_new(p,&nui_bar_class);}
 static bool descends_from(nui_obj_t *o,nui_obj_t *ancestor){for(;o;o=o->parent)if(o==ancestor)return true;return false;}
-static void object_release(nui_obj_t *o){while(o->handlers){handler *h=o->handlers;o->handlers=h->next;mem_free(h);}entries_free(o->local);while(o->styles){style_ref *r=o->styles;o->styles=r->next;mem_free(r);}while(o->series){nui_chart_series_t *s=o->series;o->series=s->next;if(s->owned)mem_free(s->y_points);mem_free(s);}mem_free(o->text);mem_free(o->accepted);mem_free(o->display_text);mem_free(o);}
+static void object_release(nui_obj_t *o){while(o->handlers){handler *h=o->handlers;o->handlers=h->next;mem_free(h);}entries_free(o->local);while(o->styles){style_ref *r=o->styles;o->styles=r->next;mem_free(r);}while(o->series){nui_chart_series_t *s=o->series;o->series=s->next;if(s->owned)mem_free(s->y_points);mem_free(s);}mem_free(o->text);mem_free(o->accepted);mem_free(o->display_text);cache_objects--;mem_free(o);}
 static void garbage_collect(void){if(n.event_depth||n.rendering)return;while(n.garbage){nui_obj_t *o=n.garbage;n.garbage=o->garbage_next;object_release(o);}}
-void nui_obj_delete(nui_obj_t *o){if(!o||o->deleted)return;nui_obj_invalidate(o);if(descends_from(n.capture,o))n.capture=NULL;if(descends_from(n.focus,o))n.focus=NULL;while(o->first)nui_obj_delete(o->first);if(o->parent){if(o->prev)o->prev->next=o->next;else o->parent->first=o->next;if(o->next)o->next->prev=o->prev;else o->parent->last=o->prev;}if(n.root==o)n.root=NULL;o->deleted=true;o->parent=o->next=o->prev=NULL;o->garbage_next=n.garbage;n.garbage=o;garbage_collect();}
-void nui_obj_set_pos(nui_obj_t *o,int32_t x,int32_t y){if(!o||o->deleted||(o->x==x&&o->y==y&&!o->center_x&&!o->center_y))return;nui_obj_invalidate(o);o->x=x;o->y=y;o->center_x=o->center_y=false;nui_obj_invalidate(o);}
-void nui_obj_set_size(nui_obj_t *o,int32_t w,int32_t h){if(!o||o->deleted||(o->w==w&&o->h==h))return;nui_obj_invalidate(o);o->w=w;o->h=h;nui_obj_invalidate(o);}
+void nui_obj_delete(nui_obj_t *o){if(!o||o->deleted)return;nui_obj_invalidate(o);if(descends_from(n.capture,o))n.capture=NULL;if(descends_from(n.focus,o))n.focus=NULL;while(o->first)nui_obj_delete(o->first);if(o->parent){if(o->prev)o->prev->next=o->next;else o->parent->first=o->next;if(o->next)o->next->prev=o->prev;else o->parent->last=o->prev;}if(n.root==o)n.root=NULL;layout_epoch++;o->deleted=true;o->parent=o->next=o->prev=NULL;o->garbage_next=n.garbage;n.garbage=o;garbage_collect();}
+void nui_obj_set_pos(nui_obj_t *o,int32_t x,int32_t y){if(!o||o->deleted||(o->x==x&&o->y==y&&!o->center_x&&!o->center_y))return;nui_obj_invalidate(o);layout_epoch++;o->x=x;o->y=y;o->center_x=o->center_y=false;nui_obj_invalidate(o);}
+void nui_obj_set_size(nui_obj_t *o,int32_t w,int32_t h){if(!o||o->deleted||(o->w==w&&o->h==h))return;nui_obj_invalidate(o);layout_epoch++;o->w=w;o->h=h;nui_obj_invalidate(o);}
 void nui_obj_set_width(nui_obj_t *o,int32_t w){if(o)nui_obj_set_size(o,w,o->h);}
 void nui_obj_set_height(nui_obj_t *o,int32_t h){if(o)nui_obj_set_size(o,o->w,h);}
 void nui_obj_set_x(nui_obj_t *o,int32_t x){if(o)nui_obj_set_pos(o,x,o->y);}
 void nui_obj_set_y(nui_obj_t *o,int32_t y){if(o)nui_obj_set_pos(o,o->x,y);}
-void nui_obj_set_align(nui_obj_t *o,int align){if(!o)return;nui_obj_invalidate(o);o->center_x=o->center_y=align==NUI_ALIGN_CENTER;nui_obj_invalidate(o);}
+void nui_obj_set_align(nui_obj_t *o,int align){if(!o)return;nui_obj_invalidate(o);layout_epoch++;o->center_x=o->center_y=align==NUI_ALIGN_CENTER;nui_obj_invalidate(o);}
 void nui_obj_center(nui_obj_t *o){nui_obj_set_align(o,NUI_ALIGN_CENTER);}
 void nui_obj_update_layout(nui_obj_t *o){/* Geometry is resolved lazily; querying it does not dirty pixels. */if(o){nui_area_t a;nui_obj_get_coords(o,&a);}}
 nui_obj_t *nui_obj_get_parent(const nui_obj_t *o){return o?o->parent:NULL;}
@@ -272,8 +293,16 @@ void nui_obj_add_flag(nui_obj_t *o,uint32_t flags){if(!o||((o->flags&flags)==fla
 static void reset_text_epochs(nui_obj_t *o){o->text_epoch=n.ticks;for(nui_obj_t *c=o->first;c;c=c->next)reset_text_epochs(c);}
 void nui_obj_remove_flag(nui_obj_t *o,uint32_t flags){if(!o||!(o->flags&flags))return;nui_obj_invalidate(o);o->flags&=~flags;if(flags&NUI_OBJ_FLAG_HIDDEN)reset_text_epochs(o);nui_obj_invalidate(o);}
 bool nui_obj_has_flag(const nui_obj_t *o,uint32_t flags){return o&&(o->flags&flags)==flags;}
-void nui_obj_add_state(nui_obj_t *o,uint32_t state){if(o&&(o->state&state)!=state){nui_obj_invalidate(o);o->state|=state;nui_obj_invalidate(o);}}
-void nui_obj_remove_state(nui_obj_t *o,uint32_t state){if(o&&(o->state&state)){nui_obj_invalidate(o);o->state&=~state;nui_obj_invalidate(o);}}
+static bool subtree_custom_paint(const nui_obj_t *o){for(handler *h=o->handlers;h;h=h->next)if(h->code==NUI_EVENT_DRAW_MAIN||h->code==NUI_EVENT_DRAW_POST||h->code==NUI_EVENT_ALL)return true;for(nui_obj_t *c=o->first;c;c=c->next)if(subtree_custom_paint(c))return true;return false;}
+static bool pressed_paint_inert(const nui_obj_t *o,uint32_t state){
+    if(state!=NUI_STATE_PRESSED||!is_kind(o,2)||(!(o->flags&NUI_OBJ_FLAG_PRESSED_PAINT_INERT)&&subtree_custom_paint(o)))return false;
+    for(nui_style_entry_t *e=o->local;e;e=e->next)if(e->selector&NUI_STATE_PRESSED)return false;
+    for(style_ref *r=o->styles;r;r=r->next)if(r->selector&NUI_STATE_PRESSED)return false;
+    return true;
+}
+void nui_obj_add_state(nui_obj_t *o,uint32_t state){if(o&&(o->state&state)!=state){bool skip=pressed_paint_inert(o,state);if(!skip)nui_obj_invalidate(o);o->state|=state;if(!skip)style_epoch++;if(!skip)nui_obj_invalidate(o);else FINE_COUNT(n.stats.skipped_state_invalidations++);}}
+void nui_obj_remove_state(nui_obj_t *o,uint32_t state){if(o&&(o->state&state)){bool skip=pressed_paint_inert(o,state);if(!skip)nui_obj_invalidate(o);o->state&=~state;if(!skip)style_epoch++;if(!skip)nui_obj_invalidate(o);else FINE_COUNT(n.stats.skipped_state_invalidations++);}}
+
 bool nui_obj_has_state(const nui_obj_t *o,uint32_t state){return o&&(o->state&state)==state;}
 void nui_obj_set_ext_click_area(nui_obj_t *o,int32_t v){if(o)o->ext=v;}
 void nui_obj_add_event_cb(nui_obj_t *o,nui_event_cb_t cb,nui_event_code_t code,void *user){if(!o||!cb)return;handler *h=mem_alloc(sizeof(*h));if(!h)return;*h=(handler){cb,code,user,NULL};handler **tail=&o->handlers;while(*tail)tail=&(*tail)->next;*tail=h;}
@@ -286,12 +315,12 @@ void *nui_event_get_param(const nui_event_t *e){return e?e->param:NULL;}
 nui_layer_t *nui_event_get_layer(const nui_event_t *e){return e?e->layer:NULL;}
 nui_draw_task_t *nui_event_get_draw_task(const nui_event_t *e){return e?e->param:NULL;}
 nui_draw_task_type_t nui_draw_task_get_type(const nui_draw_task_t *t){return t?t->type:NUI_DRAW_TASK_TYPE_NONE;}
-void nui_label_set_text(nui_obj_t *o,const char *text){if(!o||o->deleted)return;if(!text)text="";if(o->text&&!strcmp(o->text,text))return;char *copy=str_copy(text);if(!copy)return;nui_obj_invalidate(o);mem_free(o->text);mem_free(o->display_text);o->display_text=NULL;o->text=copy;o->text_epoch=n.ticks;nui_obj_invalidate(o);}
+void nui_label_set_text(nui_obj_t *o,const char *text){if(!o||o->deleted)return;if(!text)text="";if(o->text&&!strcmp(o->text,text))return;char *copy=str_copy(text);if(!copy)return;nui_obj_invalidate(o);mem_free(o->text);mem_free(o->display_text);o->display_text=NULL;o->text=copy;if(o->w==NUI_SIZE_CONTENT||o->h==NUI_SIZE_CONTENT)layout_epoch++;o->text_epoch=n.ticks;nui_obj_invalidate(o);}
 const char *nui_label_get_text(const nui_obj_t *o){return o?(o->display_text?o->display_text:o->text?o->text:""):"";}
 void nui_label_set_long_mode(nui_obj_t *o,int mode){if(o&&o->long_mode!=mode){o->long_mode=mode;nui_obj_invalidate(o);}}
 void nui_textarea_set_text(nui_obj_t *o,const char *s){if(!o||o->deleted)return;bool changed=strcmp(nui_label_get_text(o),s?s:"")!=0;nui_label_set_text(o,s);o->cursor=(uint32_t)strlen(nui_label_get_text(o));if(changed){o->blink_epoch=n.ticks;nui_obj_send_event(o,NUI_EVENT_VALUE_CHANGED,NULL);}}
 const char *nui_textarea_get_text(const nui_obj_t *o){return nui_label_get_text(o);}
-void nui_textarea_set_one_line(nui_obj_t *o,bool v){if(o&&o->one_line!=v){nui_obj_invalidate(o);o->one_line=v;if(v)o->h=NUI_SIZE_CONTENT;nui_obj_invalidate(o);}}
+void nui_textarea_set_one_line(nui_obj_t *o,bool v){if(o&&o->one_line!=v){nui_obj_invalidate(o);layout_epoch++;o->one_line=v;if(v)o->h=NUI_SIZE_CONTENT;nui_obj_invalidate(o);}}
 bool nui_native_textarea_get_text_bounds(const nui_obj_t *o,nui_area_t *out){
     if(!is_kind(o,4)||!out)return false;
     nui_area_t a;nui_obj_get_coords(o,&a);int bw=num(o,NUI_STYLE_BORDER_WIDTH,0);
@@ -307,7 +336,7 @@ static bool accepted_codepoint(const nui_obj_t *o,uint32_t cp){if(!o->accepted||
 void nui_textarea_add_text(nui_obj_t *o,const char *s){if(!o||!s)return;const char *old=nui_textarea_get_text(o);size_t len=strlen(old),add=strlen(s);char *buf=mem_alloc(len+add+1);if(!buf)return;uint32_t cursor=MIN(o->cursor,len);memcpy(buf,old,cursor);size_t used=cursor;uint32_t i=0;unsigned count=utf8_count(old);while(s[i]&&count<o->max_length){uint32_t start=i,cp=nui_text_utf8_next(s,&i);if((cp=='\n'&&o->one_line)||!accepted_codepoint(o,cp))continue;memcpy(buf+used,s+start,i-start);used+=i-start;count++;}memcpy(buf+used,old+cursor,len-cursor+1);uint32_t new_cursor=(uint32_t)used;n.event_depth++;nui_textarea_set_text(o,buf);if(!o->deleted)o->cursor=new_cursor;n.event_depth--;garbage_collect();mem_free(buf);}
 void nui_textarea_delete_char(nui_obj_t *o){if(!o)return;const char *old=nui_textarea_get_text(o);size_t len=strlen(old);uint32_t cursor=MIN(o->cursor,len);if(!cursor)return;uint32_t start=cursor-1;while(start&&((uint8_t)old[start]&0xc0)==0x80)start--;char *buf=str_copy(old);if(!buf)return;memmove(buf+start,buf+cursor,len-cursor+1);n.event_depth++;nui_textarea_set_text(o,buf);if(!o->deleted)o->cursor=start;n.event_depth--;garbage_collect();mem_free(buf);}
 void nui_textarea_set_cursor_pos(nui_obj_t *o,int32_t pos){if(!o)return;const char *s=nui_textarea_get_text(o);if(pos<0){o->cursor=(uint32_t)strlen(s);return;}uint32_t i=0;while(s[i]&&pos-->0)nui_text_utf8_next(s,&i);o->cursor=i;nui_obj_invalidate(o);}
-void nui_image_set_src(nui_obj_t *o,const void *src){if(!o)return;nui_obj_invalidate(o);o->image=src;if(src){o->w=o->image->header.w;o->h=o->image->header.h;}nui_obj_invalidate(o);}
+void nui_image_set_src(nui_obj_t *o,const void *src){if(!o)return;nui_obj_invalidate(o);o->image=src;layout_epoch++;if(src){o->w=o->image->header.w;o->h=o->image->header.h;}nui_obj_invalidate(o);}
 const void *nui_image_get_src(const nui_obj_t *o){return o?o->image:NULL;}
 void nui_image_cache_drop(const void *src){/* RGB565 source is borrowed and read directly on every invalidated pass.
  * No decoded copy/cache exists to drop. */(void)src;}
@@ -322,17 +351,26 @@ static uint16_t blend565(uint16_t dst,uint16_t src,unsigned alpha){
     /* RGB565 coverage is quantized to 1/32; rounding only the opacity matches
      * the source framebuffer's integer channel blend, including modal veils. */
     unsigned mix=(alpha+4)>>3,inv=32-mix;
-    unsigned r=(((src>>11)&31)*mix+((dst>>11)&31)*inv)>>5;
-    unsigned g=(((src>>5)&63)*mix+((dst>>5)&63)*inv)>>5;
-    unsigned b=((src&31)*mix+(dst&31)*inv)>>5;
-    return (uint16_t)((r<<11)|(g<<5)|b);
+    /* Separate packed red/blue lanes cannot carry into one another: weights
+     * sum to 32, so the blue numerator is at most 31*32 < 2^10. */
+    unsigned rb=(((src&0xf81fu)*mix+(dst&0xf81fu)*inv)>>5)&0xf81fu;
+    unsigned g=(((src&0x07e0u)*mix+(dst&0x07e0u)*inv)>>5)&0x07e0u;
+    return (uint16_t)(rb|g);
 }
-static void pixel(nui_layer_t *l,int x,int y,uint16_t c,unsigned alpha){if(!n.fb||x<l->clip.x1||x>l->clip.x2||y<l->clip.y1||y>l->clip.y2)return;alpha=alpha*l->opa/255;if(!alpha)return;uint16_t *p=&n.fb[(size_t)y*n.width+x];*p=blend565(*p,c,alpha);n.stats.primitive[active_primitive].pixels++;}
-static void span(nui_layer_t *l,int x1,int x2,int y,uint16_t c,unsigned alpha){if(y<l->clip.y1||y>l->clip.y2)return;x1=MAX(x1,l->clip.x1);x2=MIN(x2,l->clip.x2);if(x1>x2)return;alpha=alpha*l->opa/255;if(!alpha)return;uint16_t *row=n.fb+(size_t)y*n.width+x1;if(alpha==255)for(int x=x1;x<=x2;x++)*row++=c;else for(int x=x1;x<=x2;x++){*row=blend565(*row,c,alpha);row++;}n.stats.primitive[active_primitive].pixels+=(uint64_t)(x2-x1+1);}
+static void pixel(nui_layer_t *l,int x,int y,uint16_t c,unsigned alpha){if(!n.fb||x<l->clip.x1||x>l->clip.x2||y<l->clip.y1||y>l->clip.y2)return;alpha=alpha*l->opa/255;if(!alpha)return;uint16_t *p=&n.fb[(size_t)y*n.width+x];*p=blend565(*p,c,alpha);FINE_COUNT(n.stats.primitive[active_primitive].pixels++);}
+static void span(nui_layer_t *l,int x1,int x2,int y,uint16_t c,unsigned alpha){if(y<l->clip.y1||y>l->clip.y2)return;x1=MAX(x1,l->clip.x1);x2=MIN(x2,l->clip.x2);if(x1>x2)return;alpha=alpha*l->opa/255;if(!alpha)return;uint16_t *row=n.fb+(size_t)y*n.width+x1;if(alpha==255){if((c&255u)==(c>>8))memset(row,c&255u,(size_t)(x2-x1+1)*sizeof(*row));else for(int x=x1;x<=x2;x++)*row++=c;}else for(int x=x1;x<=x2;x++){*row=blend565(*row,c,alpha);row++;}FINE_COUNT(n.stats.primitive[active_primitive].pixels+=(uint64_t)(x2-x1+1));}
 /* Coverage at 2x2 integer subpixels only in rounded corners. The central
  * spans use direct RGB565 stores; no mask/layer/framebuffer allocations. */
 static unsigned round_coverage(nui_area_t a,int r,int x,int y){if(r<=0)return 255;int cx=x<a.x1+r?a.x1+r:x>a.x2-r?a.x2-r:x,cy=y<a.y1+r?a.y1+r:y>a.y2-r?a.y2-r:y;if(cx==x||cy==y)return 255;unsigned hit=0;int64_t rr=(int64_t)(r*4)*(r*4);for(int sy=1;sy<=3;sy+=2)for(int sx=1;sx<=3;sx+=2){int64_t dx=4*(x-cx)+sx-2,dy=4*(y-cy)+sy-2;if(dx*dx+dy*dy<=rr)hit++;}return hit*255/4;}
-static void rectangle(nui_layer_t *l,nui_area_t a,int radius,uint16_t c,unsigned alpha){nui_area_t clip;if(!area_intersect(&clip,a,l->clip))return;radius=MAX(0,MIN(radius,MIN(nui_area_get_width(&a),nui_area_get_height(&a))/2));for(int y=clip.y1;y<=clip.y2;y++){if(!radius||(y>=a.y1+radius&&y<=a.y2-radius)){span(l,clip.x1,clip.x2,y,c,alpha);continue;}int left=MAX(clip.x1,a.x1+radius),right=MIN(clip.x2,a.x2-radius);if(left<=right)span(l,left,right,y,c,alpha);for(int x=clip.x1;x<left;x++)pixel(l,x,y,c,round_coverage(a,radius,x,y)*alpha/255);for(int x=MAX(clip.x1,right+1);x<=clip.x2;x++)pixel(l,x,y,c,round_coverage(a,radius,x,y)*alpha/255);}}
+static void rectangle(nui_layer_t *l,nui_area_t a,int radius,uint16_t c,unsigned alpha){nui_area_t clip;if(!area_intersect(&clip,a,l->clip))return;radius=MAX(0,MIN(radius,MIN(nui_area_get_width(&a),nui_area_get_height(&a))/2));for(int y=clip.y1;y<=clip.y2;y++){if(!radius||(y>=a.y1+radius&&y<=a.y2-radius)){
+    int last=radius?MIN(clip.y2,a.y2-radius):clip.y2;
+    if(alpha*l->opa/255==255&&last>y){
+        size_t count=(size_t)(clip.x2-clip.x1+1);uint16_t *first=n.fb+(size_t)y*n.width+clip.x1;
+        if((c&255u)==(c>>8))memset(first,c&255u,count*sizeof(*first));else for(size_t x=0;x<count;x++)first[x]=c;
+        for(int py=y+1;py<=last;py++)memcpy(n.fb+(size_t)py*n.width+clip.x1,first,count*sizeof(*first));
+        FINE_COUNT(n.stats.primitive[active_primitive].pixels+=(uint64_t)count*(last-y+1));y=last;
+    }else span(l,clip.x1,clip.x2,y,c,alpha);
+    continue;}int left=MAX(clip.x1,a.x1+radius),right=MIN(clip.x2,a.x2-radius);if(left<=right)span(l,left,right,y,c,alpha);for(int x=clip.x1;x<left;x++)pixel(l,x,y,c,round_coverage(a,radius,x,y)*alpha/255);for(int x=MAX(clip.x1,right+1);x<=clip.x2;x++)pixel(l,x,y,c,round_coverage(a,radius,x,y)*alpha/255);}}
 static void border_pixel(nui_layer_t *l,nui_area_t a,nui_area_t inner,int radius,int width,int x,int y,uint16_t c,unsigned alpha){unsigned outer=round_coverage(a,radius,x,y),inside=0;if(x>=inner.x1&&x<=inner.x2&&y>=inner.y1&&y<=inner.y2)inside=round_coverage(inner,MAX(0,radius-width),x,y);if(outer>inside)pixel(l,x,y,c,(outer-inside)*alpha/255);}
 static void border(nui_layer_t *l,nui_area_t a,int radius,int width,uint16_t c,unsigned alpha){
     if(width<=0)return;
@@ -408,9 +446,23 @@ void nui_draw_arc(nui_layer_t *l,const nui_draw_arc_dsc_t *d){
 
 static int64_t cross_edge(int ax,int ay,int bx,int by,int x,int y){return (int64_t)(x-ax)*(by-ay)-(int64_t)(y-ay)*(bx-ax);}
 void nui_draw_triangle(nui_layer_t *l,const nui_draw_triangle_dsc_t *d){if(!l||!d)return;nui_primitive_t prev=active_primitive;active_primitive=NUI_PRIM_TRIANGLE;uint64_t t=profile_begin(active_primitive);int x[3],y[3];for(unsigned i=0;i<3;i++){x[i]=(int)lroundf(d->p[i].x*4);y[i]=(int)lroundf(d->p[i].y*4);}nui_area_t a={MIN(x[0],MIN(x[1],x[2]))/4-1,MIN(y[0],MIN(y[1],y[2]))/4-1,MAX(x[0],MAX(x[1],x[2]))/4+1,MAX(y[0],MAX(y[1],y[2]))/4+1},clip;if(area_intersect(&clip,a,l->clip)){uint16_t c=nui_color_to_u16(d->color);for(int py=clip.y1;py<=clip.y2;py++)for(int px=clip.x1;px<=clip.x2;px++){unsigned hit=0;for(int sy=1;sy<=3;sy+=2)for(int sx=1;sx<=3;sx+=2){int64_t e0=cross_edge(x[0],y[0],x[1],y[1],px*4+sx,py*4+sy),e1=cross_edge(x[1],y[1],x[2],y[2],px*4+sx,py*4+sy),e2=cross_edge(x[2],y[2],x[0],y[0],px*4+sx,py*4+sy);if((e0>=0&&e1>=0&&e2>=0)||(e0<=0&&e1<=0&&e2<=0))hit++;}if(hit)pixel(l,px,py,c,d->opa*hit/4);}}profile_end(active_primitive,t);active_primitive=prev;}
-static void glyph_draw(nui_layer_t *l,const nui_font_t *f,uint32_t cp,uint32_t next,int x,int y,nui_color_t fg,unsigned opa){nui_font_glyph_dsc_t d;if(!nui_font_get_glyph_dsc(f,&d,cp,next))return;const nui_font_t *primary=f;f=d.resolved_font;const uint8_t *bitmap=f->get_glyph_bitmap?f->get_glyph_bitmap(f,cp):NULL;if(!bitmap)return;int gx=x+d.ofs_x,gy=y+primary->line_height-primary->base_line-d.box_h-d.ofs_y;uint16_t c=nui_color_to_u16(fg);for(int row=0;row<d.box_h;row++){int py=gy+row;if(py<l->clip.y1||py>l->clip.y2)continue;int lo=MAX(0,l->clip.x1-gx),hi=MIN((int)d.box_w-1,l->clip.x2-gx);for(int col=lo;col<=hi;col++){size_t bit=((size_t)row*d.box_w+col)*d.bpp;unsigned val=(bitmap[bit/8]>>(8-d.bpp-(bit%8)))&((1u<<d.bpp)-1);if(val)pixel(l,gx+col,py,c,opa*val/((1u<<d.bpp)-1));}}}
+typedef struct {uint32_t rb[16],g[16];uint8_t inv[16],alpha[16];} glyph_palette_t;
+static void glyph_palette_init(glyph_palette_t *p,uint16_t c,unsigned opa,unsigned layer_opa){
+    for(unsigned i=0;i<16;i++){unsigned a=(opa*i/15)*layer_opa/255,mix=(a+4)>>3;p->alpha[i]=(uint8_t)a;p->inv[i]=(uint8_t)(32-mix);p->rb[i]=(c&0xf81fu)*mix;p->g[i]=(c&0x07e0u)*mix;}
+}
+static void glyph_draw(nui_layer_t *l,const nui_font_t *f,uint32_t cp,uint32_t next,int x,int y,nui_color_t fg,unsigned opa,const glyph_palette_t *palette){nui_font_glyph_dsc_t d;if(!nui_font_get_glyph_dsc(f,&d,cp,next))return;const nui_font_t *primary=f;f=d.resolved_font;const uint8_t *bitmap=NULL;if(f->get_glyph_bitmap==nui_font_get_bitmap_fmt_txt&&f->get_glyph_dsc==nui_font_get_glyph_dsc_fmt_txt){const nui_font_fmt_txt_dsc_t *fd=f->dsc;if(fd&&fd->bitmap_format==0)bitmap=fd->glyph_bitmap+fd->glyph_dsc[d.gid].bitmap_index;else bitmap=f->get_glyph_bitmap(f,cp);}else if(f->get_glyph_bitmap)bitmap=f->get_glyph_bitmap(f,cp);if(!bitmap)return;int gx=x+d.ofs_x,gy=y+primary->line_height-primary->base_line-d.box_h-d.ofs_y;uint16_t c=nui_color_to_u16(fg);for(int row=0;row<d.box_h;row++){int py=gy+row;if(py<l->clip.y1||py>l->clip.y2)continue;int lo=MAX(0,l->clip.x1-gx),hi=MIN((int)d.box_w-1,l->clip.x2-gx);if(lo>hi)continue;if(d.bpp==4){
+    uint16_t *dst=n.fb+(size_t)py*n.width+gx+lo;
+    for(int col=lo;col<=hi;col++,dst++){
+        size_t nibble=(size_t)row*d.box_w+col;unsigned val=(bitmap[nibble/2]>>(nibble&1?0:4))&15;
+        unsigned alpha=palette->alpha[val];if(!alpha)continue;
+        if(alpha==255)*dst=c;
+        else if(*dst!=c){unsigned inv=palette->inv[val];*dst=(uint16_t)((((palette->rb[val]+(*dst&0xf81fu)*inv)>>5)&0xf81fu)|(((palette->g[val]+(*dst&0x07e0u)*inv)>>5)&0x07e0u));}
+        FINE_COUNT(n.stats.primitive[active_primitive].pixels++);
+    }
+    continue;
+}for(int col=lo;col<=hi;col++){size_t bit=((size_t)row*d.box_w+col)*d.bpp;unsigned val=(bitmap[bit/8]>>(8-d.bpp-(bit%8)))&((1u<<d.bpp)-1);if(val)pixel(l,gx+col,py,c,opa*val/((1u<<d.bpp)-1));}}}
 static int text_range_width(const char *s,uint32_t begin,uint32_t end,const nui_font_t *f,int letter){int w=0;bool any=false;uint32_t i=begin;while(i<end&&s[i]){uint32_t cp=nui_text_utf8_next(s,&i),peek=i,next=i<end?nui_text_utf8_next(s,&peek):0;w+=glyph_advance(f,cp,next)+letter;any=true;}return MAX(0,w-(any?letter:0));}
-static void draw_text_range(nui_layer_t *l,const char *s,uint32_t begin,uint32_t end,const nui_font_t *f,int letter,int x,int y,nui_color_t fg,unsigned opa){uint32_t i=begin;while(i<end&&s[i]){uint32_t cp=nui_text_utf8_next(s,&i),peek=i,next=i<end?nui_text_utf8_next(s,&peek):0;glyph_draw(l,f,cp,next,x,y,fg,opa);x+=glyph_advance(f,cp,next)+letter;}}
+static void draw_text_range(nui_layer_t *l,const char *s,uint32_t begin,uint32_t end,const nui_font_t *f,int letter,int x,int y,nui_color_t fg,unsigned opa){glyph_palette_t palette;glyph_palette_init(&palette,nui_color_to_u16(fg),opa,l->opa);uint32_t i=begin;while(i<end&&s[i]){uint32_t cp=nui_text_utf8_next(s,&i),peek=i,next=i<end?nui_text_utf8_next(s,&peek):0;glyph_draw(l,f,cp,next,x,y,fg,opa,&palette);x+=glyph_advance(f,cp,next)+letter;}}
 static uint32_t text_line_end(const char *s,uint32_t start,const nui_font_t *f,int letter,int width,bool wrap,uint32_t *next){uint32_t i=start,last_space=UINT32_MAX;int w=0;while(s[i]){uint32_t prev=i,cp=nui_text_utf8_next(s,&i),peek=i,nc=nui_text_utf8_next(s,&peek);if(cp=='\n'){*next=i;return prev;}int adv=glyph_advance(f,cp,nc);if(wrap&&w+adv>width&&prev>start){if(last_space!=UINT32_MAX&&last_space>start){*next=last_space+1;return last_space;}*next=prev;return prev;}if(cp==' ')last_space=prev;w+=adv+letter;}*next=i;return i;}
 static void text_render(nui_obj_t *o,nui_layer_t *layer,nui_area_t a,unsigned part){const nui_font_t *f=font(o,part);const char *source=o->text?o->text:"";char *masked=NULL;if(o->password){unsigned count=utf8_count(source);masked=mem_alloc(count*3+1);if(masked){for(unsigned i=0;i<count;i++)memcpy(masked+i*3,"•",3);source=masked;}}
     int bw=num(o,NUI_STYLE_BORDER_WIDTH,part);
@@ -506,7 +558,7 @@ nui_chart_series_t *nui_chart_get_series_next(nui_obj_t *o,const nui_chart_serie
 int32_t *nui_chart_get_series_y_array(nui_obj_t *o,nui_chart_series_t *s){(void)o;return s?s->y_points:NULL;}
 void nui_chart_refresh(nui_obj_t *o){nui_obj_invalidate(o);}
 
-static void image_render(nui_obj_t *o,nui_layer_t *layer,nui_area_t a){const nui_image_dsc_t *d=o->image;if(!d||!d->data)return;assert(d->header.cf==NUI_COLOR_FORMAT_RGB565);nui_area_t clip;if(!area_intersect(&clip,a,layer->clip))return;unsigned stride=d->header.stride?d->header.stride/2:d->header.w,opa=(unsigned)num(o,NUI_STYLE_IMAGE_OPA,0)*layer->opa/255;assert(stride>=d->header.w&&d->data_size>=(size_t)stride*d->header.h*2);const uint16_t *src=(const uint16_t*)d->data;uint64_t t=profile_begin(NUI_PRIM_IMAGE);nui_primitive_t prev=active_primitive;active_primitive=NUI_PRIM_IMAGE;for(int y=clip.y1;y<=clip.y2;y++){const uint16_t *row=src+(size_t)(y-a.y1)*stride+(clip.x1-a.x1);uint16_t *dest=n.fb+(size_t)y*n.width+clip.x1;size_t count=(size_t)(clip.x2-clip.x1+1);if(opa==255)memcpy(dest,row,count*2);else for(size_t x=0;x<count;x++)dest[x]=blend565(dest[x],row[x],opa);n.stats.primitive[NUI_PRIM_IMAGE].pixels+=count;}profile_end(NUI_PRIM_IMAGE,t);active_primitive=prev;}
+static void image_render(nui_obj_t *o,nui_layer_t *layer,nui_area_t a){const nui_image_dsc_t *d=o->image;if(!d||!d->data)return;assert(d->header.cf==NUI_COLOR_FORMAT_RGB565);nui_area_t clip;if(!area_intersect(&clip,a,layer->clip))return;unsigned stride=d->header.stride?d->header.stride/2:d->header.w,opa=(unsigned)num(o,NUI_STYLE_IMAGE_OPA,0)*layer->opa/255;assert(stride>=d->header.w&&d->data_size>=(size_t)stride*d->header.h*2);const uint16_t *src=(const uint16_t*)d->data;uint64_t t=profile_begin(NUI_PRIM_IMAGE);nui_primitive_t prev=active_primitive;active_primitive=NUI_PRIM_IMAGE;for(int y=clip.y1;y<=clip.y2;y++){const uint16_t *row=src+(size_t)(y-a.y1)*stride+(clip.x1-a.x1);uint16_t *dest=n.fb+(size_t)y*n.width+clip.x1;size_t count=(size_t)(clip.x2-clip.x1+1);if(opa==255)memcpy(dest,row,count*2);else for(size_t x=0;x<count;x++)dest[x]=blend565(dest[x],row[x],opa);FINE_COUNT(n.stats.primitive[NUI_PRIM_IMAGE].pixels+=count);}profile_end(NUI_PRIM_IMAGE,t);active_primitive=prev;}
 
 /* Separable integer blur of a rounded opaque silhouette. Support is half the
  * declared shadow width; the center is shifted before filtering. No masks,
@@ -516,32 +568,102 @@ static unsigned blur_axis(int coordinate,int low,int high,int blur){
     static const unsigned weight[9]={1,8,28,56,70,56,28,8,1};unsigned sum=0;
     for(int k=-4;k<=4;k++){int pos=coordinate+k*blur/4;if(pos>=low&&pos<=high)sum+=weight[k+4];}return sum;
 }
+
+#define SHADOW_CACHE_LIMIT 65536u
+#define SHADOW_CACHE_SLOTS 8
+/* A canonical 9-slice is independent of card width/height. The cached data is
+ * only alpha, computed by exactly the v1 integer blur formula. */
+typedef struct {int radius,width,offset,opa,cap,cw,ch,mw,mh;bool narrow_w,narrow_h;uint8_t *alpha;size_t bytes;uint64_t used;} shadow_cache_entry;
+static shadow_cache_entry shadow_cache[SHADOW_CACHE_SLOTS];
+static size_t shadow_cache_bytes,shadow_cache_peak_bytes;
+static uint64_t shadow_cache_clock;
+static unsigned shadow_alpha(nui_area_t a,int radius,int blur,int offset,unsigned opa,int x,int y){
+    if(inside_round(a,MAX(0,radius-1),x,y))return 0;
+    nui_area_t shape={a.x1,a.y1+offset,a.x2,a.y2+offset};
+    static const unsigned weight[9]={1,8,28,56,70,56,28,8,1};unsigned coverage;
+    if(x>=shape.x1+radius+blur&&x<=shape.x2-radius-blur)coverage=blur_axis(y,shape.y1,shape.y2,blur)*256;
+    else if(y>=shape.y1+radius+blur&&y<=shape.y2-radius-blur)coverage=blur_axis(x,shape.x1,shape.x2,blur)*256;
+    else{coverage=0;for(int iy=-4;iy<=4;iy++)for(int ix=-4;ix<=4;ix++)if(inside_round(shape,radius,x+ix*blur/4,y+iy*blur/4))coverage+=weight[ix+4]*weight[iy+4];}
+    unsigned alpha=(coverage*opa+32768)>>16;return MIN(alpha,(opa+1)/2);
+}
+static void shadow_cache_clear(void){for(unsigned i=0;i<SHADOW_CACHE_SLOTS;i++){mem_free(shadow_cache[i].alpha);memset(&shadow_cache[i],0,sizeof(shadow_cache[i]));}shadow_cache_bytes=0;}
+static shadow_cache_entry *shadow_mask(int w,int h,int radius,int width,int offset,unsigned opa){
+    int blur=MAX(1,(width+1)/2),cap=radius+2*blur+abs(offset)+2;
+    if(cap>96||width>32||abs(offset)>32)return NULL;
+    int cw=MIN(w,2*cap+1),ch=MIN(h,2*cap+1);
+    for(unsigned i=0;i<SHADOW_CACHE_SLOTS;i++){shadow_cache_entry *e=&shadow_cache[i];if(e->alpha&&e->radius==radius&&e->width==width&&e->offset==offset&&e->opa==(int)opa&&e->cw==cw&&e->ch==ch){e->used=++shadow_cache_clock;FINE_COUNT(n.stats.shadow_cache_hits++);return e;}}
+    FINE_COUNT(n.stats.shadow_cache_misses++);
+    size_t bytes=(size_t)(cw+2*blur)*(ch+2*blur);if(bytes>SHADOW_CACHE_LIMIT)return NULL;
+    int slot=-1;for(unsigned i=0;i<SHADOW_CACHE_SLOTS;i++)if(!shadow_cache[i].alpha){slot=(int)i;break;}
+    if(slot<0){slot=0;for(unsigned i=1;i<SHADOW_CACHE_SLOTS;i++)if(shadow_cache[i].used<shadow_cache[slot].used)slot=(int)i;}
+    while(shadow_cache_bytes+bytes>SHADOW_CACHE_LIMIT||shadow_cache[slot].alpha){shadow_cache_entry *e=&shadow_cache[slot];shadow_cache_bytes-=e->bytes;if(e->alpha)FINE_COUNT(n.stats.shadow_cache_evictions++);mem_free(e->alpha);memset(e,0,sizeof(*e));if(shadow_cache_bytes+bytes<=SHADOW_CACHE_LIMIT)break;slot=0;for(unsigned i=1;i<SHADOW_CACHE_SLOTS;i++)if(shadow_cache[i].alpha&&(!shadow_cache[slot].alpha||shadow_cache[i].used<shadow_cache[slot].used))slot=(int)i;}
+    shadow_cache_entry *e=&shadow_cache[slot];uint8_t *data=mem_alloc(bytes);if(!data)return NULL;
+    *e=(shadow_cache_entry){.radius=radius,.width=width,.offset=offset,.opa=(int)opa,.cap=cap,.cw=cw,.ch=ch,.mw=cw+2*blur,.mh=ch+2*blur,.narrow_w=w<=2*cap,.narrow_h=h<=2*cap,.alpha=data,.bytes=bytes,.used=++shadow_cache_clock};
+    nui_area_t canonical={0,0,cw-1,ch-1};for(int y=0;y<e->mh;y++)for(int x=0;x<e->mw;x++)data[(size_t)y*e->mw+x]=(uint8_t)shadow_alpha(canonical,radius,blur,offset,opa,x-blur,y-blur+offset);
+    shadow_cache_bytes+=bytes;if(shadow_cache_bytes>shadow_cache_peak_bytes)shadow_cache_peak_bytes=shadow_cache_bytes;FINE_COUNT(n.stats.shadow_cache_build_pixels+=bytes);return e;
+}
+static int shadow_map(int coordinate,int length,int canonical,int cap,bool narrow){if(narrow||coordinate<cap)return coordinate;if(coordinate>=length-cap)return coordinate-length+canonical;return cap;}
 static void shadow_render(nui_layer_t *l,nui_area_t a,int radius,int width,int offset,uint16_t c,unsigned opa){
-    int blur=MAX(1,(width+1)/2);nui_area_t shape={a.x1,a.y1+offset,a.x2,a.y2+offset};
-    nui_area_t expanded={shape.x1-blur,shape.y1-blur,shape.x2+blur,shape.y2+blur},clip;
+    int blur=MAX(1,(width+1)/2);nui_area_t expanded={a.x1-blur,a.y1+offset-blur,a.x2+blur,a.y2+offset+blur},clip;
     if(!area_intersect(&clip,expanded,l->clip))return;
-    radius=MAX(0,MIN(radius,MIN(nui_area_get_width(&a),nui_area_get_height(&a))/2));
-    static const unsigned weight[9]={1,8,28,56,70,56,28,8,1};
-    for(int y=clip.y1;y<=clip.y2;y++)for(int x=clip.x1;x<=clip.x2;x++){
-        if(inside_round(a,MAX(0,radius-1),x,y))continue;
-        unsigned coverage;
-        if(x>=shape.x1+radius+blur&&x<=shape.x2-radius-blur)coverage=blur_axis(y,shape.y1,shape.y2,blur)*256;
-        else if(y>=shape.y1+radius+blur&&y<=shape.y2-radius-blur)coverage=blur_axis(x,shape.x1,shape.x2,blur)*256;
-        else{coverage=0;for(int iy=-4;iy<=4;iy++)for(int ix=-4;ix<=4;ix++)if(inside_round(shape,radius,x+ix*blur/4,y+iy*blur/4))coverage+=weight[ix+4]*weight[iy+4];}
-        unsigned alpha=(coverage*opa+32768)>>16;
-        /* Only the outside penumbra remains visible over an opaque card.
-         * Bound its coverage to half the source shadow opacity; otherwise a
-         * shifted silhouette leaves a dark hard strip at the lower edge. */
-        alpha=MIN(alpha,(opa+1)/2);if(alpha)pixel(l,x,y,c,alpha);
+    int w=nui_area_get_width(&a),h=nui_area_get_height(&a);radius=MAX(0,MIN(radius,MIN(w,h)/2));
+    shadow_cache_entry *e=shadow_mask(w,h,radius,width,offset,opa);
+    /* Rows through the solid interior only visit the two edge strips. */
+    int edge=MAX(radius+blur+abs(offset),blur+1);
+    for(int y=clip.y1;y<=clip.y2;y++){
+        int intervals[4]={clip.x1,clip.x2,1,0};
+        if(y>=a.y1+edge&&y<=a.y2-edge){intervals[1]=MIN(clip.x2,a.x1+edge);intervals[2]=MAX(clip.x1,a.x2-edge);intervals[3]=clip.x2;if(intervals[2]<=intervals[1]){intervals[1]=clip.x2;intervals[2]=1;intervals[3]=0;}}
+        for(unsigned run=0;run<2;run++)for(int x=intervals[run*2];x<=intervals[run*2+1];x++){
+            unsigned alpha;
+            if(e){int sx=shadow_map(x-a.x1,w,e->cw,e->cap,e->narrow_w)+blur,sy=shadow_map(y-a.y1,h,e->ch,e->cap,e->narrow_h)+blur-offset;alpha=e->alpha[(size_t)sy*e->mw+sx];}
+            else alpha=shadow_alpha(a,radius,blur,offset,opa,x,y);
+            if(alpha)pixel(l,x,y,c,alpha);
+        }
     }
 }
+
+/* One bounded mathematical LUT, never a cached rendered image. */
+static nui_gradient_cache_t gradient_cache;
+static void gradient_render(nui_layer_t *l,nui_area_t a,nui_area_t clip,int radius,
+                            int direction,nui_color_t begin,nui_color_t end,unsigned opa){
+    bool horizontal=direction==NUI_GRAD_DIR_HOR;
+    int total=horizontal?nui_area_get_width(&a):nui_area_get_height(&a);
+#if NUI_PROFILE_FINE_COUNTERS
+    bool replaced=gradient_cache.valid&&(gradient_cache.length!=total||gradient_cache.begin!=begin||gradient_cache.end!=end);
+#endif
+    const uint16_t *lut=nui_gradient_prepare(&gradient_cache,total,begin,end);
+    FINE_COUNT(if(lut&&replaced)n.stats.gradient_cache_evictions++);
+    radius=MIN(radius,MIN(nui_area_get_width(&a),nui_area_get_height(&a))/2);
+    for(int y=clip.y1;y<=clip.y2;y++){
+        int left=clip.x1,right=clip.x1-1;
+        if(lut&&horizontal&&opa==255&&l->opa==255){
+            if(radius<=0||(y>=a.y1+radius&&y<=a.y2-radius)){left=clip.x1;right=clip.x2;}
+            else{left=MAX(clip.x1,a.x1+radius);right=MIN(clip.x2,a.x2-radius);}
+            if(left<=right){
+                size_t count=(size_t)(right-left+1);
+                memcpy(n.fb+(size_t)y*n.width+left,lut+left-a.x1,count*sizeof(*lut));
+                FINE_COUNT(n.stats.primitive[NUI_PRIM_FILL].pixels+=count);
+            }else{left=clip.x1;right=clip.x1-1;}
+        }
+        /* Identical coverage/blend path for corners, inherited opacity and LUT fallback. */
+        for(int run=0;run<2;run++){
+            int from=run?right+1:clip.x1,to=run?clip.x2:left-1;
+            for(int x=from;x<=to;x++){
+                int pos=horizontal?x-a.x1:y-a.y1;
+                uint16_t c=lut?lut[pos]:nui_color_to_u16(nui_color_mix(end,begin,(uint8_t)(pos*255/MAX(1,total-1))));
+                pixel(l,x,y,c,opa*round_coverage(a,radius,x,y)/255);
+            }
+        }
+    }
+}
+
 static void object_box(nui_obj_t *o,nui_layer_t *l,nui_area_t a,unsigned part){int r=num(o,NUI_STYLE_RADIUS,part),sw=num(o,NUI_STYLE_SHADOW_WIDTH,part),sy=num(o,NUI_STYLE_SHADOW_OFFSET_Y,part);if(sw>0&&num(o,NUI_STYLE_SHADOW_OPA,part)>0){
         uint64_t t=profile_begin(NUI_PRIM_SHADOW);nui_primitive_t prev=active_primitive;active_primitive=NUI_PRIM_SHADOW;
         shadow_render(l,a,r,sw,sy,nui_color_to_u16(color(o,NUI_STYLE_SHADOW_COLOR,part)),(unsigned)num(o,NUI_STYLE_SHADOW_OPA,part));
         profile_end(NUI_PRIM_SHADOW,t);active_primitive=prev;
     }
     nui_draw_rect_dsc_t d={.radius=r,.bg_color=color(o,NUI_STYLE_BG_COLOR,part),.bg_opa=(uint8_t)num(o,NUI_STYLE_BG_OPA,part),.border_color=color(o,NUI_STYLE_BORDER_COLOR,part),.border_width=num(o,NUI_STYLE_BORDER_WIDTH,part),.border_opa=255};
-    int grad=num(o,NUI_STYLE_BG_GRAD_DIR,part);if(grad&&d.bg_opa){uint64_t t=profile_begin(NUI_PRIM_FILL);nui_primitive_t prev=active_primitive;active_primitive=NUI_PRIM_FILL;nui_area_t clip;if(area_intersect(&clip,a,l->clip)){nui_color_t end=color(o,NUI_STYLE_BG_GRAD_COLOR,part);int total=grad==NUI_GRAD_DIR_HOR?nui_area_get_width(&a):nui_area_get_height(&a);for(int y=clip.y1;y<=clip.y2;y++)for(int x=clip.x1;x<=clip.x2;x++){int pos=grad==NUI_GRAD_DIR_HOR?x-a.x1:y-a.y1;nui_color_t c=nui_color_mix(end,d.bg_color,(uint8_t)(pos*255/MAX(1,total-1)));pixel(l,x,y,nui_color_to_u16(c),d.bg_opa*round_coverage(a,MIN(r,MIN(nui_area_get_width(&a),nui_area_get_height(&a))/2),x,y)/255);}}profile_end(NUI_PRIM_FILL,t);active_primitive=prev;d.bg_opa=0;}
+    int grad=num(o,NUI_STYLE_BG_GRAD_DIR,part);if(grad&&d.bg_opa){uint64_t t=profile_begin(NUI_PRIM_FILL);nui_primitive_t prev=active_primitive;active_primitive=NUI_PRIM_FILL;nui_area_t clip;if(area_intersect(&clip,a,l->clip)){nui_color_t end=color(o,NUI_STYLE_BG_GRAD_COLOR,part);gradient_render(l,a,clip,r,grad,d.bg_color,end,d.bg_opa);}profile_end(NUI_PRIM_FILL,t);active_primitive=prev;d.bg_opa=0;}
     nui_draw_rect(l,&d,&a);int ow=num(o,NUI_STYLE_OUTLINE_WIDTH,part),op=num(o,NUI_STYLE_OUTLINE_PAD,part);if(ow>0){nui_area_t outline={a.x1-op-ow,a.y1-op-ow,a.x2+op+ow,a.y2+op+ow};nui_draw_rect_dsc_t od={.radius=r==NUI_RADIUS_CIRCLE?r:r+op+ow,.border_color=color(o,NUI_STYLE_OUTLINE_COLOR,part),.border_width=ow,.border_opa=(uint8_t)num(o,NUI_STYLE_OUTLINE_OPA,part)};nui_draw_rect(l,&od,&outline);}}
 static void keyboard_render(nui_obj_t *o,nui_layer_t *l){nui_area_t areas[MAX_KEYS];const char *keys[MAX_KEYS];size_t count=keyboard_geometry(o,areas,keys,MAX_KEYS);uint32_t saved=o->state;for(unsigned i=0;i<count;i++){if(!area_intersect(&(nui_area_t){0},areas[i],l->clip))continue;o->state=saved;if(keyboard_controls(o)[i]&0x0100u)o->state|=NUI_STATE_CHECKED;if(o->key_pressed==(int)i)o->state|=NUI_STATE_PRESSED;unsigned part=NUI_PART_ITEMS;object_box(o,l,areas[i],part);const nui_font_t *f=font(o,part);int letter=num(o,NUI_STYLE_TEXT_LETTER_SPACE,part),w=text_range_width(keys[i],0,(uint32_t)strlen(keys[i]),f,letter),x=areas[i].x1+(nui_area_get_width(&areas[i])-w)/2,y=areas[i].y1+(nui_area_get_height(&areas[i])-f->line_height)/2;nui_layer_t key_layer=*l;if(area_intersect(&key_layer.clip,l->clip,areas[i])){uint64_t t=profile_begin(NUI_PRIM_LABEL);nui_primitive_t prev=active_primitive;active_primitive=NUI_PRIM_LABEL;draw_text_range(&key_layer,keys[i],0,(uint32_t)strlen(keys[i]),f,letter,x,y,color(o,NUI_STYLE_TEXT_COLOR,part),255);profile_end(NUI_PRIM_LABEL,t);active_primitive=prev;}}o->state=saved;}
 static void chart_render(nui_obj_t *o,nui_layer_t *l,nui_area_t a){int w=nui_area_get_width(&a),h=nui_area_get_height(&a);nui_draw_line_dsc_t line;nui_draw_line_dsc_init(&line);line.color=color(o,NUI_STYLE_LINE_COLOR,0);line.width=num(o,NUI_STYLE_LINE_WIDTH,0);line.opa=(uint8_t)num(o,NUI_STYLE_LINE_OPA,0);if(line.opa){for(unsigned i=0;i<o->hdiv;i++){int y=a.y1+(h-1)*(int)i/MAX(1,(int)o->hdiv-1);line.p1=(nui_point_precise_t){(float)a.x1,(float)y};line.p2=(nui_point_precise_t){(float)a.x2,(float)y};nui_draw_line(l,&line);}for(unsigned i=0;i<o->vdiv;i++){int x=a.x1+(w-1)*(int)i/MAX(1,(int)o->vdiv-1);line.p1=(nui_point_precise_t){(float)x,(float)a.y1};line.p2=(nui_point_precise_t){(float)x,(float)a.y2};nui_draw_line(l,&line);}}
@@ -558,8 +680,19 @@ static bool opaque_cover(nui_obj_t *o,nui_area_t dirty){
     int r=num(o,NUI_STYLE_RADIUS,0);r=MAX(0,MIN(r,MIN(nui_area_get_width(&a),nui_area_get_height(&a))/2));
     return !r||(dirty.x1>=a.x1+r&&dirty.x2<=a.x2-r)||(dirty.y1>=a.y1+r&&dirty.y2<=a.y2-r);
 }
+/* Paint-inert-on-press is NOT permission to suppress draw events. Only an
+ * explicit occlusion audit may opt a callback subtree out of this guard. */
+static bool occlusion_callbacks_required(const nui_obj_t *o){
+    if(!nui_obj_is_visible(o)||(o->flags&NUI_OBJ_FLAG_OCCLUSION_PAINT_INERT))return false;
+    for(handler *h=o->handlers;h;h=h->next)
+        if(h->code==NUI_EVENT_DRAW_MAIN||h->code==NUI_EVENT_DRAW_POST||h->code==NUI_EVENT_ALL||
+           (h->code==NUI_EVENT_DRAW_TASK_ADDED&&(o->flags&NUI_OBJ_FLAG_SEND_DRAW_TASK_EVENTS)))return true;
+    for(nui_obj_t *c=o->first;c;c=c->next)if(occlusion_callbacks_required(c))return true;
+    return false;
+}
 static void object_render(nui_obj_t *o,nui_layer_t parent){if(!nui_obj_is_visible(o))return;nui_area_t a,visual;nui_obj_get_coords(o,&a);visual=object_visual(o);nui_area_t check;if(!area_intersect(&check,parent.clip,visual))return;nui_layer_t l=parent;l.opa=(uint8_t)((unsigned)parent.opa*(unsigned)num(o,NUI_STYLE_OPA,0)/255);if(!l.opa)return;nui_obj_t *saved_source=draw_source;draw_source=o;
     nui_obj_t *cover=NULL;if(l.opa==255)for(nui_obj_t *c=o->last;c;c=c->prev)if(opaque_cover(c,l.clip)){cover=c;break;}
+    if(cover)for(nui_obj_t *c=o->first;c&&c!=cover;c=c->next)if(occlusion_callbacks_required(c)){cover=NULL;break;}
     if(!cover)object_box(o,&l,a,0);
     nui_layer_t inner=l;if(!area_intersect(&inner.clip,l.clip,a)){draw_source=saved_source;return;}
     if(!cover){if(is_kind(o,1)||is_kind(o,4))text_render(o,&inner,a,0);
@@ -571,11 +704,15 @@ static void object_render(nui_obj_t *o,nui_layer_t parent){if(!nui_obj_is_visibl
     }event_send(o,NUI_EVENT_DRAW_MAIN,NULL,&inner);if(o->deleted){draw_source=saved_source;return;}for(nui_obj_t *c=cover?cover:o->first;c;){nui_obj_t *next=c->next;object_render(c,inner);c=next;}event_send(o,NUI_EVENT_DRAW_POST,NULL,&inner);draw_source=saved_source;}
 void nui_native_set_flush_cb(nui_native_flush_cb_t cb,void *user){n.flush=cb;n.flush_user=user;}
 void nui_native_set_clock_cb(uint64_t (*cb)(void)){n.clock_us=cb;}
-void nui_native_profile_snapshot(nui_native_stats_t *out){if(out)*out=n.stats;}
-void nui_native_profile_reset(void){size_t bytes=n.stats.allocation_bytes,peak=n.stats.allocation_peak,count=n.stats.allocation_count;uint64_t fail=n.stats.allocation_failures;memset(&n.stats,0,sizeof(n.stats));n.stats.allocation_bytes=bytes;n.stats.allocation_peak=peak;n.stats.allocation_count=count;n.stats.allocation_failures=fail;}
+void nui_native_profile_snapshot(nui_native_stats_t *out){if(out){*out=n.stats;out->shadow_cache_bytes=shadow_cache_bytes+sizeof(shadow_cache);out->shadow_cache_peak_bytes=shadow_cache_peak_bytes+sizeof(shadow_cache);out->shadow_cache_capacity_bytes=SHADOW_CACHE_LIMIT+sizeof(shadow_cache);out->shadow_cache_static_bytes=sizeof(shadow_cache);out->object_cache_bytes=cache_objects*OBJECT_CACHE_BYTES;out->object_cache_peak_bytes=cache_objects_peak*OBJECT_CACHE_BYTES;out->object_cache_bytes_per_object=OBJECT_CACHE_BYTES;out->gradient_cache_bytes=sizeof(gradient_cache);out->gradient_cache_peak_bytes=sizeof(gradient_cache);out->gradient_cache_capacity_bytes=sizeof(gradient_cache);out->gradient_cache_hits=gradient_cache.hits;out->gradient_cache_misses=gradient_cache.misses;out->gradient_cache_build_pixels=gradient_cache.build_pixels;}}
+void nui_native_profile_reset(void){size_t bytes=n.stats.allocation_bytes,peak=n.stats.allocation_peak,count=n.stats.allocation_count;uint64_t fail=n.stats.allocation_failures;memset(&n.stats,0,sizeof(n.stats));n.stats.allocation_bytes=bytes;n.stats.allocation_peak=peak;n.stats.allocation_count=count;n.stats.allocation_failures=fail;gradient_cache.hits=gradient_cache.misses=gradient_cache.build_pixels=0;}
 size_t nui_native_get_dirty(nui_area_t *out,size_t cap){size_t count=MIN(cap,n.rendered_count);if(out&&count)memcpy(out,n.rendered,count*sizeof(*out));return n.rendered_count;}
-size_t nui_native_render(void){if(!n.fb||!n.root||!n.dirty_count){n.rendered_count=0;return 0;}uint64_t start=now_us();n.rendered_count=n.dirty_count;memcpy(n.rendered,n.dirty,n.dirty_count*sizeof(nui_area_t));n.dirty_count=0;n.rendering=true;for(size_t i=0;i<n.rendered_count;i++){nui_area_t a=n.rendered[i];nui_layer_t layer={a,255};active_primitive=NUI_PRIM_FILL;for(int y=a.y1;y<=a.y2;y++){uint16_t *row=n.fb+(size_t)y*n.width+a.x1;memset(row,0,(size_t)nui_area_get_width(&a)*2);}object_render(n.root,layer);n.stats.dirty_pixels+=(uint64_t)nui_area_get_width(&a)*nui_area_get_height(&a);}n.rendering=false;garbage_collect();n.stats.frames++;n.stats.dirty_rects+=n.rendered_count;uint64_t end=now_us();if(end>=start)n.stats.render_us+=end-start;/* Callback time is excluded from render_us; platform measures transport. */if(n.flush)for(size_t i=0;i<n.rendered_count;i++){nui_area_t *a=&n.rendered[i];n.flush(a,n.fb+(size_t)a->y1*n.width+a->x1,(size_t)n.width,n.flush_user);}return n.rendered_count;}
-void nui_native_deinit(void){if(n.root)nui_obj_delete(n.root);garbage_collect();while(n.timers){nui_timer_t *t=n.timers;n.timers=t->next;mem_free(t);}if(n.own_fb)mem_free(n.fb);n.fb=NULL;n.own_fb=false;n.dirty_count=n.rendered_count=0;n.capture=n.focus=NULL;}
+size_t nui_native_render(void){if(!n.fb||!n.root||!n.dirty_count){n.rendered_count=0;return 0;}uint64_t start=now_us();n.rendered_count=n.dirty_count;memcpy(n.rendered,n.dirty,n.dirty_count*sizeof(nui_area_t));n.dirty_count=0;n.rendering=true;for(size_t i=0;i<n.rendered_count;i++){nui_area_t a=n.rendered[i];nui_layer_t layer={a,255};active_primitive=NUI_PRIM_FILL;nui_area_t root_bounds;nui_obj_get_coords(n.root,&root_bounds);
+    bool root_opaque=nui_obj_is_visible(n.root)&&num(n.root,NUI_STYLE_BG_OPA,0)==255&&num(n.root,NUI_STYLE_OPA,0)==255&&num(n.root,NUI_STYLE_RADIUS,0)==0&&area_contains(root_bounds,a);
+    if(root_opaque)FINE_COUNT(n.stats.clear_pixels_skipped+=(uint64_t)nui_area_get_width(&a)*nui_area_get_height(&a));
+    else for(int y=a.y1;y<=a.y2;y++){uint16_t *row=n.fb+(size_t)y*n.width+a.x1;memset(row,0,(size_t)nui_area_get_width(&a)*2);}
+    object_render(n.root,layer);n.stats.dirty_pixels+=(uint64_t)nui_area_get_width(&a)*nui_area_get_height(&a);}n.rendering=false;garbage_collect();n.stats.frames++;n.stats.dirty_rects+=n.rendered_count;uint64_t end=now_us();if(end>=start)n.stats.render_us+=end-start;/* Callback time is excluded from render_us; platform measures transport. */if(n.flush)for(size_t i=0;i<n.rendered_count;i++){nui_area_t *a=&n.rendered[i];n.flush(a,n.fb+(size_t)a->y1*n.width+a->x1,(size_t)n.width,n.flush_user);}return n.rendered_count;}
+void nui_native_deinit(void){gradient_cache.valid=false;shadow_cache_clear();if(n.root)nui_obj_delete(n.root);garbage_collect();while(n.timers){nui_timer_t *t=n.timers;n.timers=t->next;mem_free(t);}if(n.own_fb)mem_free(n.fb);n.fb=NULL;n.own_fb=false;n.dirty_count=n.rendered_count=0;n.capture=n.focus=NULL;}
 bool nui_native_init(int width,int height,uint16_t *fb){if(width<=0||height<=0||(size_t)width>SIZE_MAX/2/(size_t)height)return false;nui_native_deinit();n.width=width;n.height=height;n.ticks=0;n.input=(nui_indev_t){0};if(!fb){fb=mem_alloc((size_t)width*height*2);if(!fb)return false;n.own_fb=true;}n.fb=fb;n.root=object_new(NULL,&nui_obj_class);if(!n.root){if(n.own_fb)mem_free(fb);n.fb=NULL;return false;}n.root->w=width;n.root->h=height;n.root->flags=0;nui_obj_set_style_bg_opa(n.root,255,0);nui_obj_set_style_bg_color(n.root,0,0);nui_obj_invalidate(n.root);return true;}
 nui_obj_t *nui_screen_active(void){if(!n.root)nui_native_init(1280,720,NULL);return n.root;}
 void nui_init(void){if(!n.root)nui_native_init(1280,720,NULL);}

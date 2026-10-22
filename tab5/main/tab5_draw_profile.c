@@ -6,6 +6,20 @@
 #include "freertos/task.h"
 #endif
 #include <string.h>
+#include <stdio.h>
+
+bool tab5_draw_profile_timing_enabled(void){return NUI_PROFILE_PRIMITIVE_TIMING!=0;}
+bool tab5_draw_profile_counters_enabled(void){return NUI_PROFILE_FINE_COUNTERS!=0;}
+void tab5_draw_profile_format(char *out,size_t capacity,const tab5_draw_profile_entry_t *entry){
+    if(!out||!capacity)return;
+    if(!entry){out[0]=0;return;}
+    char us[24]="null",calls[24]="null";
+    bool timed=tab5_draw_profile_timing_enabled(),counted=tab5_draw_profile_counters_enabled();
+    if(timed)snprintf(us,sizeof(us),"%llu",(unsigned long long)entry->us);
+    if(counted)snprintf(calls,sizeof(calls),"%llu",(unsigned long long)entry->calls);
+    snprintf(out,capacity,"{\"draw\":\"%s\",\"us\":%s,\"calls\":%s,\"timing_enabled\":%s,\"counters_enabled\":%s}",
+             entry->name?entry->name:"unknown",us,calls,timed?"true":"false",counted?"true":"false");
+}
 
 /* Keep the diagnostic protocol's eight-entry shape, but report actual native
  * primitives rather than retaining linker wrappers from the removed toolkit. */

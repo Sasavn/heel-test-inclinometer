@@ -9,6 +9,9 @@ idf_component_register(SRCS
              esp_event lwip fatfs sdmmc mbedtls tab5_board_support esp_driver_ppa esp_lcd
     PRIV_REQUIRES espressif__esp_lcd_st7123 espressif__esp_lcd_ili9881c
                   espressif__esp_lcd_touch_st7123 espressif__esp_lcd_touch_gt911)
+target_compile_definitions(${COMPONENT_LIB} PRIVATE
+    NUI_PROFILE_FINE_COUNTERS=$<BOOL:${CONFIG_TAB5_NATIVE_FINE_PROFILE}>
+    NUI_PROFILE_PRIMITIVE_TIMING=$<BOOL:${CONFIG_TAB5_NATIVE_PRIMITIVE_TIMING}>)
 foreach(fn esp_lcd_new_dsi_bus esp_lcd_new_panel_st7123 esp_lcd_new_panel_ili9881c
            esp_lcd_touch_new_i2c_st7123 esp_lcd_touch_new_i2c_gt911
            esp_lcd_panel_reset esp_lcd_panel_init esp_lcd_panel_disp_on_off)

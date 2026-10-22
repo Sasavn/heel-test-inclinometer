@@ -1,0 +1,7 @@
+{
+  "status": "TIMINGREADY authorized",
+  "shared_gate_owner": "This benchmark worker; marker blocks other workers",
+  "firmware_version": "1.6.13-esp32",
+  "host_fixture_version": "1.6.1 identical immutable fixture for all backends",
+  "cmake_project_version_is_host_input": false
+}

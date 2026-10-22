@@ -1,0 +1,84 @@
+{
+  "status": "PASS",
+  "native_c_sha256": "becf5ffae69200f60ade34133754674dcbd56b4014a070ba1b4f2263376dbd03",
+  "native_h_sha256": "553f931bd23d0b115566e3bea5392a2ab9ff373f6f0fc3d62397f8538e18d7ae",
+  "ui_sha256": "5c66a685c05707159738c5ab57f1f703738440b90806e018866054a4a0732486",
+  "source_manifest_sha256": "f4c396f23eb103ad7fe17152448cf75244de4ed50f1afe55e352a3db5dfca5e3",
+  "frames_per_mode": 98,
+  "exact_rgb_vs_immutable_v1": true,
+  "exact_rgb_between_modes": true,
+  "geometry_semantic_differences": 0,
+  "inputs": "PASS both modes",
+  "helpers": [
+    {
+      "name": "run_native_gradient",
+      "command": [
+        "C:\\ProgramData\\anaconda3\\python.exe",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-opt\\final-pack\\20261022-231053-becf5ffae692\\source\\tab5\\tests\\run_native_gradient.py"
+      ],
+      "returncode": 0,
+      "status": "PASS"
+    },
+    {
+      "name": "run_native_profile_flags",
+      "command": [
+        "C:\\ProgramData\\anaconda3\\python.exe",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-opt\\final-pack\\20261022-231053-becf5ffae692\\source\\tab5\\tests\\run_native_profile_flags.py"
+      ],
+      "returncode": 0,
+      "status": "PASS"
+    },
+    {
+      "name": "run_draw_profile_mode",
+      "command": [
+        "C:\\ProgramData\\anaconda3\\python.exe",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-opt\\final-pack\\20261022-231053-becf5ffae692\\source\\tab5\\tests\\run_draw_profile_mode.py"
+      ],
+      "returncode": 0,
+      "status": "PASS"
+    },
+    {
+      "name": "run_native_lifetime",
+      "command": [
+        "C:\\ProgramData\\anaconda3\\python.exe",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-opt\\final-pack\\20261022-231053-becf5ffae692\\source\\tab5\\tests\\run_native_lifetime.py"
+      ],
+      "returncode": 0,
+      "status": "PASS"
+    },
+    {
+      "name": "final_regressions_build",
+      "command": [
+        "C:\\Users\\aaaor\\gcc\\bin\\gcc.EXE",
+        "-std=c11",
+        "-O2",
+        "-DNUI_PROFILE_FINE_COUNTERS=1",
+        "-DNUI_PROFILE_PRIMITIVE_TIMING=0",
+        "-IC:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-opt\\final-pack\\20261022-231053-becf5ffae692\\source\\tab5\\main",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-opt\\final-pack\\20261022-231053-becf5ffae692\\source\\tab5\\tests\\test_native_final_regressions.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-opt\\final-pack\\20261022-231053-becf5ffae692\\source\\tab5\\main\\native\\font_native_fallback14.c",
+        "-lm",
+        "-o",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-opt\\final-pack\\20261022-231053-becf5ffae692\\helpers\\final-regressions.exe"
+      ],
+      "returncode": 0,
+      "status": "PASS"
+    },
+    {
+      "name": "final_regressions",
+      "command": [
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-opt\\final-pack\\20261022-231053-becf5ffae692\\helpers\\final-regressions.exe"
+      ],
+      "returncode": 0,
+      "status": "PASS"
+    },
+    {
+      "name": "asan",
+      "status": "UNAVAILABLE",
+      "reason": "Compiler/runtime capability probe failed; see capability logs"
+    }
+  ],
+  "asan": "UNAVAILABLE: installed gcc cannot link -lasan/-lubsan; capability log retained",
+  "cpu_tests_complete": true,
+  "benchmark": "No final performance claims from functional timings"
+}

@@ -1,0 +1,3605 @@
+{
+  "rows": [
+    {
+      "scene": "idle",
+      "theme": "dark",
+      "frames": 0,
+      "dirty_rects": 0,
+      "dirty_pixels": 0,
+      "engine_render_us_excluding_flush": 0,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "native_v1",
+      "round": 1
+    },
+    {
+      "scene": "angles",
+      "theme": "dark",
+      "frames": 600,
+      "dirty_rects": 4132,
+      "dirty_pixels": 116429128,
+      "engine_render_us_excluding_flush": 350271,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 7653,
+          "us": 0,
+          "pixels": 127194120
+        },
+        {
+          "id": 1,
+          "calls": 2352,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 13430,
+          "us": 0,
+          "pixels": 8463613
+        },
+        {
+          "id": 3,
+          "calls": 1183,
+          "us": 0,
+          "pixels": 47320000
+        },
+        {
+          "id": 4,
+          "calls": 1791,
+          "us": 0,
+          "pixels": 285780
+        },
+        {
+          "id": 5,
+          "calls": 1791,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 2352,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "native_v1",
+      "round": 1
+    },
+    {
+      "scene": "graph",
+      "theme": "dark",
+      "frames": 600,
+      "dirty_rects": 2652,
+      "dirty_pixels": 142676352,
+      "engine_render_us_excluding_flush": 104918,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 4704,
+          "us": 0,
+          "pixels": 55526016
+        },
+        {
+          "id": 1,
+          "calls": 2352,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 2352,
+          "us": 0,
+          "pixels": 1868397
+        },
+        {
+          "id": 3,
+          "calls": 300,
+          "us": 0,
+          "pixels": 113568000
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 2352,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "native_v1",
+      "round": 1
+    },
+    {
+      "scene": "modal",
+      "theme": "dark",
+      "frames": 1200,
+      "dirty_rects": 3000,
+      "dirty_pixels": 59928000,
+      "engine_render_us_excluding_flush": 228769,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 5400,
+          "us": 0,
+          "pixels": 105710400
+        },
+        {
+          "id": 1,
+          "calls": 4800,
+          "us": 0,
+          "pixels": 1972800
+        },
+        {
+          "id": 2,
+          "calls": 3600,
+          "us": 0,
+          "pixels": 1821000
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 3000,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "native_v1",
+      "round": 1
+    },
+    {
+      "scene": "transition",
+      "theme": "dark",
+      "frames": 1200,
+      "dirty_rects": 2490,
+      "dirty_pixels": 587630488,
+      "engine_render_us_excluding_flush": 3271272,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 30775,
+          "us": 0,
+          "pixels": 1210975184
+        },
+        {
+          "id": 1,
+          "calls": 14734,
+          "us": 0,
+          "pixels": 7327920
+        },
+        {
+          "id": 2,
+          "calls": 34337,
+          "us": 0,
+          "pixels": 20769866
+        },
+        {
+          "id": 3,
+          "calls": 596,
+          "us": 0,
+          "pixels": 64467200
+        },
+        {
+          "id": 4,
+          "calls": 20640,
+          "us": 0,
+          "pixels": 1430408
+        },
+        {
+          "id": 5,
+          "calls": 5040,
+          "us": 0,
+          "pixels": 404160
+        },
+        {
+          "id": 6,
+          "calls": 3360,
+          "us": 0,
+          "pixels": 56640
+        },
+        {
+          "id": 7,
+          "calls": 3334,
+          "us": 0,
+          "pixels": 6224880
+        }
+      ],
+      "backend": "native_v1",
+      "round": 1
+    },
+    {
+      "scene": "idle",
+      "theme": "light",
+      "frames": 0,
+      "dirty_rects": 0,
+      "dirty_pixels": 0,
+      "engine_render_us_excluding_flush": 0,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "native_v1",
+      "round": 1
+    },
+    {
+      "scene": "angles",
+      "theme": "light",
+      "frames": 600,
+      "dirty_rects": 4132,
+      "dirty_pixels": 116429128,
+      "engine_render_us_excluding_flush": 603557,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 7653,
+          "us": 0,
+          "pixels": 127194120
+        },
+        {
+          "id": 1,
+          "calls": 2352,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 13430,
+          "us": 0,
+          "pixels": 8463613
+        },
+        {
+          "id": 3,
+          "calls": 1183,
+          "us": 0,
+          "pixels": 47320000
+        },
+        {
+          "id": 4,
+          "calls": 1791,
+          "us": 0,
+          "pixels": 285780
+        },
+        {
+          "id": 5,
+          "calls": 1791,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 2352,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "native_v1",
+      "round": 1
+    },
+    {
+      "scene": "graph",
+      "theme": "light",
+      "frames": 600,
+      "dirty_rects": 2652,
+      "dirty_pixels": 142676352,
+      "engine_render_us_excluding_flush": 189827,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 4704,
+          "us": 0,
+          "pixels": 55526016
+        },
+        {
+          "id": 1,
+          "calls": 2352,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 2352,
+          "us": 0,
+          "pixels": 1868397
+        },
+        {
+          "id": 3,
+          "calls": 300,
+          "us": 0,
+          "pixels": 113568000
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 2352,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "native_v1",
+      "round": 1
+    },
+    {
+      "scene": "modal",
+      "theme": "light",
+      "frames": 1200,
+      "dirty_rects": 3000,
+      "dirty_pixels": 59928000,
+      "engine_render_us_excluding_flush": 409132,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 5400,
+          "us": 0,
+          "pixels": 105710400
+        },
+        {
+          "id": 1,
+          "calls": 4800,
+          "us": 0,
+          "pixels": 1972800
+        },
+        {
+          "id": 2,
+          "calls": 3600,
+          "us": 0,
+          "pixels": 1821000
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 3000,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "native_v1",
+      "round": 1
+    },
+    {
+      "scene": "transition",
+      "theme": "light",
+      "frames": 1200,
+      "dirty_rects": 2490,
+      "dirty_pixels": 587630488,
+      "engine_render_us_excluding_flush": 3560411,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 30775,
+          "us": 0,
+          "pixels": 1210975184
+        },
+        {
+          "id": 1,
+          "calls": 14734,
+          "us": 0,
+          "pixels": 7327920
+        },
+        {
+          "id": 2,
+          "calls": 34337,
+          "us": 0,
+          "pixels": 20769866
+        },
+        {
+          "id": 3,
+          "calls": 596,
+          "us": 0,
+          "pixels": 64467200
+        },
+        {
+          "id": 4,
+          "calls": 20640,
+          "us": 0,
+          "pixels": 1430408
+        },
+        {
+          "id": 5,
+          "calls": 5040,
+          "us": 0,
+          "pixels": 404160
+        },
+        {
+          "id": 6,
+          "calls": 3360,
+          "us": 0,
+          "pixels": 56640
+        },
+        {
+          "id": 7,
+          "calls": 3334,
+          "us": 0,
+          "pixels": 6114240
+        }
+      ],
+      "backend": "native_v1",
+      "round": 1
+    },
+    {
+      "scene": "idle",
+      "theme": "dark",
+      "frames": 0,
+      "dirty_rects": 0,
+      "dirty_pixels": 0,
+      "engine_render_us_excluding_flush": 0,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "optimized",
+      "round": 1
+    },
+    {
+      "scene": "angles",
+      "theme": "dark",
+      "frames": 600,
+      "dirty_rects": 4132,
+      "dirty_pixels": 116429128,
+      "engine_render_us_excluding_flush": 55058,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "optimized",
+      "round": 1
+    },
+    {
+      "scene": "graph",
+      "theme": "dark",
+      "frames": 600,
+      "dirty_rects": 2652,
+      "dirty_pixels": 142676352,
+      "engine_render_us_excluding_flush": 20320,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "optimized",
+      "round": 1
+    },
+    {
+      "scene": "modal",
+      "theme": "dark",
+      "frames": 600,
+      "dirty_rects": 1800,
+      "dirty_pixels": 49156800,
+      "engine_render_us_excluding_flush": 86804,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "optimized",
+      "round": 1
+    },
+    {
+      "scene": "transition",
+      "theme": "dark",
+      "frames": 840,
+      "dirty_rects": 2610,
+      "dirty_pixels": 516861208,
+      "engine_render_us_excluding_flush": 472954,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "optimized",
+      "round": 1
+    },
+    {
+      "scene": "idle",
+      "theme": "light",
+      "frames": 0,
+      "dirty_rects": 0,
+      "dirty_pixels": 0,
+      "engine_render_us_excluding_flush": 0,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "optimized",
+      "round": 1
+    },
+    {
+      "scene": "angles",
+      "theme": "light",
+      "frames": 600,
+      "dirty_rects": 4132,
+      "dirty_pixels": 116429128,
+      "engine_render_us_excluding_flush": 76891,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "optimized",
+      "round": 1
+    },
+    {
+      "scene": "graph",
+      "theme": "light",
+      "frames": 600,
+      "dirty_rects": 2652,
+      "dirty_pixels": 142676352,
+      "engine_render_us_excluding_flush": 37480,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "optimized",
+      "round": 1
+    },
+    {
+      "scene": "modal",
+      "theme": "light",
+      "frames": 600,
+      "dirty_rects": 1800,
+      "dirty_pixels": 49156800,
+      "engine_render_us_excluding_flush": 158834,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "optimized",
+      "round": 1
+    },
+    {
+      "scene": "transition",
+      "theme": "light",
+      "frames": 840,
+      "dirty_rects": 2610,
+      "dirty_pixels": 516861208,
+      "engine_render_us_excluding_flush": 847477,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "optimized",
+      "round": 1
+    },
+    {
+      "scene": "idle",
+      "theme": "dark",
+      "frames": 0,
+      "dirty_rects": 0,
+      "dirty_pixels": 0,
+      "engine_render_us_excluding_flush": 0,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "native_v1",
+      "round": 2
+    },
+    {
+      "scene": "angles",
+      "theme": "dark",
+      "frames": 600,
+      "dirty_rects": 4132,
+      "dirty_pixels": 116429128,
+      "engine_render_us_excluding_flush": 332257,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 7653,
+          "us": 0,
+          "pixels": 127194120
+        },
+        {
+          "id": 1,
+          "calls": 2352,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 13430,
+          "us": 0,
+          "pixels": 8463613
+        },
+        {
+          "id": 3,
+          "calls": 1183,
+          "us": 0,
+          "pixels": 47320000
+        },
+        {
+          "id": 4,
+          "calls": 1791,
+          "us": 0,
+          "pixels": 285780
+        },
+        {
+          "id": 5,
+          "calls": 1791,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 2352,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "native_v1",
+      "round": 2
+    },
+    {
+      "scene": "graph",
+      "theme": "dark",
+      "frames": 600,
+      "dirty_rects": 2652,
+      "dirty_pixels": 142676352,
+      "engine_render_us_excluding_flush": 102393,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 4704,
+          "us": 0,
+          "pixels": 55526016
+        },
+        {
+          "id": 1,
+          "calls": 2352,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 2352,
+          "us": 0,
+          "pixels": 1868397
+        },
+        {
+          "id": 3,
+          "calls": 300,
+          "us": 0,
+          "pixels": 113568000
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 2352,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "native_v1",
+      "round": 2
+    },
+    {
+      "scene": "modal",
+      "theme": "dark",
+      "frames": 1200,
+      "dirty_rects": 3000,
+      "dirty_pixels": 59928000,
+      "engine_render_us_excluding_flush": 219953,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 5400,
+          "us": 0,
+          "pixels": 105710400
+        },
+        {
+          "id": 1,
+          "calls": 4800,
+          "us": 0,
+          "pixels": 1972800
+        },
+        {
+          "id": 2,
+          "calls": 3600,
+          "us": 0,
+          "pixels": 1821000
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 3000,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "native_v1",
+      "round": 2
+    },
+    {
+      "scene": "transition",
+      "theme": "dark",
+      "frames": 1200,
+      "dirty_rects": 2490,
+      "dirty_pixels": 587630488,
+      "engine_render_us_excluding_flush": 3149739,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 30775,
+          "us": 0,
+          "pixels": 1210975184
+        },
+        {
+          "id": 1,
+          "calls": 14734,
+          "us": 0,
+          "pixels": 7327920
+        },
+        {
+          "id": 2,
+          "calls": 34337,
+          "us": 0,
+          "pixels": 20769866
+        },
+        {
+          "id": 3,
+          "calls": 596,
+          "us": 0,
+          "pixels": 64467200
+        },
+        {
+          "id": 4,
+          "calls": 20640,
+          "us": 0,
+          "pixels": 1430408
+        },
+        {
+          "id": 5,
+          "calls": 5040,
+          "us": 0,
+          "pixels": 404160
+        },
+        {
+          "id": 6,
+          "calls": 3360,
+          "us": 0,
+          "pixels": 56640
+        },
+        {
+          "id": 7,
+          "calls": 3334,
+          "us": 0,
+          "pixels": 6224880
+        }
+      ],
+      "backend": "native_v1",
+      "round": 2
+    },
+    {
+      "scene": "idle",
+      "theme": "light",
+      "frames": 0,
+      "dirty_rects": 0,
+      "dirty_pixels": 0,
+      "engine_render_us_excluding_flush": 0,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "native_v1",
+      "round": 2
+    },
+    {
+      "scene": "angles",
+      "theme": "light",
+      "frames": 600,
+      "dirty_rects": 4132,
+      "dirty_pixels": 116429128,
+      "engine_render_us_excluding_flush": 602228,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 7653,
+          "us": 0,
+          "pixels": 127194120
+        },
+        {
+          "id": 1,
+          "calls": 2352,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 13430,
+          "us": 0,
+          "pixels": 8463613
+        },
+        {
+          "id": 3,
+          "calls": 1183,
+          "us": 0,
+          "pixels": 47320000
+        },
+        {
+          "id": 4,
+          "calls": 1791,
+          "us": 0,
+          "pixels": 285780
+        },
+        {
+          "id": 5,
+          "calls": 1791,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 2352,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "native_v1",
+      "round": 2
+    },
+    {
+      "scene": "graph",
+      "theme": "light",
+      "frames": 600,
+      "dirty_rects": 2652,
+      "dirty_pixels": 142676352,
+      "engine_render_us_excluding_flush": 189701,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 4704,
+          "us": 0,
+          "pixels": 55526016
+        },
+        {
+          "id": 1,
+          "calls": 2352,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 2352,
+          "us": 0,
+          "pixels": 1868397
+        },
+        {
+          "id": 3,
+          "calls": 300,
+          "us": 0,
+          "pixels": 113568000
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 2352,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "native_v1",
+      "round": 2
+    },
+    {
+      "scene": "modal",
+      "theme": "light",
+      "frames": 1200,
+      "dirty_rects": 3000,
+      "dirty_pixels": 59928000,
+      "engine_render_us_excluding_flush": 431958,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 5400,
+          "us": 0,
+          "pixels": 105710400
+        },
+        {
+          "id": 1,
+          "calls": 4800,
+          "us": 0,
+          "pixels": 1972800
+        },
+        {
+          "id": 2,
+          "calls": 3600,
+          "us": 0,
+          "pixels": 1821000
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 3000,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "native_v1",
+      "round": 2
+    },
+    {
+      "scene": "transition",
+      "theme": "light",
+      "frames": 1200,
+      "dirty_rects": 2490,
+      "dirty_pixels": 587630488,
+      "engine_render_us_excluding_flush": 3517277,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 30775,
+          "us": 0,
+          "pixels": 1210975184
+        },
+        {
+          "id": 1,
+          "calls": 14734,
+          "us": 0,
+          "pixels": 7327920
+        },
+        {
+          "id": 2,
+          "calls": 34337,
+          "us": 0,
+          "pixels": 20769866
+        },
+        {
+          "id": 3,
+          "calls": 596,
+          "us": 0,
+          "pixels": 64467200
+        },
+        {
+          "id": 4,
+          "calls": 20640,
+          "us": 0,
+          "pixels": 1430408
+        },
+        {
+          "id": 5,
+          "calls": 5040,
+          "us": 0,
+          "pixels": 404160
+        },
+        {
+          "id": 6,
+          "calls": 3360,
+          "us": 0,
+          "pixels": 56640
+        },
+        {
+          "id": 7,
+          "calls": 3334,
+          "us": 0,
+          "pixels": 6114240
+        }
+      ],
+      "backend": "native_v1",
+      "round": 2
+    },
+    {
+      "scene": "idle",
+      "theme": "dark",
+      "frames": 0,
+      "dirty_rects": 0,
+      "dirty_pixels": 0,
+      "engine_render_us_excluding_flush": 0,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "optimized",
+      "round": 2
+    },
+    {
+      "scene": "angles",
+      "theme": "dark",
+      "frames": 600,
+      "dirty_rects": 4132,
+      "dirty_pixels": 116429128,
+      "engine_render_us_excluding_flush": 55392,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "optimized",
+      "round": 2
+    },
+    {
+      "scene": "graph",
+      "theme": "dark",
+      "frames": 600,
+      "dirty_rects": 2652,
+      "dirty_pixels": 142676352,
+      "engine_render_us_excluding_flush": 20187,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "optimized",
+      "round": 2
+    },
+    {
+      "scene": "modal",
+      "theme": "dark",
+      "frames": 600,
+      "dirty_rects": 1800,
+      "dirty_pixels": 49156800,
+      "engine_render_us_excluding_flush": 85030,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "optimized",
+      "round": 2
+    },
+    {
+      "scene": "transition",
+      "theme": "dark",
+      "frames": 840,
+      "dirty_rects": 2610,
+      "dirty_pixels": 516861208,
+      "engine_render_us_excluding_flush": 478758,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "optimized",
+      "round": 2
+    },
+    {
+      "scene": "idle",
+      "theme": "light",
+      "frames": 0,
+      "dirty_rects": 0,
+      "dirty_pixels": 0,
+      "engine_render_us_excluding_flush": 0,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "optimized",
+      "round": 2
+    },
+    {
+      "scene": "angles",
+      "theme": "light",
+      "frames": 600,
+      "dirty_rects": 4132,
+      "dirty_pixels": 116429128,
+      "engine_render_us_excluding_flush": 81371,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "optimized",
+      "round": 2
+    },
+    {
+      "scene": "graph",
+      "theme": "light",
+      "frames": 600,
+      "dirty_rects": 2652,
+      "dirty_pixels": 142676352,
+      "engine_render_us_excluding_flush": 37721,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "optimized",
+      "round": 2
+    },
+    {
+      "scene": "modal",
+      "theme": "light",
+      "frames": 600,
+      "dirty_rects": 1800,
+      "dirty_pixels": 49156800,
+      "engine_render_us_excluding_flush": 156013,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "optimized",
+      "round": 2
+    },
+    {
+      "scene": "transition",
+      "theme": "light",
+      "frames": 840,
+      "dirty_rects": 2610,
+      "dirty_pixels": 516861208,
+      "engine_render_us_excluding_flush": 841668,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "optimized",
+      "round": 2
+    },
+    {
+      "scene": "idle",
+      "theme": "dark",
+      "frames": 0,
+      "dirty_rects": 0,
+      "dirty_pixels": 0,
+      "engine_render_us_excluding_flush": 0,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "optimized",
+      "round": 3
+    },
+    {
+      "scene": "angles",
+      "theme": "dark",
+      "frames": 600,
+      "dirty_rects": 4132,
+      "dirty_pixels": 116429128,
+      "engine_render_us_excluding_flush": 55142,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "optimized",
+      "round": 3
+    },
+    {
+      "scene": "graph",
+      "theme": "dark",
+      "frames": 600,
+      "dirty_rects": 2652,
+      "dirty_pixels": 142676352,
+      "engine_render_us_excluding_flush": 20132,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "optimized",
+      "round": 3
+    },
+    {
+      "scene": "modal",
+      "theme": "dark",
+      "frames": 600,
+      "dirty_rects": 1800,
+      "dirty_pixels": 49156800,
+      "engine_render_us_excluding_flush": 88702,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "optimized",
+      "round": 3
+    },
+    {
+      "scene": "transition",
+      "theme": "dark",
+      "frames": 840,
+      "dirty_rects": 2610,
+      "dirty_pixels": 516861208,
+      "engine_render_us_excluding_flush": 470927,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "optimized",
+      "round": 3
+    },
+    {
+      "scene": "idle",
+      "theme": "light",
+      "frames": 0,
+      "dirty_rects": 0,
+      "dirty_pixels": 0,
+      "engine_render_us_excluding_flush": 0,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "optimized",
+      "round": 3
+    },
+    {
+      "scene": "angles",
+      "theme": "light",
+      "frames": 600,
+      "dirty_rects": 4132,
+      "dirty_pixels": 116429128,
+      "engine_render_us_excluding_flush": 76672,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "optimized",
+      "round": 3
+    },
+    {
+      "scene": "graph",
+      "theme": "light",
+      "frames": 600,
+      "dirty_rects": 2652,
+      "dirty_pixels": 142676352,
+      "engine_render_us_excluding_flush": 36831,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "optimized",
+      "round": 3
+    },
+    {
+      "scene": "modal",
+      "theme": "light",
+      "frames": 600,
+      "dirty_rects": 1800,
+      "dirty_pixels": 49156800,
+      "engine_render_us_excluding_flush": 158128,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "optimized",
+      "round": 3
+    },
+    {
+      "scene": "transition",
+      "theme": "light",
+      "frames": 840,
+      "dirty_rects": 2610,
+      "dirty_pixels": 516861208,
+      "engine_render_us_excluding_flush": 844606,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "optimized",
+      "round": 3
+    },
+    {
+      "scene": "idle",
+      "theme": "dark",
+      "frames": 0,
+      "dirty_rects": 0,
+      "dirty_pixels": 0,
+      "engine_render_us_excluding_flush": 0,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "native_v1",
+      "round": 3
+    },
+    {
+      "scene": "angles",
+      "theme": "dark",
+      "frames": 600,
+      "dirty_rects": 4132,
+      "dirty_pixels": 116429128,
+      "engine_render_us_excluding_flush": 335422,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 7653,
+          "us": 0,
+          "pixels": 127194120
+        },
+        {
+          "id": 1,
+          "calls": 2352,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 13430,
+          "us": 0,
+          "pixels": 8463613
+        },
+        {
+          "id": 3,
+          "calls": 1183,
+          "us": 0,
+          "pixels": 47320000
+        },
+        {
+          "id": 4,
+          "calls": 1791,
+          "us": 0,
+          "pixels": 285780
+        },
+        {
+          "id": 5,
+          "calls": 1791,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 2352,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "native_v1",
+      "round": 3
+    },
+    {
+      "scene": "graph",
+      "theme": "dark",
+      "frames": 600,
+      "dirty_rects": 2652,
+      "dirty_pixels": 142676352,
+      "engine_render_us_excluding_flush": 102093,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 4704,
+          "us": 0,
+          "pixels": 55526016
+        },
+        {
+          "id": 1,
+          "calls": 2352,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 2352,
+          "us": 0,
+          "pixels": 1868397
+        },
+        {
+          "id": 3,
+          "calls": 300,
+          "us": 0,
+          "pixels": 113568000
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 2352,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "native_v1",
+      "round": 3
+    },
+    {
+      "scene": "modal",
+      "theme": "dark",
+      "frames": 1200,
+      "dirty_rects": 3000,
+      "dirty_pixels": 59928000,
+      "engine_render_us_excluding_flush": 221218,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 5400,
+          "us": 0,
+          "pixels": 105710400
+        },
+        {
+          "id": 1,
+          "calls": 4800,
+          "us": 0,
+          "pixels": 1972800
+        },
+        {
+          "id": 2,
+          "calls": 3600,
+          "us": 0,
+          "pixels": 1821000
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 3000,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "native_v1",
+      "round": 3
+    },
+    {
+      "scene": "transition",
+      "theme": "dark",
+      "frames": 1200,
+      "dirty_rects": 2490,
+      "dirty_pixels": 587630488,
+      "engine_render_us_excluding_flush": 5987936,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 30775,
+          "us": 0,
+          "pixels": 1210975184
+        },
+        {
+          "id": 1,
+          "calls": 14734,
+          "us": 0,
+          "pixels": 7327920
+        },
+        {
+          "id": 2,
+          "calls": 34337,
+          "us": 0,
+          "pixels": 20769866
+        },
+        {
+          "id": 3,
+          "calls": 596,
+          "us": 0,
+          "pixels": 64467200
+        },
+        {
+          "id": 4,
+          "calls": 20640,
+          "us": 0,
+          "pixels": 1430408
+        },
+        {
+          "id": 5,
+          "calls": 5040,
+          "us": 0,
+          "pixels": 404160
+        },
+        {
+          "id": 6,
+          "calls": 3360,
+          "us": 0,
+          "pixels": 56640
+        },
+        {
+          "id": 7,
+          "calls": 3334,
+          "us": 0,
+          "pixels": 6224880
+        }
+      ],
+      "backend": "native_v1",
+      "round": 3
+    },
+    {
+      "scene": "idle",
+      "theme": "light",
+      "frames": 0,
+      "dirty_rects": 0,
+      "dirty_pixels": 0,
+      "engine_render_us_excluding_flush": 0,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "native_v1",
+      "round": 3
+    },
+    {
+      "scene": "angles",
+      "theme": "light",
+      "frames": 600,
+      "dirty_rects": 4132,
+      "dirty_pixels": 116429128,
+      "engine_render_us_excluding_flush": 610658,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 7653,
+          "us": 0,
+          "pixels": 127194120
+        },
+        {
+          "id": 1,
+          "calls": 2352,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 13430,
+          "us": 0,
+          "pixels": 8463613
+        },
+        {
+          "id": 3,
+          "calls": 1183,
+          "us": 0,
+          "pixels": 47320000
+        },
+        {
+          "id": 4,
+          "calls": 1791,
+          "us": 0,
+          "pixels": 285780
+        },
+        {
+          "id": 5,
+          "calls": 1791,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 2352,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "native_v1",
+      "round": 3
+    },
+    {
+      "scene": "graph",
+      "theme": "light",
+      "frames": 600,
+      "dirty_rects": 2652,
+      "dirty_pixels": 142676352,
+      "engine_render_us_excluding_flush": 194838,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 4704,
+          "us": 0,
+          "pixels": 55526016
+        },
+        {
+          "id": 1,
+          "calls": 2352,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 2352,
+          "us": 0,
+          "pixels": 1868397
+        },
+        {
+          "id": 3,
+          "calls": 300,
+          "us": 0,
+          "pixels": 113568000
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 2352,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "native_v1",
+      "round": 3
+    },
+    {
+      "scene": "modal",
+      "theme": "light",
+      "frames": 1200,
+      "dirty_rects": 3000,
+      "dirty_pixels": 59928000,
+      "engine_render_us_excluding_flush": 425510,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 5400,
+          "us": 0,
+          "pixels": 105710400
+        },
+        {
+          "id": 1,
+          "calls": 4800,
+          "us": 0,
+          "pixels": 1972800
+        },
+        {
+          "id": 2,
+          "calls": 3600,
+          "us": 0,
+          "pixels": 1821000
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 3000,
+          "us": 0,
+          "pixels": 0
+        }
+      ],
+      "backend": "native_v1",
+      "round": 3
+    },
+    {
+      "scene": "transition",
+      "theme": "light",
+      "frames": 1200,
+      "dirty_rects": 2490,
+      "dirty_pixels": 587630488,
+      "engine_render_us_excluding_flush": 3531531,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 30775,
+          "us": 0,
+          "pixels": 1210975184
+        },
+        {
+          "id": 1,
+          "calls": 14734,
+          "us": 0,
+          "pixels": 7327920
+        },
+        {
+          "id": 2,
+          "calls": 34337,
+          "us": 0,
+          "pixels": 20769866
+        },
+        {
+          "id": 3,
+          "calls": 596,
+          "us": 0,
+          "pixels": 64467200
+        },
+        {
+          "id": 4,
+          "calls": 20640,
+          "us": 0,
+          "pixels": 1430408
+        },
+        {
+          "id": 5,
+          "calls": 5040,
+          "us": 0,
+          "pixels": 404160
+        },
+        {
+          "id": 6,
+          "calls": 3360,
+          "us": 0,
+          "pixels": 56640
+        },
+        {
+          "id": 7,
+          "calls": 3334,
+          "us": 0,
+          "pixels": 6114240
+        }
+      ],
+      "backend": "native_v1",
+      "round": 3
+    }
+  ],
+  "notice": "Release requests primitive timing=0 and fine counters=0. Immutable v1 ignores the unsupported fine flag and retains counters. Disabled primitive/cache hit counters are unavailable, not measured zero. Cache byte accounting remains available."
+}

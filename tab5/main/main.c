@@ -109,8 +109,7 @@ static void ui_perf_reply(bool reset,tab5_service_reply_fn reply,void *ctx) {
     );reply(ctx,out);
     tab5_draw_profile_snapshot_t draw;tab5_draw_profile_snapshot(&draw,false);
     for(unsigned i=0;i<TAB5_DRAW_PROFILE_COUNT;i++){
-        snprintf(out,sizeof(out),"{\"draw\":\"%s\",\"us\":%llu,\"calls\":%llu}",draw.entries[i].name,
-            (unsigned long long)draw.entries[i].us,(unsigned long long)draw.entries[i].calls);reply(ctx,out);
+        tab5_draw_profile_format(out,sizeof(out),&draw.entries[i]);reply(ctx,out);
     }
     reply(ctx,"OK ui perf");
 }

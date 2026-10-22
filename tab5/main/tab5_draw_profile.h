@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <stddef.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -28,6 +29,10 @@ typedef struct {
  * snapshot and does not apply the requested reset. No hardware access.
  */
 void tab5_draw_profile_snapshot(tab5_draw_profile_snapshot_t *out, bool reset);
+bool tab5_draw_profile_timing_enabled(void);
+bool tab5_draw_profile_counters_enabled(void);
+/* Disabled fine measurements are JSON null, never a measured zero. */
+void tab5_draw_profile_format(char *out,size_t capacity,const tab5_draw_profile_entry_t *entry);
 
 #ifdef __cplusplus
 }

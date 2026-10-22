@@ -14,6 +14,12 @@
 #include <time.h>
 #include <limits.h>
 _Static_assert(NUI_CHART_POINT_NONE == INT32_MAX, "native chart gap must match graph core");
+#ifndef NUI_PROFILE_FINE_COUNTERS
+#error "Host harness requires explicit NUI_PROFILE_FINE_COUNTERS=1 or an explicit release capture build"
+#endif
+#if !NUI_PROFILE_FINE_COUNTERS && !defined(TAB5_RELEASE_CAPTURE_BUILD)
+#error "Fine0 is reserved for release capture equivalence; functional primitive diagnostics require fine1"
+#endif
 NUI_FONT_DECLARE(font_tab5_64);
 
 #ifdef _WIN32
@@ -557,7 +563,11 @@ static void level_overlay_regression(unsigned theme){
         s.now_us+=100000;for(unsigned i=0;i<2;i++){s.measurement.sensor[i].good++;s.measurement.sensor[i].timestamp_us=s.now_us;s.measurement.sensor[i].decoded_x=3*sinf(tick*.4f+i);s.measurement.sensor[i].decoded_y=3*cosf(tick*.4f+i);}
         input=s;tab5_ui_update(&s);pump();assert(!memcmp(&input,&s,sizeof(s)));
     }
+#if NUI_PROFILE_FINE_COUNTERS
     assert(level_images>0&&level_vectors==0&&level_masks==0);
+#else
+    printf("RELEASE_CAPTURE primitive notifications not asserted; diagnostic fine1 is mandatory separately\n");
+#endif
     printf("LEVEL_OVERLAY theme=%u RGB565 first-child / marker-color / flush pixels / input immutable: image_primitives=%u vector_ring_primitives=%u masks=%u PASS\n",theme,level_images,level_vectors,level_masks);
     /* Fresh good replies with sub-pixel angle movement cannot regenerate
      * or invalidate either level image. No timestamps are frozen here. */
@@ -567,7 +577,9 @@ static void level_overlay_regression(unsigned theme){
     s.now_us+=100000;for(unsigned i=0;i<2;i++){s.measurement.sensor[i].good++;s.measurement.sensor[i].timestamp_us=s.now_us;s.measurement.sensor[i].decoded_x+=.000001f;}
     input=s;tab5_ui_update(&s);pump();assert(!memcmp(&input,&s,sizeof(s)));
     for(unsigned i=0;i<2;i++){const nui_image_dsc_t *d=nui_image_get_src(images[i]);assert(!memcmp(before[i],d->data,sizeof(before[i])));}
+#if NUI_PROFILE_FINE_COUNTERS
     assert(!level_images&&!level_vectors&&!level_masks);
+#endif
     printf("LEVEL_QUANTIZED theme=%u fresh subpixel movement image_primitives=0 buffer unchanged PASS\n",theme);
     char name[100];snprintf(name,sizeof(name),"dashboard_level_raster_synthetic_%s",theme?"light":"dark");capture(name);
     tab5_ui_destroy();
@@ -701,14 +713,148 @@ static void caret_epoch_regression(unsigned theme){
 }
 #endif
 
+
+/* Optimization probes use the unmodified production RGB565 renderer. Golden
+ * full-suite frames stay separate; cold rebuilds detect stale warm cache data. */
+static uint16_t opt_before[1280*720],opt_warm[1280*720],opt_original[1280*720];
+static unsigned opt_clicks;
+static void opt_click(nui_event_t *e){(void)e;opt_clicks++;}
+static void opt_init(void){nui_native_deinit();assert(nui_native_init(1280,720,framebuffer));nui_native_set_flush_cb(flush,NULL);pressed=false;point=(nui_point_t){0,0};}
+static nui_obj_t *opt_box(nui_obj_t *parent,int x,int y,int w,int h,uint32_t color){
+    nui_obj_t *o=nui_obj_create(parent);assert(o);nui_obj_remove_style_all(o);nui_obj_set_pos(o,x,y);nui_obj_set_size(o,w,h);nui_obj_set_style_bg_color(o,nui_color_hex(color),0);nui_obj_set_style_bg_opa(o,255,0);nui_obj_set_style_opa(o,255,0);return o;
+}
+static nui_obj_t *opt_button(bool visual_pressed){
+    nui_obj_t *o=nui_button_create(nui_screen_active());assert(o);nui_obj_remove_style_all(o);nui_obj_set_pos(o,100,100);nui_obj_set_size(o,80,60);nui_obj_set_style_bg_opa(o,255,0);nui_obj_set_style_opa(o,255,0);nui_obj_set_style_bg_color(o,nui_color_hex(0x2864a0),0);
+    if(visual_pressed)nui_obj_set_style_bg_color(o,nui_color_hex(0xf08020),NUI_STATE_PRESSED);
+    nui_obj_add_event_cb(o,opt_click,NUI_EVENT_CLICKED,NULL);return o;
+}
+static size_t opt_dirty_area(const nui_area_t *bound){
+    nui_area_t areas[512];size_t n=nui_native_get_dirty(areas,512),sum=0;assert(n<=512);
+    for(size_t i=0;i<n;i++){if(bound)assert(contains(*bound,areas[i]));sum+=(size_t)nui_area_get_width(&areas[i])*nui_area_get_height(&areas[i]);}return sum;
+}
+static void opt_changed_covered(void){
+    nui_area_t areas[512];size_t n=nui_native_get_dirty(areas,512);assert(n<=512);unsigned changed=0;
+    for(int y=0;y<720;y++)for(int x=0;x<1280;x++)if(opt_before[y*1280+x]!=framebuffer[y*1280+x]){
+        bool covered=false;for(size_t i=0;i<n;i++)if(x>=areas[i].x1&&x<=areas[i].x2&&y>=areas[i].y1&&y<=areas[i].y2){covered=true;break;}assert(covered);changed++;
+    }assert(changed>0);
+}
+static void optimization_press(void){
+    opt_init();nui_obj_t *button=opt_button(false);render_now();memcpy(opt_before,framebuffer,sizeof(opt_before));opt_clicks=0;nui_native_profile_reset();
+    point=(nui_point_t){140,130};pressed=true;input_step(1);assert(!memcmp(opt_before,framebuffer,sizeof(opt_before)));assert(opt_dirty_area(NULL)==0);
+    nui_native_stats_t stats;nui_native_profile_snapshot(&stats);assert(stats.frames==0&&stats.dirty_pixels==0);
+    pressed=false;input_step(1);assert(opt_clicks==1&&!memcmp(opt_before,framebuffer,sizeof(opt_before)));assert(opt_dirty_area(NULL)==0);
+    /* A real pressed selector must still render and release must restore it. */
+    nui_obj_set_style_bg_color(button,nui_color_hex(0xf08020),NUI_STATE_PRESSED);render_now();memcpy(opt_before,framebuffer,sizeof(opt_before));
+    pressed=true;input_step(1);assert(memcmp(opt_before,framebuffer,sizeof(opt_before)));nui_area_t bound={100,100,179,159};assert(opt_dirty_area(&bound)<=80*60);
+    pressed=false;input_step(1);assert(opt_clicks==2&&!memcmp(opt_before,framebuffer,sizeof(opt_before)));
+    nui_native_deinit();printf("OPT_PRESS PASS unchanged-style=zero-render/zero-dirty clicked-callback=preserved actual-pressed-style=redrawn/restored\n");
+}
+static void optimization_dirty(void){
+    opt_init();nui_obj_t *o=opt_button(false);render_now();memcpy(opt_before,framebuffer,sizeof(opt_before));
+    nui_obj_set_style_bg_color(o,nui_color_hex(0x40b070),0);render_now();nui_area_t local={100,100,179,159};assert(opt_dirty_area(&local)<=80*60);opt_changed_covered();
+    memcpy(opt_before,framebuffer,sizeof(opt_before));nui_obj_set_pos(o,130,115);render_now();nui_area_t moved={100,100,209,174};assert(opt_dirty_area(&moved)<=110*75);opt_changed_covered();memcpy(opt_warm,framebuffer,sizeof(opt_warm));
+    nui_native_invalidate(&(nui_area_t){0,0,1279,719});render_now();assert(!memcmp(opt_warm,framebuffer,sizeof(opt_warm)));
+    memcpy(opt_before,framebuffer,sizeof(opt_before));nui_obj_delete(o);render_now();opt_changed_covered();
+    o=opt_button(false);nui_obj_set_pos(o,130,115);nui_obj_set_style_bg_color(o,nui_color_hex(0x40b070),0);render_now();assert(!memcmp(opt_warm,framebuffer,sizeof(opt_warm)));
+    nui_native_deinit();printf("OPT_DIRTY PASS tight-style/move/delete/recreate covered-all-changed-pixels partial-vs-full=exact\n");
+}
+typedef struct {int x,y,w,h,radius,shadow,offset,shadow_opa,parent_opa;bool light,modal;} opt_scene_state;
+static const opt_scene_state opt_states[]={
+    {180,120,260,180,16,28,10,80,255,false,false},
+    {215,155,260,180,16,28,10,80,255,false,false},
+    {180,120,301,197,16,28,10,80,255,false,false},
+    {180,120,260,180,16,28,10,80,255,true,false},
+    {180,120,260,180,16,46,-7,144,255,false,false},
+    {180,120,260,180,16,28,10,80,128,false,false},
+    {180,120,260,180,16,28,10,80,255,false,true},
+    {-18,7,260,180,16,28,10,80,255,true,false},
+    {180,120,401,137,33,9,3,160,255,true,false}
+};
+typedef struct {nui_obj_t *parent,*panel,*swatch,*veil,*modal;} opt_scene;
+static void opt_apply(opt_scene *s,const opt_scene_state *v){
+    nui_obj_set_style_bg_color(nui_screen_active(),nui_color_hex(v->light?0xf1e9dd:0x152033),0);
+    nui_obj_set_style_opa(s->parent,v->parent_opa,0);nui_obj_set_pos(s->panel,v->x,v->y);nui_obj_set_size(s->panel,v->w,v->h);
+    nui_obj_set_style_bg_color(s->panel,nui_color_hex(v->light?0xffffff:0x294064),0);nui_obj_set_style_radius(s->panel,v->radius,0);nui_obj_set_style_border_width(s->panel,2,0);nui_obj_set_style_border_color(s->panel,nui_color_hex(v->light?0x4080c0:0x80b0d0),0);
+    nui_obj_set_style_shadow_width(s->panel,v->shadow,0);nui_obj_set_style_shadow_offset_y(s->panel,v->offset,0);nui_obj_set_style_shadow_opa(s->panel,v->shadow_opa,0);nui_obj_set_style_shadow_color(s->panel,nui_color_hex(v->light?0x102030:0x080b10),0);
+    nui_obj_set_style_bg_color(s->swatch,nui_color_hex(v->light?0xc04020:0x50c080),0);
+    if(v->modal)nui_obj_remove_flag(s->veil,NUI_OBJ_FLAG_HIDDEN);else nui_obj_add_flag(s->veil,NUI_OBJ_FLAG_HIDDEN);
+}
+static opt_scene opt_build(unsigned state){
+    opt_init();nui_obj_t *root=nui_screen_active();opt_box(root,140,80,420,300,0x805020);opt_box(root,220,180,300,180,0x205870);
+    opt_scene s={0};s.parent=opt_box(root,0,0,1280,720,0);nui_obj_set_style_bg_opa(s.parent,0,0);
+    s.panel=opt_box(s.parent,180,120,260,180,0x294064);s.swatch=opt_box(s.panel,20,30,47,41,0x50c080);
+    s.veil=opt_box(root,0,0,1280,720,0);nui_obj_set_style_bg_opa(s.veil,90,0);s.modal=opt_box(s.veil,300,200,360,220,0xc8d8e8);nui_obj_set_style_radius(s.modal,19,0);nui_obj_set_style_shadow_width(s.modal,36,0);nui_obj_set_style_shadow_opa(s.modal,100,0);nui_obj_set_style_shadow_offset_y(s.modal,8,0);
+    opt_apply(&s,&opt_states[state]);return s;
+}
+static void optimization_cache_state(void){
+    for(unsigned state=1;state<sizeof(opt_states)/sizeof(opt_states[0]);state++){
+        opt_scene s=opt_build(0);render_now();memcpy(opt_original,framebuffer,sizeof(opt_original));
+        nui_native_invalidate(&(nui_area_t){100,50,699,499});render_now();assert(!memcmp(opt_original,framebuffer,sizeof(opt_original)));
+        memcpy(opt_before,framebuffer,sizeof(opt_before));opt_apply(&s,&opt_states[state]);render_now();opt_changed_covered();memcpy(opt_warm,framebuffer,sizeof(opt_warm));
+        opt_apply(&s,&opt_states[0]);render_now();assert(!memcmp(opt_original,framebuffer,sizeof(opt_original)));
+        opt_apply(&s,&opt_states[state]);render_now();assert(!memcmp(opt_warm,framebuffer,sizeof(opt_warm)));
+        opt_build(state);render_now();assert(!memcmp(opt_warm,framebuffer,sizeof(opt_warm)));nui_native_deinit();
+        printf("OPT_CACHE_STATE state=%u PASS warm/cold/roundtrip=exact dirty-coverage=complete\n",state);
+    }
+}
+static void optimization_lifetime(void){
+    nui_native_deinit();nui_native_stats_t initial;nui_native_profile_snapshot(&initial);assert(initial.allocation_bytes==0&&initial.allocation_count==0);
+    uint64_t failures=initial.allocation_failures;
+    for(unsigned cycle=0;cycle<64;cycle++){
+        opt_scene s=opt_build(cycle%(sizeof(opt_states)/sizeof(opt_states[0])));render_now();
+        nui_obj_delete(s.panel);render_now();s.panel=opt_box(s.parent,110,100,280,190,0x294064);s.swatch=opt_box(s.panel,20,30,47,41,0x50c080);opt_apply(&s,&opt_states[0]);render_now();
+        nui_native_deinit();nui_native_stats_t after;nui_native_profile_snapshot(&after);assert(after.allocation_bytes==0&&after.allocation_count==0&&after.allocation_failures==failures);
+    }printf("OPT_LIFETIME PASS 64-init/render/delete/recreate/deinit cycles live-bytes=0 live-allocations=0 failures=0\n");
+}
+
+#ifdef NUI_TEST_HAS_OPT_CACHE_STATS
+static size_t opt_object_count(nui_obj_t *o){size_t n=1;for(unsigned i=0;i<nui_obj_get_child_count(o);i++)n+=opt_object_count(nui_obj_get_child(o,i));return n;}
+static void opt_cache_bounds(nui_native_stats_t *out){
+    nui_native_profile_snapshot(out);assert(out->shadow_cache_capacity_bytes>out->shadow_cache_static_bytes);
+    assert(out->shadow_cache_bytes>=out->shadow_cache_static_bytes&&out->shadow_cache_bytes<=out->shadow_cache_capacity_bytes);
+    assert(out->shadow_cache_peak_bytes<=out->shadow_cache_capacity_bytes);
+    assert(out->object_cache_bytes_per_object>0&&out->object_cache_bytes==opt_object_count(nui_screen_active())*out->object_cache_bytes_per_object);
+}
+static void optimization_cache_budget(void){
+    opt_scene s=opt_build(0);render_now();memcpy(opt_original,framebuffer,sizeof(opt_original));nui_native_stats_t warm,now;opt_cache_bounds(&warm);
+    assert(warm.shadow_cache_bytes>warm.shadow_cache_static_bytes);
+    for(unsigned i=0;i<8;i++){nui_native_invalidate(&(nui_area_t){100,50,699,499});render_now();assert(!memcmp(opt_original,framebuffer,sizeof(opt_original)));opt_cache_bounds(&now);}
+    assert(now.shadow_cache_hits>warm.shadow_cache_hits&&now.shadow_cache_misses==warm.shadow_cache_misses);
+    assert(now.allocation_bytes==warm.allocation_bytes&&now.allocation_count==warm.allocation_count);
+    uint64_t evictions=now.shadow_cache_evictions;
+    for(unsigned i=0;i<40;i++){
+        nui_obj_set_style_radius(s.panel,2+(int)(i%36),0);nui_obj_set_style_shadow_width(s.panel,4+(int)(i%8)*4,0);nui_obj_set_style_shadow_offset_y(s.panel,(int)(i%11)-5,0);nui_obj_set_style_shadow_opa(s.panel,40+(int)i*3,0);render_now();opt_cache_bounds(&now);
+    }
+    assert(now.shadow_cache_evictions>evictions);opt_apply(&s,&opt_states[0]);render_now();assert(!memcmp(opt_original,framebuffer,sizeof(opt_original)));
+    /* An oversized shadow must not allocate beyond the cache budget. */
+    nui_obj_set_style_shadow_width(s.panel,128,0);nui_obj_set_style_radius(s.panel,90,0);nui_obj_set_style_shadow_offset_y(s.panel,40,0);render_now();opt_cache_bounds(&now);
+    opt_apply(&s,&opt_states[0]);render_now();assert(!memcmp(opt_original,framebuffer,sizeof(opt_original)));
+    size_t live_object_bytes=now.object_cache_bytes;nui_obj_delete(s.panel);render_now();opt_cache_bounds(&now);assert(now.object_cache_bytes<live_object_bytes);
+    nui_native_deinit();nui_native_profile_snapshot(&now);assert(now.shadow_cache_bytes==now.shadow_cache_static_bytes&&now.object_cache_bytes==0&&now.allocation_bytes==0&&now.allocation_count==0);
+    printf("OPT_CACHE_BUDGET PASS warm-hits/no-rebuild/no-allocation pressure-eviction oversized-fallback exact-restoration object-cache-bounded teardown-static-only capacity=%llu\n",(unsigned long long)now.shadow_cache_capacity_bytes);
+}
+#else
+static void optimization_cache_budget(void){fprintf(stderr,"OPT_CACHE_BUDGET unavailable: public live/capacity/hit/miss/eviction/object-byte stats required\n");assert(!"Missing required optimization cache evidence");}
+#endif
+static void optimization_probes(const char *group){
+    if(!strcmp(group,"press")||!strcmp(group,"all"))optimization_press();
+    if(!strcmp(group,"dirty")||!strcmp(group,"all"))optimization_dirty();
+    if(!strcmp(group,"cache-state")||!strcmp(group,"all"))optimization_cache_state();
+    if(!strcmp(group,"lifetime")||!strcmp(group,"all"))optimization_lifetime();
+    if(!strcmp(group,"cache-budget")||!strcmp(group,"all"))optimization_cache_budget();
+}
+
 int main(int argc,char **argv){
     assert(argc==2);output=argv[1];setbuf(stdout,NULL);setbuf(stderr,NULL);char path[1024];snprintf(path,sizeof(path),"%s/geometry.txt",output);report=fopen(path,"w");assert(report);setbuf(report,NULL);
     snprintf(path,sizeof(path),"%s/geometry_points.tsv",output);points=fopen(path,"w");assert(points);
     snprintf(path,sizeof(path),"%s/textarea_points.tsv",output);textarea_points=fopen(path,"w");assert(textarea_points);
     snprintf(path,sizeof(path),"%s/input_contracts.jsonl",output);contracts=fopen(path,"w");assert(contracts);
     rgb565_mode=true; /* Exercise the production RGB565 renderer unconditionally. */
+    printf("HOST_MODE fine_counters=%d release_capture=%d\n",NUI_PROFILE_FINE_COUNTERS,1-NUI_PROFILE_FINE_COUNTERS);
     printf("NATIVE_DISPLAY format=%s NUI_COLOR_DEPTH=%d framebuffer=1280x720\n",rgb565_mode?"RGB565":"XRGB8888",16);
     assert(nui_native_init(1280,720,framebuffer));nui_native_set_flush_cb(flush,NULL);
+    const char *opt_group=getenv("TAB5_OPT_GROUP");
+    if(opt_group&&*opt_group){optimization_probes(opt_group);fclose(contracts);fclose(textarea_points);fclose(points);fclose(report);nui_native_deinit();return 0;}
     if(getenv("TAB5_TEST_BENCH_ONLY")&&!strcmp(getenv("TAB5_TEST_BENCH_ONLY"),"1")){
         for(unsigned theme=0;theme<2;theme++)graph_motion_benchmark(theme);
         for(unsigned theme=0;theme<2;theme++)measure_motion_benchmark(theme);

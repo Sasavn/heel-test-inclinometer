@@ -43,13 +43,23 @@ int main(void){
         nui_native_touch(635,200,false);nui_native_tick(1000);nui_timer_handler();
         nui_native_render();
         nui_native_profile_snapshot(&after);
-        if(after.allocation_bytes!=initial.allocation_bytes||after.allocation_count!=initial.allocation_count){
-            fprintf(stderr,"cycle %u retained %zu bytes/%zu blocks; expected %zu/%zu\n",cycle,
-                    after.allocation_bytes,after.allocation_count,initial.allocation_bytes,initial.allocation_count);
+        /* Global masks may survive an individual UI destroy for reuse. Every
+         * retained heap byte must be accounted for by the bounded cache, never
+         * waived as an arbitrary warmup allowance. Per-object caches must die. */
+        assert(after.shadow_cache_bytes>=after.shadow_cache_static_bytes);
+        assert(after.shadow_cache_bytes<=after.shadow_cache_capacity_bytes);
+        size_t retained_masks=after.shadow_cache_bytes-after.shadow_cache_static_bytes;
+        if(after.allocation_bytes!=initial.allocation_bytes+retained_masks||
+           after.object_cache_bytes!=initial.object_cache_bytes){
+            fprintf(stderr,"cycle %u retained %zu bytes/%zu blocks; root=%zu masks=%zu object-cache=%zu expected=%zu\n",cycle,
+                    after.allocation_bytes,after.allocation_count,initial.allocation_bytes,retained_masks,
+                    after.object_cache_bytes,initial.object_cache_bytes);
             return 1;
         }
         assert(!after.allocation_failures);
     }
-    printf("native lifetime: 64 production UI cycles, dialogs/keyboards/held repeat, no retained allocation growth; actions=%u\n",actions);
-    nui_native_deinit();return 0;
+    printf("native lifetime: 64 production UI cycles, dialogs/keyboards/held repeat; all retained bytes accounted, masks bounded; actions=%u\n",actions);
+    nui_native_deinit();nui_native_profile_snapshot(&after);
+    assert(after.allocation_bytes==0&&after.allocation_count==0);
+    return 0;
 }

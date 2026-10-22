@@ -1,0 +1,20 @@
+menu "Tab5 native UI diagnostics"
+
+config TAB5_NATIVE_FINE_PROFILE
+    bool "Count individual UI primitives and cache operations"
+    default n
+    help
+        Diagnostic builds only. Enables per-primitive/pixel and style/layout
+        cache counters. Coarse frame, update, render and memory accounting
+        remain available with this disabled. Release builds leave it off.
+
+config TAB5_NATIVE_PRIMITIVE_TIMING
+    bool "Time individual UI primitives"
+    default n
+    select TAB5_NATIVE_FINE_PROFILE
+    help
+        Diagnostic builds only. Reads the microsecond clock around every
+        primitive. This changes rendering cost; use a separate diagnostic
+        run, never silently mix it into a coarse performance comparison.
+
+endmenu

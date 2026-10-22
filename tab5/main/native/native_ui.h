@@ -11,8 +11,11 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+#ifndef NUI_PROFILE_FINE_COUNTERS
+#define NUI_PROFILE_FINE_COUNTERS 0
+#endif
 #ifndef NUI_PROFILE_PRIMITIVE_TIMING
-#define NUI_PROFILE_PRIMITIVE_TIMING 1
+#define NUI_PROFILE_PRIMITIVE_TIMING 0
 #endif
 #define NUI_VERSION_MAJOR 9
 #define NUI_VERSION_MINOR 0
@@ -51,6 +54,12 @@ extern "C" {
 #define NUI_OBJ_FLAG_CLICKABLE 2u
 #define NUI_OBJ_FLAG_SCROLLABLE 4u
 #define NUI_OBJ_FLAG_SEND_DRAW_TASK_EVENTS 8u
+/* Audited subtree callbacks do not change paint when this button is PRESSED.
+ * State selectors still veto the skip. Unknown callbacks remain conservative. */
+#define NUI_OBJ_FLAG_PRESSED_PAINT_INERT 16u
+/* Audited subtree draw callbacks may be omitted when completely occluded.
+ * Separate contract from PRESSED paint invariance; never implied by it. */
+#define NUI_OBJ_FLAG_OCCLUSION_PAINT_INERT 32u
 #define NUI_TEXT_FLAG_NONE 0
 #define NUI_TEXT_FLAG_EXPAND 1
 #define NUI_STYLE_RES_FOUND 1
@@ -163,7 +172,22 @@ enum {
 
 typedef enum {NUI_PRIM_FILL,NUI_PRIM_BORDER,NUI_PRIM_LABEL,NUI_PRIM_IMAGE,NUI_PRIM_LINE,NUI_PRIM_ARC,NUI_PRIM_TRIANGLE,NUI_PRIM_SHADOW,NUI_PRIM_COUNT} nui_primitive_t;
 typedef struct {uint64_t calls,us,pixels;} nui_primitive_stats_t;
-typedef struct {uint64_t frames,dirty_rects,dirty_pixels,render_us; nui_primitive_stats_t primitive[NUI_PRIM_COUNT];size_t allocation_bytes,allocation_peak,allocation_count;uint64_t allocation_failures;} nui_native_stats_t;
+/* Fine activity counters (primitive calls/pixels, cache hits/misses/evictions)
+ * are disabled unless NUI_PROFILE_FINE_COUNTERS=1; zero then means unavailable,
+ * not measured inactivity. Primitive us requires NUI_PROFILE_PRIMITIVE_TIMING=1.
+ * Coarse frames/render/dirty totals and live/peak allocation/cache bytes always
+ * remain available. No claim of per-frame allocation counts is made.
+ * The gradient cache is one static bounded LUT; its full struct size is reported
+ * outside heap allocation bytes. Profile reset retains its valid warm data.
+ * Cache byte gauges include resident descriptors: shadow capacity is a fixed 64 KiB
+ * mask budget plus eight static descriptors. The object cache is fixed per live
+ * retained object; its payload is already part of allocation_bytes (not additive).
+ * Style eviction counts replacement of a populated part/state property set;
+ * layout eviction counts replacement of a populated coordinate record.
+ * Peak gauges have process lifetime, like allocation_peak; profile_reset clears
+ * activity counters only. Miss/build work runs inside render_us, including cold
+ * first paint. No hidden prewarm and no cached final framebuffer pixels. */
+typedef struct {uint64_t frames,dirty_rects,dirty_pixels,render_us; nui_primitive_stats_t primitive[NUI_PRIM_COUNT];size_t allocation_bytes,allocation_peak,allocation_count;uint64_t allocation_failures;uint64_t shadow_cache_hits,shadow_cache_misses,shadow_cache_build_pixels,style_cache_hits,style_cache_misses,style_cache_evictions;size_t shadow_cache_bytes,shadow_cache_peak_bytes,shadow_cache_capacity_bytes,shadow_cache_static_bytes;uint64_t shadow_cache_evictions;size_t object_cache_bytes,object_cache_peak_bytes,object_cache_bytes_per_object;uint64_t layout_cache_hits,layout_cache_misses,layout_cache_evictions,skipped_state_invalidations,clear_pixels_skipped;size_t gradient_cache_bytes,gradient_cache_peak_bytes,gradient_cache_capacity_bytes;uint64_t gradient_cache_hits,gradient_cache_misses,gradient_cache_build_pixels,gradient_cache_evictions;} nui_native_stats_t;
 typedef void (*nui_native_flush_cb_t)(const nui_area_t*,const uint16_t*,size_t stride,void*);
 bool nui_native_init(int width,int height,uint16_t *framebuffer);
 void nui_native_deinit(void);

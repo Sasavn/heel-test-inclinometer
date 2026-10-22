@@ -1,0 +1,3 @@
+FINAL_CALLBACK PASS unknown subtree MAIN/POST/ALL under opaque cover; press flag insufficient; explicit occlusion opt-in and removal exact
+FINAL_SPAN PASS 576 exact span/rectangle cases widths including84 offsets0..3 colors0000/FFFF/1234 opaque/inherited/partial; untouched pixels exact
+FINAL_GLYPH PASS real4bpp entirely left/right lo>hi framebuffer unchanged
