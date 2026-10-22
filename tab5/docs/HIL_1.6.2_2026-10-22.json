@@ -1,0 +1,53 @@
+{
+  "date": "2026-10-22",
+  "version": "1.6.2-esp32",
+  "chip_revision": 103,
+  "panel": "ST7121",
+  "touch_fw": "1.80.1.16",
+  "boot_confirmed": true,
+  "uptime_s": 264,
+  "ap": true,
+  "ap_ip": "192.168.4.1",
+  "rtc": true,
+  "moscow_time": "2026-10-22 16:13:29",
+  "flash_verified_bytes": 1699152,
+  "flash_verified_parts": 4,
+  "nvs_preserved": true,
+  "sensors": {
+    "2": "ABSENT",
+    "3": "ABSENT"
+  },
+  "sd_error": 263,
+  "physical_measurements_verified": false,
+  "temporary_tasks_removed": true,
+  "packages": [
+    {
+      "profile": "build",
+      "version": "1.6.2-esp32",
+      "size": 1664576,
+      "sha256": "bbfc98213c9ddfbf042f51a3308371ac8239bc0ec2947c8719b4ab3d62ebab3e",
+      "revision_min": 100,
+      "revision_max": 199,
+      "parts_sha256": {
+        "bootloader.bin": "315bd966cf7d2074fec28589a6f488e182c64ab630768bc1446b8f9c08102036",
+        "krenomer-esp32.bin": "bbfc98213c9ddfbf042f51a3308371ac8239bc0ec2947c8719b4ab3d62ebab3e",
+        "partition-table.bin": "f1572c83b8e4718acde1887b9238701bc7a53f03afd086330432a3148b8165a3",
+        "ota_data_initial.bin": "7d2c7ac4888bfd75cd5f56e8d61f69595121183afc81556c876732fd3782c62f"
+      }
+    },
+    {
+      "profile": "build-rev3",
+      "version": "1.6.2-esp32",
+      "size": 1665792,
+      "sha256": "20f63c4582f02ad0a4ff69c5e5905039065aa7237a209eacc275c435739686a8",
+      "revision_min": 300,
+      "revision_max": 399,
+      "parts_sha256": {
+        "bootloader.bin": "b8f4ba328379e07d88762cad8a6172448e000a6626ccf5da1314bf7954017ec5",
+        "krenomer-esp32.bin": "20f63c4582f02ad0a4ff69c5e5905039065aa7237a209eacc275c435739686a8",
+        "partition-table.bin": "f1572c83b8e4718acde1887b9238701bc7a53f03afd086330432a3148b8165a3",
+        "ota_data_initial.bin": "7d2c7ac4888bfd75cd5f56e8d61f69595121183afc81556c876732fd3782c62f"
+      }
+    }
+  ]
+}

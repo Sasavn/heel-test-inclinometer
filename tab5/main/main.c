@@ -258,7 +258,11 @@ void app_main(void) {
     esp_err_t services_result=tab5_services_init(&services);
     if(xTaskCreate(storage_router_task,"sample_storage",6144,NULL,4,NULL)!=pdPASS){boot_failed();return;}
     if(xTaskCreate(usb_task,"protocol_usb",16384,NULL,4,NULL)!=pdPASS){boot_failed();return;}
-    lv_display_t *display=bsp_display_start();if(!display || !tab5_panel_ready()){boot_failed();return;}
+    const bsp_display_cfg_t display_cfg={
+        .lvgl_port_cfg=ESP_LVGL_PORT_INIT_CONFIG(),
+        .buffer_size=BSP_LCD_H_RES*32,.double_buffer=true,
+        .flags={.buff_dma=false,.buff_spiram=true,.sw_rotate=true}};
+    lv_display_t *display=bsp_display_start_with_config(&display_cfg);if(!display || !tab5_panel_ready()){boot_failed();return;}
     if(bsp_display_lock(2000)){bsp_display_rotate(display,LV_DISPLAY_ROTATION_90);tab5_ui_init(ui_callback,NULL);bsp_display_unlock();}else {boot_failed();return;}
     bsp_display_brightness_set(60);persist();
     if(services_result!=ESP_OK){boot_failed();return;}

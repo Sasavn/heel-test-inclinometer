@@ -49,6 +49,7 @@ int main(void){
  CHECK(version_ok("2.0.1-esp32"));strcpy(test_current_version,"1.5.0-esp32");
  strcpy(test_current_version,"1.6.0-esp32");CHECK(!version_ok("1.5.0-esp32"));CHECK(version_ok("1.6.0-esp32"));
  strcpy(test_current_version,"1.6.1-esp32");CHECK(!version_ok("1.6.0-esp32"));CHECK(version_ok("1.6.1-esp32"));
+ strcpy(test_current_version,"1.6.2-esp32");CHECK(!version_ok("1.6.1-esp32"));CHECK(version_ok("1.6.2-esp32"));
  strcpy(test_current_version,"1.5.0-esp32");
  begin();CHECK(tab5_services_record_start("blocked")!=0);chunk(0,256);CHECK(ota.offset==256);size_t written=test_flash_offset;chunk(0,256);CHECK(ota.offset==256 && written==test_flash_offset);
  line(2,"ota abort");CHECK(ota.active);tab5_services_disconnect(2);CHECK(ota.active);tab5_services_disconnect(1);CHECK(!ota.active && !test_boot_selected);

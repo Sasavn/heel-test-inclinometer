@@ -25,6 +25,7 @@
 #include "esp_vfs_fat.h"
 #include "diskio_impl.h"
 #include "diskio_sdmmc.h"
+#include "sd_pwr_ctrl_by_on_chip_ldo.h"
 #include "ff.h"
 #include "usb/msc_host.h"
 #include "usb/msc_host_vfs.h"
@@ -458,6 +459,11 @@ esp_err_t tab5_services_confirm_boot(void) {
 void tab5_services_network_snapshot(tab5_network_snapshot_t *out) {if(out){if(!initialized){memset(out,0,sizeof(*out));return;}lock();*out=network_status;unlock();}}
 
 #ifndef TAB5_SERVICES_HOST
+static sdmmc_card_t *sd_card;
+static sd_pwr_ctrl_handle_t sd_power;
+static void unmount_sd(void){
+ if(sd_card){esp_vfs_fat_sdcard_unmount(BSP_SD_MOUNT_POINT,sd_card);sd_card=NULL;}
+}
 static bool fat32_drive(BYTE drive_number) {
  if(drive_number>=10)return false;
  char drive[3]={(char)('0'+drive_number),':',0};FATFS *fs=NULL;DWORD clusters;
@@ -466,9 +472,11 @@ static bool fat32_drive(BYTE drive_number) {
 static esp_err_t mount_sd(void) {
  esp_vfs_fat_sdmmc_mount_config_t mount={.format_if_mount_failed=false,.max_files=6,.allocation_unit_size=16384};
  sdmmc_host_t host;sdmmc_slot_config_t slot;bsp_sdcard_get_sdmmc_host(SDMMC_HOST_SLOT_0,&host);bsp_sdcard_sdmmc_get_slot(SDMMC_HOST_SLOT_0,&slot);
- bsp_sdcard_cfg_t cfg={.mount=&mount,.host=&host,.slot.sdmmc=&slot};
- esp_err_t e=bsp_sdcard_sdmmc_mount(&cfg);
- if(e==ESP_OK && !fat32_drive(ff_diskio_get_pdrv_card(bsp_sdcard_get_handle()))){bsp_sdcard_unmount();return ESP_FAIL;}
+ if(!sd_power){sd_pwr_ctrl_ldo_config_t power={.ldo_chan_id=4};
+  esp_err_t e=sd_pwr_ctrl_new_on_chip_ldo(&power,&sd_power);if(e!=ESP_OK)return e;}
+ host.pwr_ctrl_handle=sd_power;
+ esp_err_t e=esp_vfs_fat_sdmmc_mount(BSP_SD_MOUNT_POINT,&host,&slot,&mount,&sd_card);
+ if(e==ESP_OK && !fat32_drive(ff_diskio_get_pdrv_card(sd_card))){unmount_sd();return ESP_FAIL;}
  return e;
 }
 static void usb_event(const msc_host_event_t *event,void *ctx) {(void)ctx;xQueueSend(usb_events,event,0);}
@@ -499,7 +507,7 @@ esp_err_t tab5_services_retry(tab5_medium_t i) {
  if(i==TAB5_USB && !usb_driver_ready){esp_err_t e=usb_driver_error;unlock();return e;}
  files_busy=true;unlock();
  ml(i);esp_err_t e;
- if(i==0){if(bsp_sdcard_get_handle())bsp_sdcard_unmount();e=mount_sd();}
+ if(i==0){unmount_sd();e=mount_sd();}
  else {
   if(usb_vfs){msc_host_vfs_unregister(usb_vfs);usb_vfs=NULL;}
   if(usb_device){msc_host_uninstall_device(usb_device);usb_device=NULL;}
