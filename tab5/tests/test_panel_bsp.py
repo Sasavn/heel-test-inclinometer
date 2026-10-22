@@ -16,7 +16,7 @@ WRAPPED_FW3 = 'cf967b925edf9323af079bd0a3af9429309c7515b45126857b12762e36ba3fb5'
 
 DRIVER_TX = {'st1': '6c10188a83f4c0e89120991fec495370025c788bf1924dbc2fa475278ca904a2', 'st3': '86a45eb2fc04f9c310a2075130da838cebd1c18288fcfc4b623206fe8df59860', 'ili': '8fd152fc78b6b99fe1ca27f06cfe752991b9ae6f900ce45043e3081b00753a2f'}
 
-FUNCTIONS = ('bsp_get_board_version', 'bsp_display_new', 'bsp_display_new_with_handles', 'bsp_display_lcd_init', 'bsp_touch_new')
+FUNCTIONS = ('bsp_get_board_version', 'bsp_display_new', 'bsp_display_new_with_handles', 'bsp_touch_new')
 
 def function(text, name):
     m = re.search(r'^(?:static )?[\w *]+\b' + name + r'\([^;]*?\)\s*\{', text, re.M)
@@ -37,7 +37,7 @@ def typedefs(path):
 
 def build(root, out, wrapped=False):
     mc = root / 'tab5/managed_components'
-    bsp = mc / 'espressif__m5stack_tab5'
+    bsp = root / 'tab5/components/tab5_board_support'
     src = (bsp / 'src/bsp_display.c').read_text()
     enum = re.search(r'typedef enum\s*\{.*?\} bsp_tab5_board_version_t;', src, re.S)[0]
     display = (bsp / 'include/bsp/display.h').read_text()
@@ -59,6 +59,19 @@ def build(root, out, wrapped=False):
         symbol = {'disp_init_data.h':'ili','disp_init_data_1.h':'st3','disp_init_data_st7121.h':'st1'}[header]
         code += '\nstatic const size_t sizes_' + symbol + '[]={' + ','.join(map(str,sizes)) + '};\n'
     harness = (HERE / 'panel_harness.c').read_text()
+    # Exercise the production low-level entry point used by native_port (zero
+    # bitrate selects the detected panel), then its explicit display-on step.
+    # The former graphics-only bsp_display_lcd_init no longer exists.
+    harness = harness.replace('bsp_display_cfg_t c={.buffer_size=720};',
+                              'bsp_display_config_t c={0}; bsp_lcd_handles_t h={0};')
+    harness = harness.replace('!bsp_display_lcd_init(&c)',
+                              'bsp_display_new_with_handles(&c,&h)!=ESP_OK')
+    harness = harness.replace('assert(bsp_display_lcd_init(&c));',
+        'int result=bsp_display_new_with_handles(&c,&h);'
+        'assert(result==((resetfail||initfail)?-1:ESP_OK));'
+        'if(result==ESP_OK)assert(esp_lcd_panel_disp_on_off(h.panel,true)==(onfail?-1:ESP_OK));')
+    # Failed touch creation now correctly deletes its freshly allocated IO.
+    harness = harness.replace('dels==(board==1?0:1)', 'dels==((board==1?0:1)+touchfail)')
     driver_source = (mc / 'espressif__esp_lcd_st7123/esp_lcd_st7123.c').read_text()
     driver_type = re.search(r'typedef struct\s*\{.*?^\} st7123_panel_t;', driver_source, re.M | re.S)[0]
     driver_default = re.search(r'static const st7123_lcd_init_cmd_t vendor_specific_init_default\[\] = \{.*?^\};', driver_source, re.M | re.S)[0]
@@ -79,6 +92,7 @@ def build(root, out, wrapped=False):
         for symbol in symbols:
             harness = re.sub(r'\b'+symbol+r'\b', '__real_'+symbol, harness)
             production = re.sub(r'\b'+symbol+r'\b', '__wrap_'+symbol, production)
+        harness = harness.replace('__real_esp_lcd_panel_disp_on_off(h.panel,true)', '__wrap_esp_lcd_panel_disp_on_off(h.panel,true)')
         wrapper = (root / 'tab5/main/tab5_panel.c').read_text()
         wrapper = re.sub(r'^#include "[^"\n]+"\s*$', '', wrapper, flags=re.M)
         production = wrapper + '\n' + production
@@ -132,11 +146,12 @@ def main():
         }
         for index,(label,(old,new)) in enumerate(mutations.items()):
             copy = temp / ('mutation'+str(index))
-            for component in ('espressif__m5stack_tab5','espressif__esp_lcd_st7123','espressif__esp_lcd_ili9881c'):
+            shutil.copytree(root/'tab5/components/tab5_board_support',copy/'tab5/components/tab5_board_support')
+            for component in ('espressif__esp_lcd_st7123','espressif__esp_lcd_ili9881c'):
                 shutil.copytree(root/'tab5/managed_components'/component,copy/'tab5/managed_components'/component)
-            source = copy/'tab5/managed_components/espressif__m5stack_tab5/src/bsp_display.c'
+            source = copy/'tab5/components/tab5_board_support/src/bsp_display.c'
             if label == 'ST7121 payload byte':
-                source = copy/'tab5/managed_components/espressif__m5stack_tab5/priv_include/disp_init_data_st7121.h'
+                source = copy/'tab5/components/tab5_board_support/priv_include/disp_init_data_st7121.h'
             text = source.read_text()
             assert text.count(old)==1, 'Mutation anchor changed: '+label
             source.write_text(text.replace(old,new))
@@ -152,11 +167,12 @@ def main():
             ('e8','{0xE8, (uint8_t[]){0x20, 0x6F','{0xE8, (uint8_t[]){0x21, 0x6F'),
             ('a3','{0xA3, (uint8_t[]){0x80, 0x01','{0xA3, (uint8_t[]){0x81, 0x01')]:
             copy = temp / (label+'negative')
-            for component in ('espressif__m5stack_tab5','espressif__esp_lcd_st7123','espressif__esp_lcd_ili9881c'):
+            shutil.copytree(root/'tab5/components/tab5_board_support',copy/'tab5/components/tab5_board_support')
+            for component in ('espressif__esp_lcd_st7123','espressif__esp_lcd_ili9881c'):
                 shutil.copytree(root/'tab5/managed_components'/component,copy/'tab5/managed_components'/component)
             (copy/'tab5/main').mkdir(parents=True)
             shutil.copy2(root/'tab5/main/tab5_panel.c',copy/'tab5/main/tab5_panel.c')
-            source = copy/'tab5/managed_components/espressif__m5stack_tab5/priv_include/disp_init_data_1.h'
+            source = copy/'tab5/components/tab5_board_support/priv_include/disp_init_data_1.h'
             text = source.read_text()
             assert text.count(old)==1
             source.write_text(text.replace(old,new))

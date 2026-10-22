@@ -1,64 +1,71 @@
 #include "tab5_draw_profile.h"
-#include "src/draw/sw/lv_draw_sw.h"
-#include "esp_timer.h"
+#include "native/native_ui.h"
+#ifdef ESP_PLATFORM
+#include "tab5_native_port.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#endif
+#include <string.h>
 
-enum { FILL, BORDER, BOX_SHADOW, IMAGE, LABEL, ARC, LINE, LAYER };
-static const char *const names[TAB5_DRAW_PROFILE_COUNT] = {
-    "fill", "border", "box_shadow", "image", "label", "arc", "line", "layer"
+/* Keep the diagnostic protocol's eight-entry shape, but report actual native
+ * primitives rather than retaining linker wrappers from the removed toolkit. */
+static const char *const names[TAB5_DRAW_PROFILE_COUNT]={
+    "fill","border","box_shadow","image","label","arc","line","triangle"
 };
-static struct { uint64_t us, calls; } counters[TAB5_DRAW_PROFILE_COUNT];
-static portMUX_TYPE counter_lock = portMUX_INITIALIZER_UNLOCKED;
-
-static void completed(unsigned index, int64_t start)
-{
-    int64_t end = esp_timer_get_time();
-    uint64_t elapsed = end >= start ? (uint64_t)(end - start) : 0;
-    portENTER_CRITICAL(&counter_lock);
-    counters[index].us += elapsed;
-    counters[index].calls++;
-    portEXIT_CRITICAL(&counter_lock);
+static const unsigned indices[TAB5_DRAW_PROFILE_COUNT]={
+    NUI_PRIM_FILL,NUI_PRIM_BORDER,NUI_PRIM_SHADOW,NUI_PRIM_IMAGE,
+    NUI_PRIM_LABEL,NUI_PRIM_ARC,NUI_PRIM_LINE,NUI_PRIM_TRIANGLE
+};
+static nui_native_stats_t baseline;
+static tab5_draw_profile_snapshot_t completed_snapshot;
+#ifdef ESP_PLATFORM
+static portMUX_TYPE cache_lock=portMUX_INITIALIZER_UNLOCKED;
+static void copy_completed(tab5_draw_profile_snapshot_t *out){
+    if(!out)return;
+#ifdef ESP_PLATFORM
+    portENTER_CRITICAL(&cache_lock);
+#endif
+    *out=completed_snapshot;
+#ifdef ESP_PLATFORM
+    portEXIT_CRITICAL(&cache_lock);
+#endif
+    /* Services are reachable before the display starts. Valid names are
+     * required even when there has not been a completed snapshot yet. */
+    for(unsigned i=0;i<TAB5_DRAW_PROFILE_COUNT;i++)out->entries[i].name=names[i];
 }
+#endif
 
-void tab5_draw_profile_snapshot(tab5_draw_profile_snapshot_t *out, bool reset)
+void tab5_draw_profile_snapshot(tab5_draw_profile_snapshot_t *out,bool reset)
 {
-    portENTER_CRITICAL(&counter_lock);
-    for(unsigned i = 0; i < TAB5_DRAW_PROFILE_COUNT; i++) {
-        if(out) {
-            out->entries[i].name = names[i];
-            out->entries[i].us = counters[i].us;
-            out->entries[i].calls = counters[i].calls;
-        }
-        if(reset) counters[i].us = counters[i].calls = 0;
+#ifdef ESP_PLATFORM
+    /* The renderer's 64-bit counters are protected by its owning UI mutex.
+     * Never mask interrupts while acquiring a task mutex. */
+    if(!tab5_native_port_lock(1000)){
+        copy_completed(out);
+        return;
     }
-    portEXIT_CRITICAL(&counter_lock);
-}
-
-/* Declarations match the pinned LVGL 9.3 lv_draw_sw.h, including non-const
- * fill descriptor and the two-argument line entry point. Never hold our lock
- * while calling the renderer: it may call another instrumented primitive. */
-#define WRAP_AREA(name, type, qualifier, index) \
-    extern void __real_lv_draw_sw_##name(lv_draw_task_t *, qualifier type *, const lv_area_t *); \
-    void __wrap_lv_draw_sw_##name(lv_draw_task_t *t, qualifier type *dsc, const lv_area_t *coords) \
-    { \
-        int64_t start = esp_timer_get_time(); \
-        __real_lv_draw_sw_##name(t, dsc, coords); \
-        completed(index, start); \
+#endif
+    nui_native_stats_t stats;
+    nui_native_profile_snapshot(&stats);
+    tab5_draw_profile_snapshot_t current;
+    for(unsigned i=0;i<TAB5_DRAW_PROFILE_COUNT;i++){
+        unsigned k=indices[i];
+        current.entries[i].name=names[i];
+        current.entries[i].us=stats.primitive[k].us>=baseline.primitive[k].us?
+            stats.primitive[k].us-baseline.primitive[k].us:stats.primitive[k].us;
+        current.entries[i].calls=stats.primitive[k].calls>=baseline.primitive[k].calls?
+            stats.primitive[k].calls-baseline.primitive[k].calls:stats.primitive[k].calls;
     }
-
-WRAP_AREA(fill, lv_draw_fill_dsc_t, , FILL)
-WRAP_AREA(border, lv_draw_border_dsc_t, const, BORDER)
-WRAP_AREA(box_shadow, lv_draw_box_shadow_dsc_t, const, BOX_SHADOW)
-WRAP_AREA(image, lv_draw_image_dsc_t, const, IMAGE)
-WRAP_AREA(label, lv_draw_label_dsc_t, const, LABEL)
-WRAP_AREA(arc, lv_draw_arc_dsc_t, const, ARC)
-WRAP_AREA(layer, lv_draw_image_dsc_t, const, LAYER)
-
-extern void __real_lv_draw_sw_line(lv_draw_task_t *, const lv_draw_line_dsc_t *);
-void __wrap_lv_draw_sw_line(lv_draw_task_t *t, const lv_draw_line_dsc_t *dsc)
-{
-    int64_t start = esp_timer_get_time();
-    __real_lv_draw_sw_line(t, dsc);
-    completed(LINE, start);
+#ifdef ESP_PLATFORM
+    portENTER_CRITICAL(&cache_lock);
+#endif
+    completed_snapshot=current;
+#ifdef ESP_PLATFORM
+    portEXIT_CRITICAL(&cache_lock);
+#endif
+    if(out)*out=current;
+    if(reset)baseline=stats;
+#ifdef ESP_PLATFORM
+    tab5_native_port_unlock();
+#endif
 }

@@ -1,4 +1,4 @@
-"""Compile/run actual pure graph with actual LVGL headers; no renderer or hardware."""
+"""Compile/run actual pure graph with toolkit-independent headers; no renderer or hardware."""
 import argparse
 from pathlib import Path
 import shutil
@@ -15,13 +15,10 @@ def main():
     compiler = shutil.which('gcc')
     if not compiler:
         raise SystemExit('gcc required on PATH')
-    lvgl = root/'tab5/managed_components/lvgl__lvgl'
     with tempfile.TemporaryDirectory(prefix='tab5-graph-') as directory:
         exe = Path(directory)/'graph.exe'
         command = [compiler, '-std=c11', '-O1', '-Wall', '-Wextra', '-Werror',
-                   '-DLV_CONF_SKIP', '-DLV_COLOR_DEPTH=32', '-DLV_USE_LOG=0',
-                   '-DLV_USE_OS=0', '-DLV_USE_DRAW_SW_ASM=0',
-                   '-I'+str(lvgl), '-I'+str(root/'tab5/main'),
+                   '-I'+str(root/'tab5/main'),
                    str(HERE/'test_ui_graph.c'), str(root/'tab5/main/tab5_ui_graph.c'),
                    '-lm', '-o', str(exe)]
         subprocess.run(command, check=True, timeout=60)

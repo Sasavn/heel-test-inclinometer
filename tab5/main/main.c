@@ -6,12 +6,8 @@
 #include "tab5_time.h"
 #include "tab5_resources.h"
 #include "tab5_draw_profile.h"
-/* The pinned LVGL 9.3 backend exposes no public flushing getter. Use exactly
- * the volatile completion flag polled by its own wait_for_flushing(), but
- * sleep between polls instead of burning an entire CPU core. */
-#include "src/display/lv_display_private.h"
+#include "tab5_native_port.h"
 #include "bsp/esp-bsp.h"
-#include "esp_lvgl_port.h"
 #include "driver/usb_serial_jtag.h"
 #include "esp_chip_info.h"
 #include "esp_app_desc.h"
@@ -92,41 +88,23 @@ typedef struct {
 } ui_perf_t;
 static ui_perf_t ui_perf;
 static portMUX_TYPE ui_perf_lock=portMUX_INITIALIZER_UNLOCKED;
-static void display_flush_wait(lv_display_t *display){
-    while(display->flushing)vTaskDelay(1);
-}
-static uint32_t display_tick_ms(void){return (uint32_t)(esp_timer_get_time()/1000);}
-static void display_perf(lv_event_t *event) {
-    uint64_t now=esp_timer_get_time();lv_event_code_t code=lv_event_get_code(event);
-    portENTER_CRITICAL(&ui_perf_lock);
-    if(code==LV_EVENT_RENDER_START)ui_perf.render_start=now;
-    else if(code==LV_EVENT_RENDER_READY&&ui_perf.render_start){ui_perf.render_us+=now-ui_perf.render_start;ui_perf.renders++;ui_perf.render_start=0;}
-    else if(code==LV_EVENT_FLUSH_START)ui_perf.flush_start=now;
-    else if(code==LV_EVENT_FLUSH_FINISH&&ui_perf.flush_start){ui_perf.flush_us+=now-ui_perf.flush_start;ui_perf.flushes++;ui_perf.flush_start=0;}
-    else if(code==LV_EVENT_FLUSH_WAIT_START)ui_perf.wait_start=now;
-    else if(code==LV_EVENT_FLUSH_WAIT_FINISH&&ui_perf.wait_start){ui_perf.wait_us+=now-ui_perf.wait_start;ui_perf.wait_start=0;}
-    else if(code==LV_EVENT_REFR_START)ui_perf.refresh_start=now;
-    else if(code==LV_EVENT_REFR_READY&&ui_perf.refresh_start){uint64_t dt=now-ui_perf.refresh_start;ui_perf.refresh_us+=dt;ui_perf.refreshes++;if(dt>ui_perf.refresh_max_us)ui_perf.refresh_max_us=dt;ui_perf.refresh_start=0;}
-    portEXIT_CRITICAL(&ui_perf_lock);
-}
 static void ui_perf_reply(bool reset,tab5_service_reply_fn reply,void *ctx) {
     if(reset)tab5_draw_profile_snapshot(NULL,true);
     uint64_t now=esp_timer_get_time();ui_perf_t p;
     portENTER_CRITICAL(&ui_perf_lock);
     if(reset){ui_perf=(ui_perf_t){.since=now};}
     p=ui_perf;portEXIT_CRITICAL(&ui_perf_lock);
+    tab5_native_port_stats_t native;tab5_native_port_stats(&native,reset);
+    p.renders=native.renders;p.render_us=native.render_us;p.flushes=native.flushes;p.flush_us=native.flush_us;
+    p.refreshes=native.refreshes;p.refresh_us=native.refresh_us;p.refresh_max_us=native.refresh_max_us;p.wait_us=native.wait_us;
     char out[640];snprintf(out,sizeof(out),
-        "{\"elapsed_ms\":%llu,\"updates\":%lu,\"update_us\":%llu,\"renders\":%lu,\"render_us\":%llu,\"flushes\":%lu,\"flush_us\":%llu,\"refreshes\":%lu,\"refresh_us\":%llu,\"refresh_max_us\":%lu,\"lock_misses\":%lu,\"sample_age_us\":[%lu,%lu],\"sample_age_max_us\":[%lu,%lu],\"flush_wait_us\":%llu,\"ppa\":%s,\"reset_reason\":%d}",
+        "{\"elapsed_ms\":%llu,\"updates\":%lu,\"update_us\":%llu,\"renders\":%lu,\"render_us\":%llu,\"flushes\":%lu,\"flush_us\":%llu,\"refreshes\":%lu,\"refresh_us\":%llu,\"refresh_max_us\":%lu,\"lock_misses\":%lu,\"sample_age_us\":[%lu,%lu],\"sample_age_max_us\":[%lu,%lu],\"flush_wait_us\":%llu,\"rotate_us\":%llu,\"draw_errors\":%lu,\"backend\":\"native\",\"ppa\":%s,\"reset_reason\":%d}",
         (unsigned long long)((now-p.since)/1000),(unsigned long)p.updates,(unsigned long long)p.update_us,
         (unsigned long)p.renders,(unsigned long long)p.render_us,(unsigned long)p.flushes,(unsigned long long)p.flush_us,
         (unsigned long)p.refreshes,(unsigned long long)p.refresh_us,(unsigned long)p.refresh_max_us,(unsigned long)p.lock_misses,
         (unsigned long)p.sample_age_us[0],(unsigned long)p.sample_age_us[1],(unsigned long)p.sample_age_max_us[0],(unsigned long)p.sample_age_max_us[1],
-        (unsigned long long)p.wait_us,
-#if CONFIG_LVGL_PORT_ENABLE_PPA
+        (unsigned long long)p.wait_us,(unsigned long long)native.rotate_us,(unsigned long)native.errors,
         "true"
-#else
-        "false"
-#endif
         ,(int)esp_reset_reason()
     );reply(ctx,out);
     tab5_draw_profile_snapshot_t draw;tab5_draw_profile_snapshot(&draw,false);
@@ -373,23 +351,9 @@ void app_main(void) {
     esp_err_t services_result=tab5_services_init(&services);
     if(xTaskCreate(storage_router_task,"sample_storage",6144,NULL,4,NULL)!=pdPASS){boot_failed();return;}
     if(xTaskCreate(usb_task,"protocol_usb",16384,NULL,4,NULL)!=pdPASS){boot_failed();return;}
-    bsp_display_cfg_t display_cfg={
-        .lvgl_port_cfg=ESP_LVGL_PORT_INIT_CONFIG(),
-        .buffer_size=BSP_LCD_H_RES*BSP_LCD_V_RES,.double_buffer=true,
-        .flags={.buff_dma=false,.buff_spiram=true,.sw_rotate=true}};
-    /* Keep expensive drawing away from the UART ISR/acquisition core. */
-    display_cfg.lvgl_port_cfg.task_affinity=1;
-    lv_display_t *display=bsp_display_start_with_config(&display_cfg);if(!display || !tab5_panel_ready()){boot_failed();return;}
-    if(bsp_display_lock(2000)){
-        /* The port's periodic tick locks timer_mux also held during touch I/O.
-         * A high-priority esp_timer callback must never wait on touch or draw.
-         * Read the monotonic clock directly; no periodic tick or catch-up queue. */
-        if(lvgl_port_stop()!=ESP_OK){bsp_display_unlock();boot_failed();return;}
-        lv_tick_set_cb(display_tick_ms);lv_timer_enable(true);
-        ui_perf.since=esp_timer_get_time();lv_display_set_flush_wait_cb(display,display_flush_wait);
-        lv_display_add_event_cb(display,display_perf,LV_EVENT_ALL,NULL);bsp_display_rotate(display,LV_DISPLAY_ROTATION_90);tab5_ui_init(ui_callback,NULL);bsp_display_unlock();
-    }else {boot_failed();return;}
-    bsp_display_brightness_set(60);persist();
+    ui_perf.since=esp_timer_get_time();
+    if(tab5_native_port_start(ui_callback,NULL)!=ESP_OK){boot_failed();return;}
+    persist();
     if(services_result!=ESP_OK){boot_failed();return;}
     bool trial_confirmed=false;
     uint64_t last_ui=0,last_battery=0,last_stream=0;
@@ -461,7 +425,7 @@ void app_main(void) {
         ui.tcp_clients_known=true;ui.tcp_clients=(uint16_t)net.clients;
         snprintf(ui.link.ap_ip,sizeof(ui.link.ap_ip),"%s",net.ap_ip);snprintf(ui.link.sta_ip,sizeof(ui.link.sta_ip),"%s",net.sta_ip);
         xSemaphoreGive(app_mutex);
-        if(now-last_ui>=100000){last_ui=now;if(bsp_display_lock(20)){
+        if(now-last_ui>=100000){last_ui=now;if(tab5_native_port_lock(20)){
             /* Service/battery calls and the display lock can take time. Take the
              * measurement first, then its time bound; never reject a new reply
              * as "from the future" against the old loop-start timestamp. */
@@ -475,7 +439,7 @@ void app_main(void) {
             }
             portEXIT_CRITICAL(&ui_perf_lock);
             uint64_t update_start=esp_timer_get_time();tab5_ui_update(&ui);
-            uint64_t update_elapsed=esp_timer_get_time()-update_start;portENTER_CRITICAL(&ui_perf_lock);ui_perf.updates++;ui_perf.update_us+=update_elapsed;portEXIT_CRITICAL(&ui_perf_lock);bsp_display_unlock();
+            uint64_t update_elapsed=esp_timer_get_time()-update_start;portENTER_CRITICAL(&ui_perf_lock);ui_perf.updates++;ui_perf.update_us+=update_elapsed;portEXIT_CRITICAL(&ui_perf_lock);tab5_native_port_unlock();
             if(!trial_confirmed && now>=2000000 && esp_get_free_heap_size()>16384){
                 esp_err_t health=tab5_services_confirm_boot();
                 trial_confirmed=health==ESP_OK || health==ESP_ERR_NOT_FOUND;

@@ -1,0 +1,588 @@
+{
+  "primitive_timing": 1,
+  "mode": "instrumented diagnostic only, excluded from before/after speed comparisons",
+  "clock": "QPC us",
+  "hardware_rotation_dsi": "N/A",
+  "rows": [
+    {
+      "scene": "idle",
+      "theme": "dark",
+      "frames": 0,
+      "dirty_rects": 0,
+      "dirty_pixels": 0,
+      "engine_render_us_excluding_flush": 0,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ]
+    },
+    {
+      "scene": "angles",
+      "theme": "dark",
+      "frames": 600,
+      "dirty_rects": 4132,
+      "dirty_pixels": 116429128,
+      "engine_render_us_excluding_flush": 385477,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 7653,
+          "us": 63711,
+          "pixels": 127194120
+        },
+        {
+          "id": 1,
+          "calls": 2352,
+          "us": 868,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 13430,
+          "us": 58916,
+          "pixels": 8463613
+        },
+        {
+          "id": 3,
+          "calls": 1183,
+          "us": 2954,
+          "pixels": 47320000
+        },
+        {
+          "id": 4,
+          "calls": 1791,
+          "us": 13802,
+          "pixels": 285780
+        },
+        {
+          "id": 5,
+          "calls": 1791,
+          "us": 236,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 2352,
+          "us": 127318,
+          "pixels": 0
+        }
+      ]
+    },
+    {
+      "scene": "graph",
+      "theme": "dark",
+      "frames": 600,
+      "dirty_rects": 2652,
+      "dirty_pixels": 142676352,
+      "engine_render_us_excluding_flush": 118476,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 4704,
+          "us": 8042,
+          "pixels": 55526016
+        },
+        {
+          "id": 1,
+          "calls": 2352,
+          "us": 508,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 2352,
+          "us": 11484,
+          "pixels": 1868397
+        },
+        {
+          "id": 3,
+          "calls": 300,
+          "us": 5417,
+          "pixels": 113568000
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 2352,
+          "us": 59176,
+          "pixels": 0
+        }
+      ]
+    },
+    {
+      "scene": "modal",
+      "theme": "dark",
+      "frames": 1200,
+      "dirty_rects": 3000,
+      "dirty_pixels": 59928000,
+      "engine_render_us_excluding_flush": 257564,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 5400,
+          "us": 32378,
+          "pixels": 105710400
+        },
+        {
+          "id": 1,
+          "calls": 4800,
+          "us": 12573,
+          "pixels": 1972800
+        },
+        {
+          "id": 2,
+          "calls": 3600,
+          "us": 14677,
+          "pixels": 1821000
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 3000,
+          "us": 123036,
+          "pixels": 0
+        }
+      ]
+    },
+    {
+      "scene": "transition",
+      "theme": "dark",
+      "frames": 1200,
+      "dirty_rects": 2490,
+      "dirty_pixels": 587630488,
+      "engine_render_us_excluding_flush": 2630240,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 30775,
+          "us": 417452,
+          "pixels": 1210975184
+        },
+        {
+          "id": 1,
+          "calls": 14734,
+          "us": 109978,
+          "pixels": 7327920
+        },
+        {
+          "id": 2,
+          "calls": 34337,
+          "us": 230470,
+          "pixels": 20769866
+        },
+        {
+          "id": 3,
+          "calls": 596,
+          "us": 7176,
+          "pixels": 64467200
+        },
+        {
+          "id": 4,
+          "calls": 20640,
+          "us": 91447,
+          "pixels": 1430408
+        },
+        {
+          "id": 5,
+          "calls": 5040,
+          "us": 33218,
+          "pixels": 404160
+        },
+        {
+          "id": 6,
+          "calls": 3360,
+          "us": 3921,
+          "pixels": 56640
+        },
+        {
+          "id": 7,
+          "calls": 3334,
+          "us": 1553466,
+          "pixels": 6224880
+        }
+      ]
+    },
+    {
+      "scene": "idle",
+      "theme": "light",
+      "frames": 0,
+      "dirty_rects": 0,
+      "dirty_pixels": 0,
+      "engine_render_us_excluding_flush": 0,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 1,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        }
+      ]
+    },
+    {
+      "scene": "angles",
+      "theme": "light",
+      "frames": 600,
+      "dirty_rects": 4132,
+      "dirty_pixels": 116429128,
+      "engine_render_us_excluding_flush": 440814,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 7653,
+          "us": 74655,
+          "pixels": 127194120
+        },
+        {
+          "id": 1,
+          "calls": 2352,
+          "us": 1027,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 13430,
+          "us": 65624,
+          "pixels": 8463613
+        },
+        {
+          "id": 3,
+          "calls": 1183,
+          "us": 3209,
+          "pixels": 47320000
+        },
+        {
+          "id": 4,
+          "calls": 1791,
+          "us": 17413,
+          "pixels": 285780
+        },
+        {
+          "id": 5,
+          "calls": 1791,
+          "us": 258,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 2352,
+          "us": 148439,
+          "pixels": 0
+        }
+      ]
+    },
+    {
+      "scene": "graph",
+      "theme": "light",
+      "frames": 600,
+      "dirty_rects": 2652,
+      "dirty_pixels": 142676352,
+      "engine_render_us_excluding_flush": 137309,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 4704,
+          "us": 9172,
+          "pixels": 55526016
+        },
+        {
+          "id": 1,
+          "calls": 2352,
+          "us": 649,
+          "pixels": 0
+        },
+        {
+          "id": 2,
+          "calls": 2352,
+          "us": 13481,
+          "pixels": 1868397
+        },
+        {
+          "id": 3,
+          "calls": 300,
+          "us": 6030,
+          "pixels": 113568000
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 2352,
+          "us": 70422,
+          "pixels": 0
+        }
+      ]
+    },
+    {
+      "scene": "modal",
+      "theme": "light",
+      "frames": 1200,
+      "dirty_rects": 3000,
+      "dirty_pixels": 59928000,
+      "engine_render_us_excluding_flush": 281775,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 5400,
+          "us": 34642,
+          "pixels": 105710400
+        },
+        {
+          "id": 1,
+          "calls": 4800,
+          "us": 14192,
+          "pixels": 1972800
+        },
+        {
+          "id": 2,
+          "calls": 3600,
+          "us": 16146,
+          "pixels": 1821000
+        },
+        {
+          "id": 3,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 4,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 5,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 6,
+          "calls": 0,
+          "us": 0,
+          "pixels": 0
+        },
+        {
+          "id": 7,
+          "calls": 3000,
+          "us": 138212,
+          "pixels": 0
+        }
+      ]
+    },
+    {
+      "scene": "transition",
+      "theme": "light",
+      "frames": 1200,
+      "dirty_rects": 2490,
+      "dirty_pixels": 587630488,
+      "engine_render_us_excluding_flush": 2626844,
+      "primitives": [
+        {
+          "id": 0,
+          "calls": 30775,
+          "us": 417593,
+          "pixels": 1210975184
+        },
+        {
+          "id": 1,
+          "calls": 14734,
+          "us": 108479,
+          "pixels": 7327920
+        },
+        {
+          "id": 2,
+          "calls": 34337,
+          "us": 229008,
+          "pixels": 20769866
+        },
+        {
+          "id": 3,
+          "calls": 596,
+          "us": 6462,
+          "pixels": 64467200
+        },
+        {
+          "id": 4,
+          "calls": 20640,
+          "us": 93901,
+          "pixels": 1430408
+        },
+        {
+          "id": 5,
+          "calls": 5040,
+          "us": 32392,
+          "pixels": 404160
+        },
+        {
+          "id": 6,
+          "calls": 3360,
+          "us": 3726,
+          "pixels": 56640
+        },
+        {
+          "id": 7,
+          "calls": 3334,
+          "us": 1567633,
+          "pixels": 6114240
+        }
+      ]
+    }
+  ]
+}

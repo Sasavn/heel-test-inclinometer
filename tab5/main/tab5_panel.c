@@ -20,6 +20,7 @@ static struct {
 } panel;
 static st7123_lcd_init_cmd_t st7123_commands[128];
 static st7123_vendor_config_t st7123_config;
+void tab5_panel_observer_reset(void){memset(&panel,0,sizeof(panel));}
 
 esp_err_t __real_esp_lcd_new_dsi_bus(const esp_lcd_dsi_bus_config_t *, esp_lcd_dsi_bus_handle_t *);
 esp_err_t __real_esp_lcd_new_panel_st7123(esp_lcd_panel_io_handle_t, const esp_lcd_panel_dev_config_t *, esp_lcd_panel_handle_t *);

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate Tab5 LVGL9 fonts; requires Node/npm and Python fonttools.
+"""Generate Tab5 native 4bpp fonts; requires Node/npm and Python fonttools.
 Run: python tab5/tools/gen_fonts.py [--check]
 Text: tab5/assets/fonts/Roboto-*.ttf (Apache 2.0, LICENSE_ROBOTO_APACHE2.txt).
 Symbols Roboto lacks (✓ ⚠ ✗ ● ▲ ■ ○ ⌫ →): pc/assets/fonts/DejaVuSans*.ttf (LICENSE_DEJAVU.txt).
@@ -57,6 +57,9 @@ def main():
         if not args.check:
             data = re.sub(r' \* Opts:.*', ' * Generated with tab5/tools/gen_fonts.py; Roboto (Apache 2.0) + DejaVu symbols, see tab5/assets/fonts', data)
             data = data.replace('#ifdef LV_LVGL_H_INCLUDE_SIMPLE\n#include "lvgl.h"\n#else\n#include "lvgl/lvgl.h"\n#endif', '#include "lvgl.h"')
+            data = data.replace('#include "lvgl.h"', '#include "native/native_ui.h"')
+            data = re.sub(r'\blv_', 'nui_', data)
+            data = re.sub(r'\bLV_', 'NUI_', data).replace('LVGL_VERSION_', 'NUI_VERSION_')
             target.write_text(data.rstrip() + '\n', encoding='utf-8')
         # Check the actual generated cmap range tables, not only command comments.
         blocks = re.findall(r'\.range_start\s*=\s*(\d+).*?\.range_length\s*=\s*(\d+).*?\.glyph_id_start.*?\.unicode_list\s*=\s*(NULL|unicode_list_\d+).*?\.list_length\s*=\s*(\d+)', data, re.S)

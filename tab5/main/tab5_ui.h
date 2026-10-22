@@ -1,7 +1,6 @@
 #ifndef TAB5_UI_H
 #define TAB5_UI_H
 #include "tab5_measure.h"
-#include "lvgl.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -22,7 +21,7 @@ typedef struct {
     tab5_ui_network_t network;
     tab5_ui_datetime_t datetime; /* TAB5_UI_TIME: main validates and writes RTC */
 } tab5_ui_action_t;
-/* Runs in LVGL context. Borrowed action: copy to main's queue before returning.
+/* Runs in the UI task. Borrowed action: copy to main's queue before returning.
  * main owns validation, persistence, recording and network services. */
 typedef void (*tab5_ui_action_cb_t)(const tab5_ui_action_t *action, void *user);
 typedef struct {
@@ -100,7 +99,7 @@ typedef struct {
      * by measurement/main. False preserves the filtered presentation. */
     bool live_unfiltered;
 } tab5_ui_state_t;
-/* All calls require BSP LVGL lock (or the LVGL thread). Display already started
+/* All calls require the UI task lock. Display already started
  * and rotated to 1280x720 by main. No task or display created here; a short-lived stepper repeat timer is UI-owned.
  * Generated font_tab5_16/16m/20/20m/24/32/40/64 and tab5_ui_graph/time must be linked. */
 void tab5_ui_init(tab5_ui_action_cb_t callback, void *user);

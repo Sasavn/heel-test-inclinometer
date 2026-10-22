@@ -1,0 +1,2170 @@
+{
+  "frames": 98,
+  "geometry": {
+    "status": "equal",
+    "baseline_points": 10934,
+    "native_points": 10934,
+    "field_mismatch_counts": {}
+  },
+  "exact_geometry_difference_count": 0,
+  "semantic_text_mismatch_groups": [],
+  "exact_rgb_parity": false,
+  "raster_differences": [
+    {
+      "name": "backend_network_error_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 5327,
+      "changed_fraction": 0.005780164930555555,
+      "mean_absolute_channel_error": 0.287056568287037,
+      "maximum_channel_error": 222,
+      "difference_bbox": [
+        0,
+        24,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "backend_network_error_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 6532,
+      "changed_fraction": 0.007087673611111111,
+      "mean_absolute_channel_error": 0.30114040798611114,
+      "maximum_channel_error": 231,
+      "difference_bbox": [
+        0,
+        24,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "backend_network_nvs_error_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 5326,
+      "changed_fraction": 0.005779079861111111,
+      "mean_absolute_channel_error": 0.2870504195601852,
+      "maximum_channel_error": 222,
+      "difference_bbox": [
+        0,
+        24,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "backend_network_nvs_error_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 6529,
+      "changed_fraction": 0.007084418402777778,
+      "mean_absolute_channel_error": 0.30113136574074073,
+      "maximum_channel_error": 231,
+      "difference_bbox": [
+        0,
+        24,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "backend_network_retry_success_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 5389,
+      "changed_fraction": 0.005847439236111111,
+      "mean_absolute_channel_error": 0.2790813078703704,
+      "maximum_channel_error": 222,
+      "difference_bbox": [
+        0,
+        24,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "backend_network_retry_success_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 6617,
+      "changed_fraction": 0.007179904513888889,
+      "mean_absolute_channel_error": 0.29635344328703705,
+      "maximum_channel_error": 231,
+      "difference_bbox": [
+        0,
+        24,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "backend_nvs_error_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 7140,
+      "changed_fraction": 0.0077473958333333336,
+      "mean_absolute_channel_error": 0.33922019675925924,
+      "maximum_channel_error": 222,
+      "difference_bbox": [
+        0,
+        24,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "backend_nvs_error_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 7892,
+      "changed_fraction": 0.008563368055555555,
+      "mean_absolute_channel_error": 0.37654947916666665,
+      "maximum_channel_error": 222,
+      "difference_bbox": [
+        0,
+        24,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "backend_record_error_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 31194,
+      "changed_fraction": 0.03384765625,
+      "mean_absolute_channel_error": 0.2861845341435185,
+      "maximum_channel_error": 222,
+      "difference_bbox": [
+        0,
+        16,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "backend_record_error_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 29934,
+      "changed_fraction": 0.03248046875,
+      "mean_absolute_channel_error": 0.29897569444444444,
+      "maximum_channel_error": 222,
+      "difference_bbox": [
+        0,
+        16,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "backend_repeated_error_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 31194,
+      "changed_fraction": 0.03384765625,
+      "mean_absolute_channel_error": 0.2861845341435185,
+      "maximum_channel_error": 222,
+      "difference_bbox": [
+        0,
+        16,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "backend_repeated_error_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 29934,
+      "changed_fraction": 0.03248046875,
+      "mean_absolute_channel_error": 0.29897569444444444,
+      "maximum_channel_error": 222,
+      "difference_bbox": [
+        0,
+        16,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "backend_settings_retry_success_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 7282,
+      "changed_fraction": 0.007901475694444444,
+      "mean_absolute_channel_error": 0.32881944444444444,
+      "maximum_channel_error": 222,
+      "difference_bbox": [
+        0,
+        24,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "backend_settings_retry_success_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 8115,
+      "changed_fraction": 0.008805338541666667,
+      "mean_absolute_channel_error": 0.3718203848379629,
+      "maximum_channel_error": 222,
+      "difference_bbox": [
+        0,
+        24,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "backend_time_error_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 31194,
+      "changed_fraction": 0.03384765625,
+      "mean_absolute_channel_error": 0.2861845341435185,
+      "maximum_channel_error": 222,
+      "difference_bbox": [
+        0,
+        16,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "backend_time_error_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 29934,
+      "changed_fraction": 0.03248046875,
+      "mean_absolute_channel_error": 0.29897569444444444,
+      "maximum_channel_error": 222,
+      "difference_bbox": [
+        0,
+        16,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "chart_30_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 6650,
+      "changed_fraction": 0.007215711805555556,
+      "mean_absolute_channel_error": 0.19533203124999998,
+      "maximum_channel_error": 222,
+      "difference_bbox": [
+        0,
+        24,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "chart_30_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 7940,
+      "changed_fraction": 0.00861545138888889,
+      "mean_absolute_channel_error": 0.20047489872685187,
+      "maximum_channel_error": 222,
+      "difference_bbox": [
+        0,
+        24,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "chart_5hz_synthetic_2min_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 6650,
+      "changed_fraction": 0.007215711805555556,
+      "mean_absolute_channel_error": 0.19533203124999998,
+      "maximum_channel_error": 222,
+      "difference_bbox": [
+        0,
+        24,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "chart_5hz_synthetic_2min_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 7940,
+      "changed_fraction": 0.00861545138888889,
+      "mean_absolute_channel_error": 0.20047489872685187,
+      "maximum_channel_error": 222,
+      "difference_bbox": [
+        0,
+        24,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "chart_5hz_synthetic_continuous_30s_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 6644,
+      "changed_fraction": 0.007209201388888889,
+      "mean_absolute_channel_error": 0.1953125,
+      "maximum_channel_error": 222,
+      "difference_bbox": [
+        0,
+        24,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "chart_5hz_synthetic_continuous_30s_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 7934,
+      "changed_fraction": 0.008608940972222222,
+      "mean_absolute_channel_error": 0.20045753761574073,
+      "maximum_channel_error": 222,
+      "difference_bbox": [
+        0,
+        24,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "chart_5hz_synthetic_failed_gap_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 6644,
+      "changed_fraction": 0.007209201388888889,
+      "mean_absolute_channel_error": 0.1953125,
+      "maximum_channel_error": 222,
+      "difference_bbox": [
+        0,
+        24,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "chart_5hz_synthetic_failed_gap_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 7934,
+      "changed_fraction": 0.008608940972222222,
+      "mean_absolute_channel_error": 0.20045753761574073,
+      "maximum_channel_error": 222,
+      "difference_bbox": [
+        0,
+        24,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "chart_5hz_synthetic_offline_empty_tail_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 6600,
+      "changed_fraction": 0.007161458333333333,
+      "mean_absolute_channel_error": 0.19516927083333332,
+      "maximum_channel_error": 222,
+      "difference_bbox": [
+        0,
+        24,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "chart_5hz_synthetic_offline_empty_tail_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 7890,
+      "changed_fraction": 0.008561197916666667,
+      "mean_absolute_channel_error": 0.20033022280092594,
+      "maximum_channel_error": 222,
+      "difference_bbox": [
+        0,
+        24,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "chart_5hz_synthetic_pending_readings_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 6642,
+      "changed_fraction": 0.00720703125,
+      "mean_absolute_channel_error": 0.19530598958333334,
+      "maximum_channel_error": 222,
+      "difference_bbox": [
+        0,
+        24,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "chart_5hz_synthetic_pending_readings_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 7932,
+      "changed_fraction": 0.008606770833333333,
+      "mean_absolute_channel_error": 0.2004517505787037,
+      "maximum_channel_error": 222,
+      "difference_bbox": [
+        0,
+        24,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "chart_600_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 12205,
+      "changed_fraction": 0.013243272569444445,
+      "mean_absolute_channel_error": 0.21341471354166666,
+      "maximum_channel_error": 222,
+      "difference_bbox": [
+        0,
+        24,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "chart_600_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 13495,
+      "changed_fraction": 0.014643012152777777,
+      "mean_absolute_channel_error": 0.21654839409722224,
+      "maximum_channel_error": 222,
+      "difference_bbox": [
+        0,
+        24,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "chart_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 6584,
+      "changed_fraction": 0.007144097222222222,
+      "mean_absolute_channel_error": 0.19511718749999998,
+      "maximum_channel_error": 222,
+      "difference_bbox": [
+        0,
+        24,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "chart_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 7874,
+      "changed_fraction": 0.008543836805555555,
+      "mean_absolute_channel_error": 0.20028392650462964,
+      "maximum_channel_error": 222,
+      "difference_bbox": [
+        0,
+        24,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "chart_live_unfiltered_synthetic_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 4790,
+      "changed_fraction": 0.005197482638888889,
+      "mean_absolute_channel_error": 0.18927734375000002,
+      "maximum_channel_error": 222,
+      "difference_bbox": [
+        0,
+        24,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "chart_live_unfiltered_synthetic_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 6080,
+      "changed_fraction": 0.006597222222222222,
+      "mean_absolute_channel_error": 0.1950929542824074,
+      "maximum_channel_error": 222,
+      "difference_bbox": [
+        0,
+        24,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "chart_samples_fixture_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 6669,
+      "changed_fraction": 0.007236328125,
+      "mean_absolute_channel_error": 0.19539388020833334,
+      "maximum_channel_error": 222,
+      "difference_bbox": [
+        0,
+        24,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "chart_samples_fixture_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 7959,
+      "changed_fraction": 0.008636067708333334,
+      "mean_absolute_channel_error": 0.20052987557870372,
+      "maximum_channel_error": 222,
+      "difference_bbox": [
+        0,
+        24,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "chart_touch_hidden_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 4619,
+      "changed_fraction": 0.005011935763888889,
+      "mean_absolute_channel_error": 0.18563078703703703,
+      "maximum_channel_error": 222,
+      "difference_bbox": [
+        0,
+        24,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "chart_touch_hidden_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 5901,
+      "changed_fraction": 0.006402994791666667,
+      "mean_absolute_channel_error": 0.19175455729166666,
+      "maximum_channel_error": 222,
+      "difference_bbox": [
+        0,
+        24,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "dashboard_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 31714,
+      "changed_fraction": 0.03441189236111111,
+      "mean_absolute_channel_error": 0.30009223090277776,
+      "maximum_channel_error": 222,
+      "difference_bbox": [
+        0,
+        16,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "dashboard_disconnected_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 31618,
+      "changed_fraction": 0.034307725694444444,
+      "mean_absolute_channel_error": 0.30394639756944447,
+      "maximum_channel_error": 222,
+      "difference_bbox": [
+        0,
+        16,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "dashboard_disconnected_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 30378,
+      "changed_fraction": 0.03296223958333333,
+      "mean_absolute_channel_error": 0.3242256221064815,
+      "maximum_channel_error": 222,
+      "difference_bbox": [
+        0,
+        16,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "dashboard_extremes_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 31569,
+      "changed_fraction": 0.03425455729166667,
+      "mean_absolute_channel_error": 0.3017086226851852,
+      "maximum_channel_error": 222,
+      "difference_bbox": [
+        0,
+        16,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "dashboard_extremes_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 29981,
+      "changed_fraction": 0.03253146701388889,
+      "mean_absolute_channel_error": 0.3249345341435185,
+      "maximum_channel_error": 222,
+      "difference_bbox": [
+        0,
+        16,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "dashboard_level_raster_synthetic_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 31161,
+      "changed_fraction": 0.033811848958333335,
+      "mean_absolute_channel_error": 0.2975047019675926,
+      "maximum_channel_error": 222,
+      "difference_bbox": [
+        0,
+        16,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "dashboard_level_raster_synthetic_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 29495,
+      "changed_fraction": 0.03200412326388889,
+      "mean_absolute_channel_error": 0.31022931134259263,
+      "maximum_channel_error": 222,
+      "difference_bbox": [
+        0,
+        16,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "dashboard_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 30021,
+      "changed_fraction": 0.03257486979166667,
+      "mean_absolute_channel_error": 0.32922743055555553,
+      "maximum_channel_error": 222,
+      "difference_bbox": [
+        0,
+        16,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "dashboard_live_unfiltered_synthetic_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 31136,
+      "changed_fraction": 0.03378472222222222,
+      "mean_absolute_channel_error": 0.29341796875,
+      "maximum_channel_error": 222,
+      "difference_bbox": [
+        0,
+        16,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "dashboard_live_unfiltered_synthetic_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 29573,
+      "changed_fraction": 0.03208875868055556,
+      "mean_absolute_channel_error": 0.3160789207175926,
+      "maximum_channel_error": 231,
+      "difference_bbox": [
+        0,
+        16,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "dashboard_recording_error_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 31230,
+      "changed_fraction": 0.03388671875,
+      "mean_absolute_channel_error": 0.30243236400462964,
+      "maximum_channel_error": 222,
+      "difference_bbox": [
+        0,
+        16,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "dashboard_recording_error_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 29578,
+      "changed_fraction": 0.03209418402777778,
+      "mean_absolute_channel_error": 0.3242433449074074,
+      "maximum_channel_error": 222,
+      "difference_bbox": [
+        0,
+        16,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "dirty_navigation_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 5732,
+      "changed_fraction": 0.0062196180555555555,
+      "mean_absolute_channel_error": 0.13706018518518517,
+      "maximum_channel_error": 148,
+      "difference_bbox": [
+        0,
+        24,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "dirty_navigation_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 6983,
+      "changed_fraction": 0.007577039930555555,
+      "mean_absolute_channel_error": 0.16160011574074074,
+      "maximum_channel_error": 173,
+      "difference_bbox": [
+        0,
+        24,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "network_ack_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 5133,
+      "changed_fraction": 0.005569661458333333,
+      "mean_absolute_channel_error": 0.27725477430555556,
+      "maximum_channel_error": 222,
+      "difference_bbox": [
+        0,
+        24,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "network_ack_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 6353,
+      "changed_fraction": 0.006893446180555556,
+      "mean_absolute_channel_error": 0.29387984664351846,
+      "maximum_channel_error": 231,
+      "difference_bbox": [
+        0,
+        24,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "network_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 5085,
+      "changed_fraction": 0.005517578125,
+      "mean_absolute_channel_error": 0.2743236400462963,
+      "maximum_channel_error": 222,
+      "difference_bbox": [
+        0,
+        24,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "network_invalid_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 5117,
+      "changed_fraction": 0.005552300347222222,
+      "mean_absolute_channel_error": 0.28256510416666664,
+      "maximum_channel_error": 222,
+      "difference_bbox": [
+        0,
+        24,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "network_invalid_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 6335,
+      "changed_fraction": 0.006873914930555555,
+      "mean_absolute_channel_error": 0.29946180555555557,
+      "maximum_channel_error": 231,
+      "difference_bbox": [
+        0,
+        24,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "network_keyboard_en_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 8786,
+      "changed_fraction": 0.009533420138888889,
+      "mean_absolute_channel_error": 0.1737745949074074,
+      "maximum_channel_error": 148,
+      "difference_bbox": [
+        10,
+        24,
+        1270,
+        710
+      ]
+    },
+    {
+      "name": "network_keyboard_en_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 9995,
+      "changed_fraction": 0.010845269097222223,
+      "mean_absolute_channel_error": 0.18006546585648145,
+      "maximum_channel_error": 173,
+      "difference_bbox": [
+        10,
+        24,
+        1270,
+        710
+      ]
+    },
+    {
+      "name": "network_keyboard_long_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 8610,
+      "changed_fraction": 0.009342447916666666,
+      "mean_absolute_channel_error": 0.17593894675925925,
+      "maximum_channel_error": 197,
+      "difference_bbox": [
+        10,
+        24,
+        1270,
+        710
+      ]
+    },
+    {
+      "name": "network_keyboard_long_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 9807,
+      "changed_fraction": 0.010641276041666667,
+      "mean_absolute_channel_error": 0.18333658854166668,
+      "maximum_channel_error": 223,
+      "difference_bbox": [
+        10,
+        24,
+        1270,
+        710
+      ]
+    },
+    {
+      "name": "network_keyboard_ru_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 8626,
+      "changed_fraction": 0.009359809027777779,
+      "mean_absolute_channel_error": 0.17139756944444443,
+      "maximum_channel_error": 148,
+      "difference_bbox": [
+        10,
+        24,
+        1270,
+        710
+      ]
+    },
+    {
+      "name": "network_keyboard_ru_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 9827,
+      "changed_fraction": 0.010662977430555555,
+      "mean_absolute_channel_error": 0.17754665798611113,
+      "maximum_channel_error": 173,
+      "difference_bbox": [
+        10,
+        24,
+        1270,
+        710
+      ]
+    },
+    {
+      "name": "network_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 6305,
+      "changed_fraction": 0.006841362847222222,
+      "mean_absolute_channel_error": 0.29175166377314815,
+      "maximum_channel_error": 231,
+      "difference_bbox": [
+        0,
+        24,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "network_long_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 9594,
+      "changed_fraction": 0.01041015625,
+      "mean_absolute_channel_error": 0.8848759403935186,
+      "maximum_channel_error": 222,
+      "difference_bbox": [
+        0,
+        24,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "network_long_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 10812,
+      "changed_fraction": 0.011731770833333334,
+      "mean_absolute_channel_error": 1.020326244212963,
+      "maximum_channel_error": 231,
+      "difference_bbox": [
+        0,
+        24,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "network_pending_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 5133,
+      "changed_fraction": 0.005569661458333333,
+      "mean_absolute_channel_error": 0.27725477430555556,
+      "maximum_channel_error": 222,
+      "difference_bbox": [
+        0,
+        24,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "network_pending_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 6353,
+      "changed_fraction": 0.006893446180555556,
+      "mean_absolute_channel_error": 0.29387984664351846,
+      "maximum_channel_error": 231,
+      "difference_bbox": [
+        0,
+        24,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "network_revealed_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 5255,
+      "changed_fraction": 0.005702039930555555,
+      "mean_absolute_channel_error": 0.2788595920138889,
+      "maximum_channel_error": 222,
+      "difference_bbox": [
+        0,
+        24,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "network_revealed_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 6475,
+      "changed_fraction": 0.007025824652777778,
+      "mean_absolute_channel_error": 0.29499421296296297,
+      "maximum_channel_error": 231,
+      "difference_bbox": [
+        0,
+        24,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "numeric_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 6950,
+      "changed_fraction": 0.007541232638888889,
+      "mean_absolute_channel_error": 0.13583080150462964,
+      "maximum_channel_error": 173,
+      "difference_bbox": [
+        0,
+        24,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "numeric_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 8090,
+      "changed_fraction": 0.008778211805555556,
+      "mean_absolute_channel_error": 0.17144133391203706,
+      "maximum_channel_error": 189,
+      "difference_bbox": [
+        0,
+        24,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "numeric_valid_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 6871,
+      "changed_fraction": 0.0074555121527777775,
+      "mean_absolute_channel_error": 0.1316626880787037,
+      "maximum_channel_error": 148,
+      "difference_bbox": [
+        0,
+        24,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "numeric_valid_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 8039,
+      "changed_fraction": 0.008722873263888889,
+      "mean_absolute_channel_error": 0.1649974681712963,
+      "maximum_channel_error": 189,
+      "difference_bbox": [
+        0,
+        24,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "recording_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 2999,
+      "changed_fraction": 0.003254123263888889,
+      "mean_absolute_channel_error": 0.18206886574074074,
+      "maximum_channel_error": 222,
+      "difference_bbox": [
+        0,
+        20,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "recording_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 4096,
+      "changed_fraction": 0.0044444444444444444,
+      "mean_absolute_channel_error": 0.1880172164351852,
+      "maximum_channel_error": 222,
+      "difference_bbox": [
+        0,
+        20,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "resources_100_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 31714,
+      "changed_fraction": 0.03441189236111111,
+      "mean_absolute_channel_error": 0.30009223090277776,
+      "maximum_channel_error": 222,
+      "difference_bbox": [
+        0,
+        16,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "resources_100_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 30021,
+      "changed_fraction": 0.03257486979166667,
+      "mean_absolute_channel_error": 0.32922743055555553,
+      "maximum_channel_error": 222,
+      "difference_bbox": [
+        0,
+        16,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "resources_dashboard_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 31714,
+      "changed_fraction": 0.03441189236111111,
+      "mean_absolute_channel_error": 0.30009223090277776,
+      "maximum_channel_error": 222,
+      "difference_bbox": [
+        0,
+        16,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "resources_dashboard_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 30021,
+      "changed_fraction": 0.03257486979166667,
+      "mean_absolute_channel_error": 0.32922743055555553,
+      "maximum_channel_error": 222,
+      "difference_bbox": [
+        0,
+        16,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "resources_unknown_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 31714,
+      "changed_fraction": 0.03441189236111111,
+      "mean_absolute_channel_error": 0.30009223090277776,
+      "maximum_channel_error": 222,
+      "difference_bbox": [
+        0,
+        16,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "resources_unknown_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 30021,
+      "changed_fraction": 0.03257486979166667,
+      "mean_absolute_channel_error": 0.32922743055555553,
+      "maximum_channel_error": 222,
+      "difference_bbox": [
+        0,
+        16,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "settings_ack_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 7151,
+      "changed_fraction": 0.007759331597222223,
+      "mean_absolute_channel_error": 0.3291775173611111,
+      "maximum_channel_error": 222,
+      "difference_bbox": [
+        0,
+        24,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "settings_ack_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 7977,
+      "changed_fraction": 0.008655598958333333,
+      "mean_absolute_channel_error": 0.3716760706018518,
+      "maximum_channel_error": 222,
+      "difference_bbox": [
+        0,
+        24,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "settings_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 7103,
+      "changed_fraction": 0.007707248263888889,
+      "mean_absolute_channel_error": 0.32624638310185183,
+      "maximum_channel_error": 222,
+      "difference_bbox": [
+        0,
+        24,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "settings_dirty_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 6942,
+      "changed_fraction": 0.007532552083333333,
+      "mean_absolute_channel_error": 0.33601273148148153,
+      "maximum_channel_error": 222,
+      "difference_bbox": [
+        0,
+        24,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "settings_dirty_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 7694,
+      "changed_fraction": 0.008348524305555556,
+      "mean_absolute_channel_error": 0.3745229311342593,
+      "maximum_channel_error": 222,
+      "difference_bbox": [
+        0,
+        24,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "settings_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 7929,
+      "changed_fraction": 0.008603515625,
+      "mean_absolute_channel_error": 0.3695478877314815,
+      "maximum_channel_error": 222,
+      "difference_bbox": [
+        0,
+        24,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "settings_longpress_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 7103,
+      "changed_fraction": 0.007707248263888889,
+      "mean_absolute_channel_error": 0.32624638310185183,
+      "maximum_channel_error": 222,
+      "difference_bbox": [
+        0,
+        24,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "settings_longpress_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 7929,
+      "changed_fraction": 0.008603515625,
+      "mean_absolute_channel_error": 0.3695478877314815,
+      "maximum_channel_error": 222,
+      "difference_bbox": [
+        0,
+        24,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "settings_pending_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 7223,
+      "changed_fraction": 0.007837456597222223,
+      "mean_absolute_channel_error": 0.3312290219907407,
+      "maximum_channel_error": 222,
+      "difference_bbox": [
+        0,
+        24,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "settings_pending_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 8025,
+      "changed_fraction": 0.008707682291666666,
+      "mean_absolute_channel_error": 0.3703088831018519,
+      "maximum_channel_error": 222,
+      "difference_bbox": [
+        0,
+        24,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "time_invalid_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 6083,
+      "changed_fraction": 0.006600477430555555,
+      "mean_absolute_channel_error": 0.18135416666666668,
+      "maximum_channel_error": 197,
+      "difference_bbox": [
+        10,
+        24,
+        1270,
+        710
+      ]
+    },
+    {
+      "name": "time_invalid_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 6918,
+      "changed_fraction": 0.0075065104166666665,
+      "mean_absolute_channel_error": 0.1297515190972222,
+      "maximum_channel_error": 223,
+      "difference_bbox": [
+        10,
+        24,
+        1270,
+        710
+      ]
+    },
+    {
+      "name": "time_valid_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 6004,
+      "changed_fraction": 0.0065147569444444445,
+      "mean_absolute_channel_error": 0.17978732638888886,
+      "maximum_channel_error": 148,
+      "difference_bbox": [
+        10,
+        24,
+        1270,
+        710
+      ]
+    },
+    {
+      "name": "time_valid_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 6839,
+      "changed_fraction": 0.007420789930555556,
+      "mean_absolute_channel_error": 0.12779116030092594,
+      "maximum_channel_error": 173,
+      "difference_bbox": [
+        10,
+        24,
+        1270,
+        710
+      ]
+    },
+    {
+      "name": "zero_confirm_dark.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 13549,
+      "changed_fraction": 0.014701605902777777,
+      "mean_absolute_channel_error": 0.1333373119212963,
+      "maximum_channel_error": 148,
+      "difference_bbox": [
+        0,
+        16,
+        1264,
+        709
+      ]
+    },
+    {
+      "name": "zero_confirm_light.png",
+      "baseline_size": [
+        1280,
+        720
+      ],
+      "native_size": [
+        1280,
+        720
+      ],
+      "status": "different",
+      "changed_pixels": 18727,
+      "changed_fraction": 0.02032009548611111,
+      "mean_absolute_channel_error": 0.1678891782407407,
+      "maximum_channel_error": 173,
+      "difference_bbox": [
+        0,
+        16,
+        1264,
+        709
+      ]
+    }
+  ]
+}

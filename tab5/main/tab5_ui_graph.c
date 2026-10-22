@@ -124,7 +124,7 @@ unsigned tab5_ui_graph_read(const tab5_ui_graph_t *g, unsigned seconds, unsigned
     for (unsigned i = 0; i < n; i++) {
         unsigned age = n - 1 - i;
         int16_t v = age < count ? ring[(next + cap - age) % cap].v[series] : TAB5_UI_GRAPH_NONE;
-        out[i] = v == TAB5_UI_GRAPH_NONE ? LV_CHART_POINT_NONE : v;
+        out[i] = v == TAB5_UI_GRAPH_NONE ? TAB5_UI_GRAPH_RENDER_NONE : v;
     }
     return n;
 }
@@ -139,7 +139,7 @@ unsigned tab5_ui_graph_read_render(const tab5_ui_graph_t *g,unsigned seconds,uns
     for(unsigned j=0;j<n;j++){
         unsigned slot=(next+cap-(n-1-j))%cap;
         unsigned bits=slot_meta(flags,slot);
-        if(out[j]==LV_CHART_POINT_NONE){
+        if(out[j]==TAB5_UI_GRAPH_RENDER_NONE){
             /* An actual sample with an invalid axis (or explicit offline)
              * is a barrier, unlike an unsampled grid bucket. */
             if(bits&bit)previous=-1;

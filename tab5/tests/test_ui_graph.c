@@ -21,51 +21,51 @@ static void empty_and_unknown(void){
  tab5_ui_state_t s=state(1000000,1,2,3,4);s.now_known=false;tab5_ui_graph_sample(&g,&s);
  CHECK(!memcmp(&g,&before,sizeof(g)));
  unsigned windows[]={30,120,600},sizes[]={300,240,1200};
- for(unsigned w=0;w<3;w++)for(unsigned k=0;k<4;k++){int32_t out[1200];CHECK(read_series(windows[w],k,out)==sizes[w]);for(unsigned i=0;i<sizes[w];i++)CHECK(out[i]==LV_CHART_POINT_NONE);}
+ for(unsigned w=0;w<3;w++)for(unsigned k=0;k<4;k++){int32_t out[1200];CHECK(read_series(windows[w],k,out)==sizes[w]);for(unsigned i=0;i<sizes[w];i++)CHECK(out[i]==TAB5_UI_GRAPH_RENDER_NONE);}
  s.now_known=true;tab5_ui_graph_sample(&g,&s);before=g;s.now_known=false;s.now_us+=999999999;tab5_ui_graph_sample(&g,&s);CHECK(!memcmp(&g,&before,sizeof(g)));
 }
 static void duplicate_timestamps(void){
  tab5_ui_graph_reset(&g);tab5_ui_state_t s=state(1000000,1,2,3,4);tab5_ui_graph_sample(&g,&s);
  s.now_us+=50000;s.measurement.sensor[0].x=99;tab5_ui_graph_sample(&g,&s);
  int32_t out[1200];read_series(30,0,out);CHECK(out[299]==100);
- s.now_us=1100000;tab5_ui_graph_sample(&g,&s);read_series(30,0,out);CHECK(out[298]==100&&out[299]==LV_CHART_POINT_NONE);
- s.now_us=1500000;tab5_ui_graph_sample(&g,&s);read_series(600,0,out);CHECK(out[1198]==100&&out[1199]==LV_CHART_POINT_NONE);
+ s.now_us=1100000;tab5_ui_graph_sample(&g,&s);read_series(30,0,out);CHECK(out[298]==100&&out[299]==TAB5_UI_GRAPH_RENDER_NONE);
+ s.now_us=1500000;tab5_ui_graph_sample(&g,&s);read_series(600,0,out);CHECK(out[1198]==100&&out[1199]==TAB5_UI_GRAPH_RENDER_NONE);
 }
 static void validity_and_axis_values(void){
  tab5_ui_graph_reset(&g);tab5_ui_state_t s=state(1000000,NAN,INFINITY,-INFINITY,327.67f);tab5_ui_graph_sample(&g,&s);
- int32_t out[1200];for(unsigned k=0;k<4;k++){read_series(30,k,out);CHECK(out[299]==LV_CHART_POINT_NONE);}
+ int32_t out[1200];for(unsigned k=0;k<4;k++){read_series(30,k,out);CHECK(out[299]==TAB5_UI_GRAPH_RENDER_NONE);}
  s=state(1100000,-327.67f,327.66f,-327.66f,0.125f);tab5_ui_graph_sample(&g,&s);
- int expected[]={LV_CHART_POINT_NONE,32766,-32766,13};for(unsigned k=0;k<4;k++){read_series(30,k,out);CHECK(out[299]==expected[k]);}
+ int expected[]={TAB5_UI_GRAPH_RENDER_NONE,32766,-32766,13};for(unsigned k=0;k<4;k++){read_series(30,k,out);CHECK(out[299]==expected[k]);}
  s=state(1200000,1,2,3,4);s.measurement.sensor[0].valid=false;s.measurement.sensor[1].good=0;tab5_ui_graph_sample(&g,&s);
- for(unsigned k=0;k<4;k++){read_series(30,k,out);CHECK(out[299]==LV_CHART_POINT_NONE);}
+ for(unsigned k=0;k<4;k++){read_series(30,k,out);CHECK(out[299]==TAB5_UI_GRAPH_RENDER_NONE);}
  s=state(1300000,1,2,3,4);s.measurement.sensor[0].timestamp_us=0;s.measurement.sensor[1].timestamp_us=1400000;tab5_ui_graph_sample(&g,&s);
- for(unsigned k=0;k<4;k++){read_series(30,k,out);CHECK(out[299]==LV_CHART_POINT_NONE);}
+ for(unsigned k=0;k<4;k++){read_series(30,k,out);CHECK(out[299]==TAB5_UI_GRAPH_RENDER_NONE);}
 }
 static void offline_and_stale_gaps(void){
  tab5_ui_graph_reset(&g);tab5_ui_state_t s=state(1000000,1,2,3,4);tab5_ui_graph_sample(&g,&s);
  s.measurement.sensor[0].valid=false;s.now_us+=10000;tab5_ui_graph_sample(&g,&s);
- int32_t out[1200];read_series(30,0,out);CHECK(out[299]==LV_CHART_POINT_NONE);read_series(30,2,out);CHECK(out[299]==300);
- s.now_us=1800000;tab5_ui_graph_sample(&g,&s);read_series(30,2,out);CHECK(out[291]==300);for(unsigned i=292;i<300;i++)CHECK(out[i]==LV_CHART_POINT_NONE);
+ int32_t out[1200];read_series(30,0,out);CHECK(out[299]==TAB5_UI_GRAPH_RENDER_NONE);read_series(30,2,out);CHECK(out[299]==300);
+ s.now_us=1800000;tab5_ui_graph_sample(&g,&s);read_series(30,2,out);CHECK(out[291]==300);for(unsigned i=292;i<300;i++)CHECK(out[i]==TAB5_UI_GRAPH_RENDER_NONE);
  s=state(1900000,5,6,7,8);tab5_ui_graph_sample(&g,&s);read_series(30,0,out);CHECK(out[299]==500);
 }
 static void buckets_and_small_gaps(void){
  tab5_ui_graph_reset(&g);tab5_ui_state_t s=state(999999,1,2,3,4);tab5_ui_graph_sample(&g,&s);
  s=state(1000000,5,6,7,8);tab5_ui_graph_sample(&g,&s);int32_t out[1200];
  read_series(30,0,out);CHECK(out[298]==100&&out[299]==500);read_series(600,0,out);CHECK(out[1198]==100&&out[1199]==500);
- s=state(1300000,9,10,11,12);tab5_ui_graph_sample(&g,&s);read_series(30,0,out);CHECK(out[296]==500&&out[297]==LV_CHART_POINT_NONE&&out[298]==LV_CHART_POINT_NONE&&out[299]==900);
+ s=state(1300000,9,10,11,12);tab5_ui_graph_sample(&g,&s);read_series(30,0,out);CHECK(out[296]==500&&out[297]==TAB5_UI_GRAPH_RENDER_NONE&&out[298]==TAB5_UI_GRAPH_RENDER_NONE&&out[299]==900);
  read_series(600,0,out);CHECK(out[1199]==900); /* Latest measurement within current half-second slot. */
 }
 static void delayed_timestamp_fast(void){
  tab5_ui_graph_reset(&g);tab5_ui_state_t s=state(1050000,1,2,3,4);
  for(unsigned i=0;i<2;i++)s.measurement.sensor[i].timestamp_us=990000;
  tab5_ui_graph_sample(&g,&s);int32_t out[1200];read_series(30,0,out);
- CHECK(out[298]==100);CHECK(out[299]==LV_CHART_POINT_NONE);
+ CHECK(out[298]==100);CHECK(out[299]==TAB5_UI_GRAPH_RENDER_NONE);
 }
 static void delayed_timestamp_slow(void){
  tab5_ui_graph_reset(&g);tab5_ui_state_t s=state(1050000,1,2,3,4);
  for(unsigned i=0;i<2;i++)s.measurement.sensor[i].timestamp_us=990000;
  tab5_ui_graph_sample(&g,&s);int32_t out[1200];read_series(600,0,out);
- CHECK(out[1198]==100);CHECK(out[1199]==LV_CHART_POINT_NONE);
+ CHECK(out[1198]==100);CHECK(out[1199]==TAB5_UI_GRAPH_RENDER_NONE);
 }
 static void newest_measurement_per_bucket(void){
  tab5_ui_graph_reset(&g);tab5_ui_state_t s=state(1000040,1,2,3,4);tab5_ui_graph_sample(&g,&s);
@@ -83,39 +83,39 @@ static void delayed_retention_and_exact_edges(void){
  for(unsigned k=0;k<2;k++)s.measurement.sensor[k].timestamp_us=80000000;
  tab5_ui_graph_sample(&g,&s);
  for(unsigned k=0;k<4;k++){
-  read_series(30,k,out);for(unsigned i=0;i<300;i++)CHECK(out[i]==(i==99?(int32_t)(100*(k+1)):LV_CHART_POINT_NONE));
-  read_series(120,k,out);for(unsigned i=0;i<240;i++)CHECK(out[i]==(i==199?(int32_t)(100*(k+1)):LV_CHART_POINT_NONE));
-  read_series(600,k,out);for(unsigned i=0;i<1200;i++)CHECK(out[i]==(i==1159?(int32_t)(100*(k+1)):LV_CHART_POINT_NONE));
+  read_series(30,k,out);for(unsigned i=0;i<300;i++)CHECK(out[i]==(i==99?(int32_t)(100*(k+1)):TAB5_UI_GRAPH_RENDER_NONE));
+  read_series(120,k,out);for(unsigned i=0;i<240;i++)CHECK(out[i]==(i==199?(int32_t)(100*(k+1)):TAB5_UI_GRAPH_RENDER_NONE));
+  read_series(600,k,out);for(unsigned i=0;i<1200;i++)CHECK(out[i]==(i==1159?(int32_t)(100*(k+1)):TAB5_UI_GRAPH_RENDER_NONE));
  }
  /* The oldest retained fast bucket is accepted; the next older one is expired. */
  tab5_ui_graph_reset(&g);s=state(100000000,1,2,3,4);
  s.measurement.sensor[0].timestamp_us=70100000;s.measurement.sensor[1].timestamp_us=70099999;
- tab5_ui_graph_sample(&g,&s);read_series(30,0,out);CHECK(out[0]==100);read_series(30,2,out);for(unsigned i=0;i<300;i++)CHECK(out[i]==LV_CHART_POINT_NONE);
+ tab5_ui_graph_sample(&g,&s);read_series(30,0,out);CHECK(out[0]==100);read_series(30,2,out);for(unsigned i=0;i<300;i++)CHECK(out[i]==TAB5_UI_GRAPH_RENDER_NONE);
  /* Same check for the 600-second history, independently of the fast ring. */
  tab5_ui_graph_reset(&g);s=state(1000000000,1,2,3,4);
  s.measurement.sensor[0].timestamp_us=400500000;s.measurement.sensor[1].timestamp_us=400499999;
- tab5_ui_graph_sample(&g,&s);read_series(600,0,out);CHECK(out[0]==100);read_series(600,2,out);for(unsigned i=0;i<1200;i++)CHECK(out[i]==LV_CHART_POINT_NONE);
+ tab5_ui_graph_sample(&g,&s);read_series(600,0,out);CHECK(out[0]==100);read_series(600,2,out);for(unsigned i=0;i<1200;i++)CHECK(out[i]==TAB5_UI_GRAPH_RENDER_NONE);
  /* Exact step-age is still the previous bucket, not the current one. */
  tab5_ui_graph_reset(&g);s=state(1500000,1,2,3,4);
  s.measurement.sensor[0].timestamp_us=1400000;s.measurement.sensor[1].timestamp_us=1000000;
- tab5_ui_graph_sample(&g,&s);read_series(30,0,out);CHECK(out[298]==100&&out[299]==LV_CHART_POINT_NONE);
- read_series(600,2,out);CHECK(out[1198]==300&&out[1199]==LV_CHART_POINT_NONE);
+ tab5_ui_graph_sample(&g,&s);read_series(30,0,out);CHECK(out[298]==100&&out[299]==TAB5_UI_GRAPH_RENDER_NONE);
+ read_series(600,2,out);CHECK(out[1198]==300&&out[1199]==TAB5_UI_GRAPH_RENDER_NONE);
 }
 static void delayed_after_existing_history(void){
  tab5_ui_graph_reset(&g);tab5_ui_state_t s=state(100000000,1,2,3,4);tab5_ui_graph_sample(&g,&s);
  s=state(110000000,5,6,7,8);for(unsigned k=0;k<2;k++)s.measurement.sensor[k].timestamp_us=105000000;
  tab5_ui_graph_sample(&g,&s);int32_t out[1200];read_series(30,0,out);
- CHECK(out[199]==100&&out[249]==500&&out[299]==LV_CHART_POINT_NONE);
- for(unsigned i=0;i<300;i++)if(i!=199&&i!=249)CHECK(out[i]==LV_CHART_POINT_NONE);
- s.now_us=110100000;s.measurement.sensor[0].x=99;tab5_ui_graph_sample(&g,&s);read_series(30,0,out);CHECK(out[248]==500&&out[299]==LV_CHART_POINT_NONE);
+ CHECK(out[199]==100&&out[249]==500&&out[299]==TAB5_UI_GRAPH_RENDER_NONE);
+ for(unsigned i=0;i<300;i++)if(i!=199&&i!=249)CHECK(out[i]==TAB5_UI_GRAPH_RENDER_NONE);
+ s.now_us=110100000;s.measurement.sensor[0].x=99;tab5_ui_graph_sample(&g,&s);read_series(30,0,out);CHECK(out[248]==500&&out[299]==TAB5_UI_GRAPH_RENDER_NONE);
 }
 static void large_jump_and_restart(void){
  tab5_ui_graph_reset(&g);tab5_ui_state_t s=state(1000000,1,2,3,4);tab5_ui_graph_sample(&g,&s);
  s=state(4000000000ULL,5,6,7,8);tab5_ui_graph_sample(&g,&s);
  unsigned windows[]={30,120,600},sizes[]={300,240,1200};int32_t out[1200];
- for(unsigned w=0;w<3;w++){read_series(windows[w],0,out);for(unsigned i=0;i<sizes[w]-1;i++)CHECK(out[i]==LV_CHART_POINT_NONE);CHECK(out[sizes[w]-1]==500);}
+ for(unsigned w=0;w<3;w++){read_series(windows[w],0,out);for(unsigned i=0;i<sizes[w]-1;i++)CHECK(out[i]==TAB5_UI_GRAPH_RENDER_NONE);CHECK(out[sizes[w]-1]==500);}
  s=state(500000,9,10,11,12);tab5_ui_graph_sample(&g,&s);CHECK(g.slow_count==1&&g.fast_count==1);
- for(unsigned w=0;w<3;w++){read_series(windows[w],0,out);for(unsigned i=0;i<sizes[w]-1;i++)CHECK(out[i]==LV_CHART_POINT_NONE);CHECK(out[sizes[w]-1]==900);}
+ for(unsigned w=0;w<3;w++){read_series(windows[w],0,out);for(unsigned i=0;i<sizes[w]-1;i++)CHECK(out[i]==TAB5_UI_GRAPH_RENDER_NONE);CHECK(out[sizes[w]-1]==900);}
 }
 static void capacity_jump_boundaries(void){
  unsigned windows[]={30,600},caps[]={300,1200};uint64_t steps[]={100000,500000};
@@ -124,7 +124,7 @@ static void capacity_jump_boundaries(void){
   s=state(1000000ULL+(caps[w]-1+extra)*steps[w],5,6,7,8);tab5_ui_graph_sample(&g,&s);
   int32_t out[1200];CHECK(read_series(windows[w],0,out)==caps[w]);
   CHECK(out[caps[w]-1]==500);
-  for(unsigned i=0;i<caps[w]-1;i++)CHECK(out[i]==(!extra&&!i?100:LV_CHART_POINT_NONE));
+  for(unsigned i=0;i<caps[w]-1;i++)CHECK(out[i]==(!extra&&!i?100:TAB5_UI_GRAPH_RENDER_NONE));
  }
 }
 static void ten_minutes_2hz_then_fast_10hz(void){
@@ -134,7 +134,7 @@ static void ten_minutes_2hz_then_fast_10hz(void){
  for(unsigned k=0;k<4;k++){
   read_series(600,k,out);for(unsigned i=0;i<1200;i++)CHECK(out[i]==(int32_t)(i+k*2000));
   read_series(120,k,out);for(unsigned i=0;i<240;i++)CHECK(out[i]==(int32_t)(960+i+k*2000));
-  read_series(30,k,out);for(unsigned i=0;i<300;i++)CHECK(out[i]==((i%5==4)?(int32_t)(1140+i/5+k*2000):LV_CHART_POINT_NONE));
+  read_series(30,k,out);for(unsigned i=0;i<300;i++)CHECK(out[i]==((i%5==4)?(int32_t)(1140+i/5+k*2000):TAB5_UI_GRAPH_RENDER_NONE));
  }
  for(unsigned i=0;i<300;i++){float v=(float)i/100;s=state(601000000ULL+i*100000ULL,v,v+20,v+40,v+60);tab5_ui_graph_sample(&g,&s);}
  for(unsigned k=0;k<4;k++){
@@ -169,11 +169,11 @@ static void render_cadence_and_wrap(void){
    tab5_ui_graph_sample(&g,&s);
   }
   int32_t raw[1200],out[1200];tab5_ui_graph_read(&g,30,0,raw);CHECK(tab5_ui_graph_read_render(&g,30,0,out)==300);
-  unsigned first=0;while(first<300&&raw[first]==LV_CHART_POINT_NONE)first++;
-  for(unsigned j=0;j<first;j++)CHECK(out[j]==LV_CHART_POINT_NONE);
+  unsigned first=0;while(first<300&&raw[first]==TAB5_UI_GRAPH_RENDER_NONE)first++;
+  for(unsigned j=0;j<first;j++)CHECK(out[j]==TAB5_UI_GRAPH_RENDER_NONE);
   for(unsigned j=first;j<300;j++)CHECK(out[j]==(int32_t)(401+j));
-  if(hz[h]<10)CHECK(raw[298]==LV_CHART_POINT_NONE);
-  tab5_ui_graph_read(&g,120,0,raw);tab5_ui_graph_read_render(&g,120,0,out);for(unsigned j=0;j<240;j++)if(raw[j]!=LV_CHART_POINT_NONE)CHECK(raw[j]==out[j]);
+  if(hz[h]<10)CHECK(raw[298]==TAB5_UI_GRAPH_RENDER_NONE);
+  tab5_ui_graph_read(&g,120,0,raw);tab5_ui_graph_read_render(&g,120,0,out);for(unsigned j=0;j<240;j++)if(raw[j]!=TAB5_UI_GRAPH_RENDER_NONE)CHECK(raw[j]==out[j]);
  }
 }
 static void render_gaps_and_tail(void){
@@ -192,9 +192,9 @@ static void render_gaps_and_tail(void){
   s.measurement.sensor[0].x=2;tab5_ui_graph_sample(&g,&s);
   if(mode==5){s.now_us=1250000;s.measurement.sensor[0].good++;s.measurement.sensor[0].timestamp_us=s.now_us;tab5_ui_graph_sample(&g,&s);}
   int32_t raw[1200],out[1200];tab5_ui_graph_read(&g,30,0,raw);tab5_ui_graph_read_render(&g,30,0,out);
-  CHECK(raw[298]==LV_CHART_POINT_NONE);CHECK(out[298]==(mode==0?150:(mode==2||mode==3||mode==5)?100:LV_CHART_POINT_NONE));
+  CHECK(raw[298]==TAB5_UI_GRAPH_RENDER_NONE);CHECK(out[298]==(mode==0?150:(mode==2||mode==3||mode==5)?100:TAB5_UI_GRAPH_RENDER_NONE));
   s.now_us+=300000;tab5_ui_graph_sample(&g,&s);tab5_ui_graph_read_render(&g,30,0,out);
-  CHECK(out[297]==LV_CHART_POINT_NONE&&out[298]==LV_CHART_POINT_NONE&&out[299]==LV_CHART_POINT_NONE);
+  CHECK(out[297]==TAB5_UI_GRAPH_RENDER_NONE&&out[298]==TAB5_UI_GRAPH_RENDER_NONE&&out[299]==TAB5_UI_GRAPH_RENDER_NONE);
  }
 }
 static void render_jitter_and_invalid_axis(void){
@@ -205,7 +205,7 @@ static void render_jitter_and_invalid_axis(void){
  s=state(1300000,4,4,4,4);s.measurement.config.frequency_hz=10;
  for(unsigned k=0;k<2;k++){s.measurement.sensor[k].timestamp_us=1260000;s.measurement.sensor[k].good=3;}
  tab5_ui_graph_sample(&g,&s);int32_t out[1200];tab5_ui_graph_read_render(&g,30,0,out);
- CHECK(out[298]==400&&out[299]==LV_CHART_POINT_NONE);
+ CHECK(out[298]==400&&out[299]==TAB5_UI_GRAPH_RENDER_NONE);
  /* 10Hz jitter straddling a bucket boundary leaves one empty grid slot. */
  tab5_ui_graph_reset(&g);s=state(1090000,0,0,0,0);s.measurement.config.frequency_hz=10;tab5_ui_graph_sample(&g,&s);
  s.now_us=1210000;s.measurement.sensor[0].timestamp_us=s.now_us;s.measurement.sensor[0].good++;s.measurement.sensor[0].x=2;tab5_ui_graph_sample(&g,&s);
@@ -214,12 +214,12 @@ static void render_jitter_and_invalid_axis(void){
  tab5_ui_graph_reset(&g);s=state(1000000,0,0,0,0);s.measurement.config.frequency_hz=5;tab5_ui_graph_sample(&g,&s);
  s.now_us=1400000;s.measurement.sensor[0].timestamp_us=s.now_us;s.measurement.sensor[0].good++;s.measurement.sensor[0].x=2;tab5_ui_graph_sample(&g,&s);
  s.now_us=1450000;s.measurement.sensor[0].timestamp_us=s.now_us;s.measurement.sensor[0].good++;s.measurement.sensor[0].x=3;tab5_ui_graph_sample(&g,&s);
- tab5_ui_graph_read_render(&g,30,0,out);CHECK(out[298]!=LV_CHART_POINT_NONE);
+ tab5_ui_graph_read_render(&g,30,0,out);CHECK(out[298]!=TAB5_UI_GRAPH_RENDER_NONE);
  /* Explicit nonfinite sample cannot be interpolated through. */
  tab5_ui_graph_reset(&g);s=state(1000000,0,0,0,0);s.measurement.config.frequency_hz=1;tab5_ui_graph_sample(&g,&s);
  s.now_us=1100000;s.measurement.sensor[0].timestamp_us=s.now_us;s.measurement.sensor[0].good++;s.measurement.sensor[0].x=NAN;tab5_ui_graph_sample(&g,&s);
  s.now_us=1200000;s.measurement.sensor[0].timestamp_us=s.now_us;s.measurement.sensor[0].good++;s.measurement.sensor[0].x=2;tab5_ui_graph_sample(&g,&s);
- tab5_ui_graph_read_render(&g,30,0,out);CHECK(out[298]==LV_CHART_POINT_NONE);
+ tab5_ui_graph_read_render(&g,30,0,out);CHECK(out[298]==TAB5_UI_GRAPH_RENDER_NONE);
  printf("graph RAM: %zu bytes; render metadata: %zu bytes\n",sizeof(g),sizeof(g.fast_meta)+sizeof(g.slow_meta)+sizeof(g.render_good)+sizeof(g.render_blocked));
 }
 static void render_skipped_snapshots(void){
@@ -237,10 +237,10 @@ static void render_skipped_snapshots(void){
   if(mode==6)s.measurement.sensor[0].good=0;
   tab5_ui_graph_sample(&g,&s);
   int32_t raw[1200],out[1200];tab5_ui_graph_read(&g,30,0,raw);tab5_ui_graph_read_render(&g,30,0,out);
-  CHECK(raw[298]==LV_CHART_POINT_NONE);
-  CHECK(out[298]==((mode==0||mode==2||mode==5)?100:LV_CHART_POINT_NONE));
+  CHECK(raw[298]==TAB5_UI_GRAPH_RENDER_NONE);
+  CHECK(out[298]==((mode==0||mode==2||mode==5)?100:TAB5_UI_GRAPH_RENDER_NONE));
   /* A sensor with no errors remains independent of the failing peer. */
-  CHECK(out[299]==(mode==6?LV_CHART_POINT_NONE:200));
+  CHECK(out[299]==(mode==6?TAB5_UI_GRAPH_RENDER_NONE:200));
  }
  /* 5Hz, UI snapshot skips one reply: interpolate two periods, not dropout. */
  tab5_ui_graph_reset(&g);tab5_ui_state_t s=state(1000000,0,0,0,0);s.measurement.config.frequency_hz=5;
@@ -266,11 +266,11 @@ static void render_short_failures_all_ranges(void){
   tab5_ui_graph_sample(&g,&s);
   int32_t raw[1200],out[1200],again[1200];unsigned n=tab5_ui_graph_read(&g,windows[w],0,raw);
   tab5_ui_graph_read_render(&g,windows[w],0,out);tab5_ui_graph_read(&g,windows[w],0,again);
-  CHECK(!memcmp(raw,again,n*sizeof(*raw)));CHECK(raw[n-2]==LV_CHART_POINT_NONE);
-  CHECK((out[n-2]!=LV_CHART_POINT_NONE)==(mode==0||mode==3));
-  CHECK(out[0]==LV_CHART_POINT_NONE); /* Never fabricate leading history. */
+  CHECK(!memcmp(raw,again,n*sizeof(*raw)));CHECK(raw[n-2]==TAB5_UI_GRAPH_RENDER_NONE);
+  CHECK((out[n-2]!=TAB5_UI_GRAPH_RENDER_NONE)==(mode==0||mode==3));
+  CHECK(out[0]==TAB5_UI_GRAPH_RENDER_NONE); /* Never fabricate leading history. */
   s.now_us+=1000000;tab5_ui_graph_sample(&g,&s);tab5_ui_graph_read_render(&g,windows[w],0,out);
-  CHECK(out[n-1]==LV_CHART_POINT_NONE); /* Never extrapolate stale tail. */
+  CHECK(out[n-1]==TAB5_UI_GRAPH_RENDER_NONE); /* Never extrapolate stale tail. */
  }
  /* Actual 10Hz isolated 100-300ms failures, inclusive 500ms threshold;
   * same bound rejects 600ms even if the good counter jumps. */
@@ -278,11 +278,11 @@ static void render_short_failures_all_ranges(void){
   tab5_ui_graph_reset(&g);tab5_ui_state_t s=state(1000000,0,0,0,0);s.measurement.config.frequency_hz=10;tab5_ui_graph_sample(&g,&s);
   s.now_us+=100000;s.measurement.sensor[0].errors++;s.measurement.sensor[0].fail_streak=1;tab5_ui_graph_sample(&g,&s);
   s.now_us=1000000+dt;s.measurement.sensor[0].timestamp_us=s.now_us;s.measurement.sensor[0].good=20;s.measurement.sensor[0].fail_streak=0;s.measurement.sensor[0].x=2;tab5_ui_graph_sample(&g,&s);
-  int32_t out[1200];tab5_ui_graph_read_render(&g,30,0,out);CHECK((out[298]!=LV_CHART_POINT_NONE)==(dt<=500000));
+  int32_t out[1200];tab5_ui_graph_read_render(&g,30,0,out);CHECK((out[298]!=TAB5_UI_GRAPH_RENDER_NONE)==(dt<=500000));
  }
 }
 int main(void){
- _Static_assert(LV_CHART_POINT_NONE==INT32_MAX,"Actual LVGL chart gap marker changed");
+ _Static_assert(TAB5_UI_GRAPH_RENDER_NONE==INT32_MAX,"Presentation gap marker changed");
  struct {const char *name;void (*run)(void);} cases[]={
 #define CASE(fn) {#fn,fn}
   CASE(empty_and_unknown),CASE(duplicate_timestamps),CASE(validity_and_axis_values),

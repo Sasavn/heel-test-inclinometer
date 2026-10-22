@@ -39,6 +39,8 @@ tab5/tests/output_ui/
 tab5/tests/output_redesign/
 tab5/tests/output_services/
 tab5/tests/*.exe
+tab5/main/native/host-check/
+tab5/main/native/checks/*.exe
 tab5/tests/test-sd/
 tab5/tests/test-usb/
 tab5/test-sd/

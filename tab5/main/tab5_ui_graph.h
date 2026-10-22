@@ -2,6 +2,8 @@
 #define TAB5_UI_GRAPH_H
 #include "tab5_ui.h"
 #define TAB5_UI_GRAPH_NONE INT16_MIN
+/* Public presentation gap sentinel; independent of any widget toolkit. */
+#define TAB5_UI_GRAPH_RENDER_NONE INT32_MAX
 typedef struct { int16_t v[4]; } tab5_ui_graph_point_t;
 typedef struct {
     tab5_ui_graph_point_t slow[1200], fast[300];

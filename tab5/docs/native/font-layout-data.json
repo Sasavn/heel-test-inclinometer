@@ -1,0 +1,56 @@
+{
+  "baseline": "369c7fc",
+  "fonts": [
+    {
+      "font": "font_tab5_16.c",
+      "arrays": 8,
+      "identical": true,
+      "normalized_sha256": "52fd76b4b863c503f418ed1d14a1ab48899b04025ad2f15e4034765039019039"
+    },
+    {
+      "font": "font_tab5_16m.c",
+      "arrays": 8,
+      "identical": true,
+      "normalized_sha256": "4723c5d7e8655d60989c0535757c5ca82d842556995dbd6bea94a55d8d248941"
+    },
+    {
+      "font": "font_tab5_20.c",
+      "arrays": 8,
+      "identical": true,
+      "normalized_sha256": "310699064849d505fc1246ceffc7b937d04da4784e672f9f22f0368860f86b6c"
+    },
+    {
+      "font": "font_tab5_20m.c",
+      "arrays": 8,
+      "identical": true,
+      "normalized_sha256": "cf1517ca2467009717f75cbe35c0a6875c9711c695302a8603c9d57f4031d5f8"
+    },
+    {
+      "font": "font_tab5_24.c",
+      "arrays": 8,
+      "identical": true,
+      "normalized_sha256": "e77a02ce5eaa6eb5855c59bccd72e071a7ed0d2e5b9dc48c24e7558e4c9022b2"
+    },
+    {
+      "font": "font_tab5_32.c",
+      "arrays": 8,
+      "identical": true,
+      "normalized_sha256": "e5679520747022b45c093a9891cb0d6f800e01b3a891d2764a008203c178c7e0"
+    },
+    {
+      "font": "font_tab5_40.c",
+      "arrays": 8,
+      "identical": true,
+      "normalized_sha256": "7bd78fe033e56e2c0ecfd10ffb96bb77cdebffd817bab83205f7fd75d77cc246"
+    },
+    {
+      "font": "font_tab5_64.c",
+      "arrays": 4,
+      "identical": true,
+      "normalized_sha256": "14720e70ef442e69e59fbf2c6a1dab5ae039adf4f81897c5f5c79eeb1b764f8e"
+    }
+  ],
+  "layout_call_count": 196,
+  "layout_calls_identical": true,
+  "passed": true
+}
