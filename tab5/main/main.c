@@ -121,6 +121,11 @@ static void ui_perf_reply(bool reset,tab5_service_reply_fn reply,void *ctx) {
 }
 
 static void boot_failed(void) {
+    printf("BOOTFAIL caller=%p internal_free=%u internal_largest=%u psram_free=%u\n",
+        __builtin_return_address(0),
+        (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT),
+        (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT),
+        (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT));
     esp_ota_img_states_t state;
     if(esp_ota_get_state_partition(esp_ota_get_running_partition(),&state)==ESP_OK && state==ESP_OTA_IMG_PENDING_VERIFY)
         esp_ota_mark_app_invalid_rollback_and_reboot();

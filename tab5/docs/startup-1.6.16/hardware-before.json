@@ -1,0 +1,15 @@
+{
+  "version": "1.6.15-esp32",
+  "chip_revision": 103,
+  "board": "Tab5/ST7121",
+  "flashed_app_sha256": "6250e5c42ab455e067c14ce48a9a452ea86ee370d96701a24eb28212add6365b",
+  "rom_md5_parts_verified": 4,
+  "nvs_preserved": true,
+  "application_start_ok": false,
+  "observed": "Returned from app_main at 3250ms after LCD backlight at 3248ms; no USB protocol",
+  "raw_boot_log": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\hil-1.6.16\\before-1.6.15-boot.log",
+  "raw_boot_log_sha256": "cd3f3965075da71e6ee97f80fdb2d832b2dfa373e6a5e793ff61551512822a10",
+  "candidate": "1.6.16-esp32",
+  "candidate_flashed": false,
+  "blocker": "Tab5 absent from remote USB before candidate deployment"
+}

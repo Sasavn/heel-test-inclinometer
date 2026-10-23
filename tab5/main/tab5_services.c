@@ -23,6 +23,7 @@
 #include "esp_chip_info.h"
 #include "esp_timer.h"
 #include "esp_system.h"
+#include "esp_heap_caps.h"
 #include "esp_wifi.h"
 #include "esp_netif.h"
 #include "esp_event.h"
@@ -50,6 +51,42 @@
 #define CLIENTS 4
 #define OUTPUT 3072
 typedef struct { char text[OUTPUT]; } output_t;
+/* TCP task owns these long-lived buffers after core startup. Payload sizes stay
+ * identical; only their placement changes from internal .bss to explicit PSRAM. */
+typedef struct {int fd;uint32_t owner,epoch;bool auth,overflow,dead;size_t used;char rx[TAB5_SERVICE_LINE_MAX];char tx[OUTPUT*8];size_t tx_len,tx_sent;uint64_t connected;} client_t;
+static client_t *clients;
+#ifdef TAB5_SERVICES_HOST
+/* Capability values match the pinned esp_heap_caps.h; only allocation is fake. */
+#ifndef MALLOC_CAP_SPIRAM
+#define MALLOC_CAP_SPIRAM (1u<<10)
+#define MALLOC_CAP_8BIT (1u<<2)
+#endif
+static void *(*test_clients_alloc_hook)(size_t,size_t,unsigned);
+static void (*test_clients_free_hook)(void*);
+#endif
+static bool clients_storage_init(void){
+ if(clients)return true;
+#ifndef TAB5_SERVICES_HOST
+ clients=heap_caps_calloc(CLIENTS,sizeof(*clients),MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+#else
+ clients=test_clients_alloc_hook?test_clients_alloc_hook(CLIENTS,sizeof(*clients),MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT):calloc(CLIENTS,sizeof(*clients));
+#endif
+ if(!clients)return false;
+ for(unsigned i=0;i<CLIENTS;i++)clients[i].fd=-1;
+ return true;
+}
+/* Core failure only: no workers can hold pointers yet. Never free after the
+ * workers have started, including optional network startup failures. */
+static void clients_storage_release(void){
+ if(!clients)return;
+#ifndef TAB5_SERVICES_HOST
+ heap_caps_free(clients);
+#else
+ if(test_clients_free_hook)test_clients_free_hook(clients);else free(clients);
+#endif
+ clients=NULL;
+}
+
 typedef struct {
  tab5_medium_status_t status;
  tab5_service_sample_t queue[DEPTH];
@@ -616,8 +653,7 @@ static esp_err_t mount_medium(tab5_medium_t i){
  return e;
 }
 
-typedef struct {int fd;uint32_t owner,epoch;bool auth,overflow,dead;size_t used;char rx[TAB5_SERVICE_LINE_MAX];char tx[OUTPUT*8];size_t tx_len,tx_sent;uint64_t connected;} client_t;
-static client_t clients[CLIENTS];
+
 static void tcp_reply(void *ctx,const char *line) {
  client_t *c=ctx;size_t n=strlen(line);
  if(c->dead || n>=OUTPUT || c->tx_len+n+1>sizeof(c->tx)){c->dead=true;return;}
@@ -744,12 +780,25 @@ esp_err_t tab5_services_retry(tab5_medium_t i){
 /* Startup orchestration below is shared verbatim by ESP and host regression
  * tests. Only the platform allocation/driver/socket/task boundaries differ. */
 static esp_err_t startup_core(void) {
+#ifdef TAB5_SERVICES_HOST
+ test_core_starts++;
+#endif
+ if(!clients_storage_init())return ESP_ERR_NO_MEM;
 #ifndef TAB5_SERVICES_HOST
  network_lock=xSemaphoreCreateMutex();transfer_lock=xSemaphoreCreateMutex();state_lock=xSemaphoreCreateMutex();medium_lock[0]=xSemaphoreCreateMutex();medium_lock[1]=xSemaphoreCreateMutex();publish_queue=xQueueCreate(16,sizeof(output_t));usb_events=xQueueCreate(8,sizeof(msc_host_event_t));
- if(!network_lock||!transfer_lock||!state_lock||!medium_lock[0]||!medium_lock[1]||!publish_queue||!usb_events)return ESP_ERR_NO_MEM;
+ if(!network_lock||!transfer_lock||!state_lock||!medium_lock[0]||!medium_lock[1]||!publish_queue||!usb_events){
+  /* All handles are still private to startup: cleanup cannot race a worker. */
+  if(usb_events){vQueueDelete(usb_events);usb_events=NULL;}
+  if(publish_queue){vQueueDelete(publish_queue);publish_queue=NULL;}
+  for(unsigned i=0;i<2;i++)if(medium_lock[i]){vSemaphoreDelete(medium_lock[i]);medium_lock[i]=NULL;}
+  if(state_lock){vSemaphoreDelete(state_lock);state_lock=NULL;}
+  if(transfer_lock){vSemaphoreDelete(transfer_lock);transfer_lock=NULL;}
+  if(network_lock){vSemaphoreDelete(network_lock);network_lock=NULL;}
+  clients_storage_release();return ESP_ERR_NO_MEM;
+ }
  strcpy(media[0].root,BSP_SD_MOUNT_POINT);strcpy(media[1].root,"/usb");
 #else
- test_core_starts++;if(test_core_start_error)return test_core_start_error;
+ if(test_core_start_error){clients_storage_release();return test_core_start_error;}
  strcpy(media[0].root,"test-sd");strcpy(media[1].root,"test-usb");
 #endif
  return ESP_OK;

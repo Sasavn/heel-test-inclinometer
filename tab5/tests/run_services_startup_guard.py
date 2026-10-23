@@ -35,6 +35,9 @@ def source_guards(root):
     assert re.search(r'tab5_services_line\s*\(\s*1\s*,\s*line\s*,\s*true', usb), 'USB-C explicit OTA dispatcher'
     assert 'usb_serial_jtag_is_connected' in usb and 'usb_serial_jtag_wait_tx_done' in usb
     services = (root/'tab5/main/tab5_services.c').read_text(encoding='utf-8')
+    allocation=re.sub(r'\s+','',function(services,'clients_storage_init'))
+    assert 'heap_caps_calloc(CLIENTS,sizeof(*clients),MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT)' in allocation, 'actual ESP allocation must require byte-accessible PSRAM'
+    assert 'if(!clients)returnfalse;' in allocation, 'allocation failure must precede client dereference'
     tcp=function(services,'network_task')
     assert re.search(r'if\s*\(\s*!c->auth\s*\)',mask_c(tcp)) and 'tab5_services_line(c->owner,c->rx,true' in tcp, 'TCP commands enter only the explicit authenticated dispatch branch'
     init = mask_c(function(services, 'tab5_services_init'))
