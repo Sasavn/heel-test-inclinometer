@@ -1,0 +1,70 @@
+{
+  "configuration_mode": "idf_build_header",
+  "config_sources_sha256": {
+    "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\build\\config\\sdkconfig.h": "8aee733b89bc2a4d1ce715c76f02031572d3649c791e4377d6be2921d21fef34"
+  },
+  "generator_sha256": "c0a4c992b3de3d1089bf9f59b6d268dc16b23629c4c636fea31c58e36230e410",
+  "source_manifest": {
+    "upstream": {
+      "version": "ESP-IDF v5.5.2",
+      "source": "https://github.com/espressif/esp-idf/tree/v5.5.2/components/fatfs",
+      "normalization": "CRLF to LF only",
+      "sha256": {
+        "src/ff.c": "b6511bc0102f42b941897cd9f96f75206b6851fedbebc6dcb17c220cb1d4bede",
+        "src/ff.h": "7bae240d9934c35599b1e49431b6bec65a7269d09284aca40191c8c5fd3be475",
+        "src/ffconf.h": "9d3a18bd5f23b9bfc6b38668d1da59274c280d22b86d281c58d441da60942fd5",
+        "src/ffunicode.c": "f2e03e97fccd9d7b0614b48ee02b7e49fb21c5196d3ff77ba5d8e4558a064d5d",
+        "CMakeLists.txt": "007c88dab43adaf0a23a83b898276ac4d046ba748dedbc4ac0f0048ab914a5e0",
+        "Kconfig": "6340a411ad698eb5e3165c9730a15b98b685df3c519a1b2b62e13ef2578fa6a2"
+      }
+    },
+    "generated_sha256": {
+      "ff.c": "b6511bc0102f42b941897cd9f96f75206b6851fedbebc6dcb17c220cb1d4bede",
+      "ff.h": "7bae240d9934c35599b1e49431b6bec65a7269d09284aca40191c8c5fd3be475",
+      "ffconf.h": "27db118066581e9aefeaa9c51af446325609b6daf0b4709e4970d37796406b57",
+      "ffunicode.c": "f2e03e97fccd9d7b0614b48ee02b7e49fb21c5196d3ff77ba5d8e4558a064d5d"
+    },
+    "change": "Only ffconf.h FF_FS_EXFAT hardcoded 0 -> CONFIG_FATFS_EXFAT. Licenses retained."
+  },
+  "passed": false,
+  "host_disabled_bool_normalization": {},
+  "scope": "FatFs RAM images; no physical media, service integration or large-file transport test",
+  "test_sources_sha256": {
+    "run_fatfs_images.py": "17a37c4f7e1fe6ab3227b7a03936b25d8ccd574e4f6b6c945484fc89413e999b",
+    "fatfs_image_test.c": "24bb1effce9972773c20bd4a9e7dbd0bffc406a772259fd69879bbe4b64dd435"
+  },
+  "diskio_header_sha256": "c8e4cda34fc44cd7398e6d52d205eb77793c4b33a2ca3efec6212d43088faa6f",
+  "compiler_version": "gcc.EXE (GCC) 14.2.0\nCopyright (C) 2024 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\n",
+  "used_sdkconfig_sha256": "2cc3576a95fc65244f68c64e5d3096e0665635d467086314b85a3b37224e21df",
+  "compiled_generated_root": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\build\\tab5-fatfs-generated",
+  "compiled_generated_sha256": {
+    "ff.c": "b6511bc0102f42b941897cd9f96f75206b6851fedbebc6dcb17c220cb1d4bede",
+    "ff.h": "7bae240d9934c35599b1e49431b6bec65a7269d09284aca40191c8c5fd3be475",
+    "ffconf.h": "27db118066581e9aefeaa9c51af446325609b6daf0b4709e4970d37796406b57",
+    "ffunicode.c": "f2e03e97fccd9d7b0614b48ee02b7e49fb21c5196d3ff77ba5d8e4558a064d5d"
+  },
+  "production_policy": {
+    "source": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\main\\tab5_services.c",
+    "source_sha256": "205be529e7a140989312d0ab2252771dd69e6d79beadd5f932cb2f6df5d2d196",
+    "function": "supported_drive",
+    "extracted_sha256": "aaed48b146541f571356b3fbd9ab0ab54ecd89bf1851a96f3d0d7e233aa908e0",
+    "enum_header_sha256": "ad42169e9c7caf6ba1dc077f6d65196696ba0316e10d4044840fbcf13230fcc3"
+  },
+  "compile_command": [
+    "C:\\Users\\aaaor\\gcc\\bin\\gcc.EXE",
+    "-std=c11",
+    "-O2",
+    "-Wall",
+    "-Wextra",
+    "-IC:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\build\\tab5-fatfs-generated",
+    "-IC:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\storage-1.6.15\\fatfs-images\\host-u06v1h57",
+    "-IC:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\esp-idf\\components\\fatfs\\src",
+    "-IC:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\main",
+    "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tests\\fatfs_image_test.c",
+    "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\build\\tab5-fatfs-generated\\ff.c",
+    "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\build\\tab5-fatfs-generated\\ffunicode.c",
+    "-o",
+    "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\storage-1.6.15\\fatfs-images\\host-u06v1h57\\fatfs-image-test.exe"
+  ],
+  "compile_returncode": 1
+}

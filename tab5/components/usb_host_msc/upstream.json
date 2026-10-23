@@ -1,0 +1,19 @@
+{
+  "component": "espressif/usb_host_msc",
+  "version": "1.3.0",
+  "repository_commit": "8ab282ac6cde1970b660fc032b2d33a9c70e8d07",
+  "idf": "5.5.2",
+  "files": {
+    "src/msc_scsi_bot.c": "2444d8083ec38bb4b9529c4248520f1eb5970656ab4b3bbf3c67cbfc2604e8c7",
+    "src/msc_host.c": "20bca65a326e3c0ac13569734ff98d39ad0c7565a718fd28e2eb65f5a5e1f21c",
+    "src/msc_host_vfs.c": "5e66056125eabb1441c24d11c1b4113de79dc5a9e27f3bda86597854e6c2a65c",
+    "src/diskio_usb.c": "da1ed927c1150ef4e9351294ae67c611fe4d1d19ee6c19bcdd8fec8591df234d",
+    "LICENCE": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+    "idf_component.yml": "75d914db418319cca4a18d0788341a495dba9c6de81361f1ec226a263c1f12db",
+    "include/esp_private/msc_scsi_bot.h": "ecb09ee1bbf8f1a37f32ee5f978465493d872cd58a9a0ebd83bc80e13c6c5547",
+    "include/usb/msc_host.h": "f3957ffe188157147a31518b610527be2f2961dc83a17029ef7acf7b403c65f0",
+    "include/usb/msc_host_vfs.h": "4ef947ca2a730bf8c4d9a9dc2eb277589b9bdc3211f78cfdebfca5cf196b40ee",
+    "private_include/diskio_usb.h": "91b5eba3c81df1d86d8c3681e6871feb4760d34cb78d9ca337c20e0e4cc23f4c",
+    "private_include/msc_common.h": "af15862c069245b5a5b5f88483e7c58fcdec3e9aecdc103e977e8fd3d090c55b"
+  }
+}

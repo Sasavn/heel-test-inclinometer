@@ -1,0 +1,40 @@
+{
+  "status": "FROZEN",
+  "api": "esp_err_t msc_host_vfs_get_drive(msc_host_vfs_handle_t handle, uint8_t *out_pdrv)",
+  "declared_via": "usb/msc_host_vfs.h (forwarding wrapper); usb/msc_host_vfs_drive.h",
+  "services_modified_by_this_worker": false,
+  "services_sha256": "cb1dce977bf185c54b1c91821cddccffb04eaaffc2470f96ddec4de01d07f78f",
+  "native_actual_vfs_ownership_test": "PASS",
+  "isolated_without_managed_msc": "PASS (copy-only temporary tree; actual vendored VFS/getter compiled and exercised)",
+  "target_getter_and_services_objects": "PASS before final manifest constraint tightening; resolved package versions unchanged",
+  "vendor": "11 unchanged upstream source/header/LICENCE/manifest files, 85487 bytes",
+  "pins": {
+    "idf": "5.5.2",
+    "espressif/usb_host_msc": "1.3.0",
+    "espressif/esp_wifi_remote": "0.14.5",
+    "espressif/esp_hosted": "2.13.0"
+  },
+  "lock_policy": "Original portable registry lock retained; no machine-absolute local source entry shipped. Manager may regenerate local entry during final configure; do not commit generated absolute path.",
+  "requires_owner_final_target_builds": true,
+  "files": {
+    "tab5/components/usb_host_msc/CMakeLists.txt": "0d3cf0b5a5b9101f625b71f3ff3854f7765d11238853dd147e5d17c6263558fd",
+    "tab5/components/usb_host_msc/idf_component.yml": "df9d310b8ddfb5af7a37c814389eb3e5c24d9e8eeaae5aba44b4876cc95abb8c",
+    "tab5/components/usb_host_msc/include/usb/msc_host_vfs.h": "34248691a3cd2de45cd3a9cc89b725b58a3cd05dca0b4e4844f2c1b4f006da4e",
+    "tab5/components/usb_host_msc/include/usb/msc_host_vfs_drive.h": "3affd5ec212d148cc7a6c4d51686010f3d965dda4142a36651e6745fcc0e0015",
+    "tab5/components/usb_host_msc/msc_vfs_owned.c": "b284ad280b2cedf6c93b08d8ca1de6d0195ac93d9224ffd4f59dac01ec4c78e8",
+    "tab5/components/usb_host_msc/upstream/idf_component.yml": "75d914db418319cca4a18d0788341a495dba9c6de81361f1ec226a263c1f12db",
+    "tab5/components/usb_host_msc/upstream/include/esp_private/msc_scsi_bot.h": "ecb09ee1bbf8f1a37f32ee5f978465493d872cd58a9a0ebd83bc80e13c6c5547",
+    "tab5/components/usb_host_msc/upstream/include/usb/msc_host.h": "f3957ffe188157147a31518b610527be2f2961dc83a17029ef7acf7b403c65f0",
+    "tab5/components/usb_host_msc/upstream/include/usb/msc_host_vfs.h": "4ef947ca2a730bf8c4d9a9dc2eb277589b9bdc3211f78cfdebfca5cf196b40ee",
+    "tab5/components/usb_host_msc/upstream/LICENCE": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+    "tab5/components/usb_host_msc/upstream/private_include/diskio_usb.h": "91b5eba3c81df1d86d8c3681e6871feb4760d34cb78d9ca337c20e0e4cc23f4c",
+    "tab5/components/usb_host_msc/upstream/private_include/msc_common.h": "af15862c069245b5a5b5f88483e7c58fcdec3e9aecdc103e977e8fd3d090c55b",
+    "tab5/components/usb_host_msc/upstream/src/diskio_usb.c": "da1ed927c1150ef4e9351294ae67c611fe4d1d19ee6c19bcdd8fec8591df234d",
+    "tab5/components/usb_host_msc/upstream/src/msc_host.c": "20bca65a326e3c0ac13569734ff98d39ad0c7565a718fd28e2eb65f5a5e1f21c",
+    "tab5/components/usb_host_msc/upstream/src/msc_host_vfs.c": "5e66056125eabb1441c24d11c1b4113de79dc5a9e27f3bda86597854e6c2a65c",
+    "tab5/components/usb_host_msc/upstream/src/msc_scsi_bot.c": "2444d8083ec38bb4b9529c4248520f1eb5970656ab4b3bbf3c67cbfc2604e8c7",
+    "tab5/components/usb_host_msc/upstream.json": "a1bc7dd5e38a3a248d8c52a731b850db95ac97c0a47469c4998d8bd26a72c768",
+    "tab5/main/idf_component.yml": "cbd0286a75684d032b704430127ff051089dd122e535e909d9e53f0eb5cd0e88",
+    "tab5/dependencies.lock": "71513a9f1c6ec57c7e2b40a435523740c7619590a3c512f565209d9658408d8e"
+  }
+}

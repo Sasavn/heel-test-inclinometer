@@ -32,24 +32,53 @@ static void usb_lib_task(void *arg)
 
 esp_err_t bsp_usb_host_start(bsp_usb_host_power_mode_t mode, bool limit_500mA)
 {
-    /* Enable Feature */
-    BSP_ERROR_CHECK_RETURN_ERR(bsp_feature_enable(BSP_FEATURE_USB, true));
+    (void)mode;
+    (void)limit_500mA;
+    if (usb_host_task) {
+        return ESP_ERR_INVALID_STATE;
+    }
 
     //Install USB Host driver. Should only be called once in entire application
     ESP_LOGI(TAG, "Installing USB Host");
     const usb_host_config_t host_config = {
         .skip_phy_setup = false,
         .intr_flags = ESP_INTR_FLAG_LOWMED,
+        /* Pinned P4 usb_dwc_info.controllers[0] is HS/UTMI, wired to USB-A.
+         * Do not select FS (audio pins) or change the USB-C Serial/JTAG PHY. */
+        .peripheral_map = 1U << 0,
     };
-    BSP_ERROR_CHECK_RETURN_ERR(usb_host_install(&host_config));
+    esp_err_t ret = usb_host_install(&host_config);
+    if (ret != ESP_OK) {
+        /* In particular, INVALID_STATE may mean another owner has the host.
+         * Do not alter its power, driver or task. */
+        return ret;
+    }
+
+    ret = bsp_feature_enable(BSP_FEATURE_USB, true);
+    if (ret != ESP_OK) {
+        goto cleanup_owned_host;
+    }
 
     // Create a task that will handle USB library events
     if (xTaskCreate(usb_lib_task, "usb_lib", 4096, NULL, 10, &usb_host_task) != pdTRUE) {
         ESP_LOGE(TAG, "Creating USB host lib task failed");
-        abort();
+        usb_host_task = NULL;
+        ret = ESP_ERR_NO_MEM;
+        goto cleanup_owned_host;
     }
 
     return ESP_OK;
+
+cleanup_owned_host: {
+        /* Only reached after our successful install. Leave VBUS alone: its
+         * previous state is unknown, so we cannot claim ownership of power. */
+        esp_err_t cleanup_ret = usb_host_uninstall();
+        if (cleanup_ret != ESP_OK) {
+            ESP_LOGE(TAG, "USB host cleanup failed: %d (start error: %d)", cleanup_ret, ret);
+            return cleanup_ret;
+        }
+        return ret;
+    }
 }
 
 esp_err_t bsp_usb_host_stop(void)

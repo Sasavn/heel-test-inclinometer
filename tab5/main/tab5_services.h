@@ -13,6 +13,7 @@ extern "C" {
 #define TAB5_SERVICE_LINE_MAX 1200
 #define TAB5_SERVICE_CSV_HEADER "Date;Time;RawX;RawY;OffsetX;OffsetY;CalcX;CalcY;BatV;Ms\n"
 typedef enum { TAB5_SD = 0, TAB5_USB = 1 } tab5_medium_t;
+typedef enum { TAB5_FS_UNKNOWN=0,TAB5_FS_FAT32=1,TAB5_FS_EXFAT=2 } tab5_fs_type_t;
 typedef struct {
  unsigned sensor; /* Modbus address 2 or 3. */
  char date[11], time[9];
@@ -23,6 +24,8 @@ typedef struct {
  bool mounted, recording, failed;
  uint32_t queued, written, dropped;
  int error;
+ bool known;
+ tab5_fs_type_t fs_type;
 } tab5_medium_status_t;
 /* Reply is one UTF-8 line WITHOUT LF; transport appends LF. Context is borrowed
  * for the synchronous call only. Application emits OK to terminate replies. */
@@ -41,6 +44,7 @@ typedef struct {
  char sta_ip[16], ap_ip[16];
  uint32_t clients;
  int last_error;
+ bool known;
 } tab5_network_snapshot_t;
 typedef struct {
  tab5_service_command_fn command;
@@ -50,14 +54,21 @@ typedef struct {
 /* Config is copied. Main initializes NVS and board BSP before init.
  * command runs synchronously on network task; protect shared measurement state.
  * USB/radio/netif/listener startup failures are optional and reported in status.
+ * SD mount and USB host initialization run only on physical-medium workers.
  * Core allocation/task creation failures are fatal. Disabled AP+STA skips C6. */
 esp_err_t tab5_services_init(const tab5_services_config_t *config);
 esp_err_t tab5_services_network_configure(const tab5_network_config_t *config);
 void tab5_services_network_snapshot(tab5_network_snapshot_t *out);
 esp_err_t tab5_services_record_start(const char *session);
+/* Nonblocking: stops accepting samples; medium workers drain/close safely.
+ * A new recording remains rejected until both workers finish stopping. */
 void tab5_services_record_stop(void);
 esp_err_t tab5_services_submit(const tab5_service_sample_t *sample);
+/* Nonblocking coherent snapshot; if state is busy returns the last published
+ * value. known=false means no initialized snapshot, never a fabricated failure. */
 void tab5_services_status(tab5_medium_t medium, tab5_medium_status_t *out);
+/* Nonblocking mount request. ESP_OK means queued, not mounted; read status
+ * for worker completion. Never formats media or triggers file-based updates. */
 esp_err_t tab5_services_retry(tab5_medium_t medium);
 /* Diagnostic control of background mount attempts only. Defaults to true.
  * Does not unmount, stop recording, or cancel an already-started mount.

@@ -2,6 +2,7 @@
 #include <windows.h>
 #include <bcrypt.h>
 #include <io.h>
+#include "test_services_startup_hooks.h"
 #define ESP_OK 0
 static char test_current_version[32]="1.5.0-esp32";
 #define ESP_FAIL -1

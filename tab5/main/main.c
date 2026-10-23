@@ -50,6 +50,9 @@ static tab5_ui_action_kind_t ui_result_kind;
 static bool ui_result_success;
 static float battery = NAN;
 static char notice[160]="Прибор готов. Перед записью установите часы";
+static const char *filesystem_name(tab5_fs_type_t type) {
+    return type==TAB5_FS_FAT32?"FAT32":type==TAB5_FS_EXFAT?"exFAT":"unknown";
+}
 
 static struct {
     bool known,cpu_known;
@@ -227,14 +230,17 @@ static void status(tab5_service_reply_fn reply,void *ctx) {
         if(p->good)cJSON_AddNumberToObject(d,"age",(esp_timer_get_time()-p->timestamp_us)/1000);else cJSON_AddNullToObject(d,"age");
     }
     cJSON_AddBoolToObject(j,"stable",s.stable);cJSON_AddStringToObject(j,"sd",sd.failed?"ERR":sd.recording?"REC":sd.mounted?"READY":"NOCARD");
+    cJSON_AddBoolToObject(j,"sd_known",sd.known);cJSON_AddStringToObject(j,"sd_fs",filesystem_name(sd.fs_type));
     cJSON_AddNumberToObject(j,"sd_err",sd.error);cJSON_AddNumberToObject(j,"rows",sd.recording?sd.written:usb.written);
     cJSON_AddNumberToObject(j,"rec_s",recording?(esp_timer_get_time()-record_start_us)/1000000:0);
     cJSON_AddNumberToObject(j,"file",measurement_number);cJSON_AddNumberToObject(j,"rec_mask",(sd.recording||usb.recording)?3:0);cJSON_AddBoolToObject(j,"rec_sw",recording);
     add_num(j,"bat_v",battery);cJSON_AddBoolToObject(j,"bat_present",isfinite(battery)&&battery>5);cJSON_AddNullToObject(j,"bat_pct");
     cJSON_AddStringToObject(j,"svc","idle");cJSON_AddStringToObject(j,"xfer","idle");
     cJSON *u=cJSON_AddObjectToObject(j,"usb_storage");cJSON_AddBoolToObject(u,"mounted",usb.mounted);cJSON_AddBoolToObject(u,"recording",usb.recording);
+    cJSON_AddBoolToObject(u,"known",usb.known);cJSON_AddStringToObject(u,"fs",filesystem_name(usb.fs_type));
     cJSON_AddBoolToObject(u,"failed",usb.failed);cJSON_AddNumberToObject(u,"written",usb.written);cJSON_AddNumberToObject(u,"dropped",usb.dropped);
     cJSON *n=cJSON_AddObjectToObject(j,"network");cJSON_AddBoolToObject(n,"ap",net.ap_started);cJSON_AddBoolToObject(n,"sta",net.sta_connected);
+    cJSON_AddBoolToObject(n,"known",net.known);
     cJSON_AddStringToObject(n,"ap_ip",net.ap_ip);cJSON_AddStringToObject(n,"sta_ip",net.sta_ip);
     cJSON_AddNumberToObject(j,"sample_drops",__atomic_load_n(&sample_drops,__ATOMIC_RELAXED));
     cJSON_AddNumberToObject(j,"usb_drops",__atomic_load_n(&usb_drops,__ATOMIC_RELAXED));
@@ -349,14 +355,18 @@ void app_main(void) {
     usb_serial_jtag_driver_config_t usb={.tx_buffer_size=4096,.rx_buffer_size=4096};
     if(usb_serial_jtag_driver_install(&usb)!=ESP_OK){boot_failed();return;}
     if(tab5_measure_start(&cfg,sample_callback,NULL)!=ESP_OK){boot_failed();return;}
-    tab5_services_config_t services={.command=command,.network=network};
-    esp_err_t services_result=tab5_services_init(&services);
-    if(xTaskCreate(storage_router_task,"sample_storage",6144,NULL,4,NULL)!=pdPASS){boot_failed();return;}
-    if(xTaskCreate(usb_task,"protocol_usb",16384,NULL,4,NULL)!=pdPASS){boot_failed();return;}
+    /* Display/input must exist before optional storage/radio initialization.
+     * In particular, inserting an unreadable card must not hide application
+     * startup behind a synchronous filesystem probe. Media mount is deferred
+     * to its service worker; the UI initially shows unknown/not-ready media. */
     ui_perf.since=esp_timer_get_time();
     if(tab5_native_port_start(ui_callback,NULL)!=ESP_OK){boot_failed();return;}
-    persist();
+    tab5_services_config_t services={.command=command,.network=network};
+    esp_err_t services_result=tab5_services_init(&services);
     if(services_result!=ESP_OK){boot_failed();return;}
+    if(xTaskCreate(storage_router_task,"sample_storage",6144,NULL,4,NULL)!=pdPASS){boot_failed();return;}
+    if(xTaskCreate(usb_task,"protocol_usb",16384,NULL,4,NULL)!=pdPASS){boot_failed();return;}
+    persist();
     bool trial_confirmed=false;
     uint64_t last_ui=0,last_battery=0,last_stream=0;
     for(;;){xSemaphoreTake(app_mutex,portMAX_DELAY);
@@ -415,16 +425,16 @@ void app_main(void) {
         memcpy(ui.network.ap_ssid,network.ap_ssid,sizeof(ui.network.ap_ssid));memcpy(ui.network.ap_password,network.ap_password,sizeof(ui.network.ap_password));
         memcpy(ui.network.sta_ssid,network.sta_ssid,sizeof(ui.network.sta_ssid));memcpy(ui.network.sta_password,network.sta_password,sizeof(ui.network.sta_password));
         tab5_medium_status_t sd,flash;tab5_services_status(TAB5_SD,&sd);tab5_services_status(TAB5_USB,&flash);
-        ui.sd=(tab5_ui_medium_t){.known=true,.mounted=sd.mounted,.recording=sd.recording,.failed=sd.failed,.written=sd.written};
-        ui.usb=(tab5_ui_medium_t){.known=true,.mounted=flash.mounted,.recording=flash.recording,.failed=flash.failed,.written=flash.written};
-        ui.capacity[0].details_known=sd.mounted;ui.capacity[1].details_known=flash.mounted;
+        ui.sd=(tab5_ui_medium_t){.known=sd.known,.mounted=sd.mounted,.recording=sd.recording,.failed=sd.failed,.written=sd.written};
+        ui.usb=(tab5_ui_medium_t){.known=flash.known,.mounted=flash.mounted,.recording=flash.recording,.failed=flash.failed,.written=flash.written};
+        ui.capacity[0].details_known=sd.known&&sd.mounted;ui.capacity[1].details_known=flash.known&&flash.mounted;
         for(unsigned i=0;i<2;i++)if(ui.capacity[i].details_known){
-            snprintf(ui.capacity[i].filesystem,sizeof(ui.capacity[i].filesystem),"FAT32");
+            snprintf(ui.capacity[i].filesystem,sizeof(ui.capacity[i].filesystem),"%s",filesystem_name(i?flash.fs_type:sd.fs_type));
             snprintf(ui.capacity[i].folder,sizeof(ui.capacity[i].folder),"/");}
         snprintf(ui.status,sizeof(ui.status),"%s",notice);
         tab5_network_snapshot_t net;tab5_services_network_snapshot(&net);snprintf(ui.network_status,sizeof(ui.network_status),"AP %s  STA %s | TCP %u | %s",net.ap_started?net.ap_ip:"off",net.sta_connected?net.sta_ip:"off",network.tcp_port,esp_err_to_name(net.last_error));
-        ui.link=(tab5_ui_link_t){.known=true,.ap_started=net.ap_started,.sta_connected=net.sta_connected,.tcp_port=network.tcp_port,.error=net.last_error};
-        ui.tcp_clients_known=true;ui.tcp_clients=(uint16_t)net.clients;
+        ui.link=(tab5_ui_link_t){.known=net.known,.ap_started=net.ap_started,.sta_connected=net.sta_connected,.tcp_port=network.tcp_port,.error=net.last_error};
+        ui.tcp_clients_known=net.known;ui.tcp_clients=(uint16_t)net.clients;
         snprintf(ui.link.ap_ip,sizeof(ui.link.ap_ip),"%s",net.ap_ip);snprintf(ui.link.sta_ip,sizeof(ui.link.sta_ip),"%s",net.sta_ip);
         xSemaphoreGive(app_mutex);
         if(now-last_ui>=100000){last_ui=now;if(tab5_native_port_lock(20)){

@@ -11,11 +11,11 @@ static esp_err_t caller_start(bool network) {
  tab5_services_config_t cfg={.command=caller_command};
  cfg.network.ap_enabled=network;
  strcpy(cfg.network.ap_ssid,"startup-test");strcpy(cfg.network.ap_password,"test-password");strcpy(cfg.network.auth_token,"test-password");
+ ui_ready++; /* UI precedes optional services; exact main.c chain tested separately. */
  esp_err_t e=tab5_services_init(&cfg);
  if(e!=ESP_OK){boot_failed++;return e;}
- /* Mirrors the main integration boundary: initialize UI/commands only after
-  * successful core init. No GUI or bootloader process is launched by this test. */
- ui_ready++;
+ /* Physical boundaries are pumped only after successful shared core init. */
+ CHECK(!test_usb_starts);pump_initial_media();
  if(!tab5_services_line(1,"status",true,reply,NULL))config.command(config.command_ctx,"status",reply,NULL);
  return e;
 }
@@ -43,7 +43,7 @@ int main(void) {
  CHECK(tab5_services_retry(TAB5_USB)==0x1703);tab5_services_status(TAB5_USB,&usb);CHECK(usb.error==0x1703);
  CHECK(tab5_services_record_start("startup_sd_survives")==ESP_OK);
  tab5_service_sample_t sample={.sensor=2,.date="21.10.2026",.time="12:00:00",.raw_x=1.25,.battery=NAN};
- CHECK(tab5_services_submit(&sample)==ESP_OK);media_step(TAB5_SD);tab5_services_record_stop();
+ CHECK(tab5_services_submit(&sample)==ESP_OK);media_step(TAB5_SD);stop_and_drain();
  CHECK(media[TAB5_SD].status.written==1 && !media[TAB5_SD].status.failed);
  FILE *f=fopen("test-sd/startup_sd_survives_D2.CSV","rb");CHECK(f!=NULL);char content[512];size_t n=fread(content,1,sizeof(content)-1,f);content[n]=0;fclose(f);
  /* Windows host stdio translates LF on disk; firmware VFS does not. The pure
@@ -54,9 +54,9 @@ int main(void) {
  reset_startup();test_wifi_start_error=0x779;CHECK(caller_start(true)==ESP_OK);CHECK(ui_ready && !boot_failed);CHECK(network_status.last_error==0x779 && test_wifi_starts==1 && !test_listener_starts);
  reset_startup();test_listener_start_error=EADDRINUSE;CHECK(caller_start(true)==ESP_OK);CHECK(ui_ready && !boot_failed);CHECK(network_status.last_error==EADDRINUSE && !network_status.tcp_listening && !test_network_task_starts);
  reset_startup();CHECK(caller_start(true)==ESP_OK);CHECK(ui_ready && network_status.tcp_listening && test_network_task_starts==1);
- reset_startup();test_core_start_error=ESP_ERR_NO_MEM;CHECK(caller_start(false)==ESP_ERR_NO_MEM);CHECK(boot_failed==1 && !ui_ready && !initialized && !test_usb_starts);
- reset_startup();test_worker_start_error=ESP_ERR_NO_MEM;CHECK(caller_start(false)==ESP_ERR_NO_MEM);CHECK(boot_failed==1 && !ui_ready && !storage_ready);
- reset_startup();test_network_task_start_error=ESP_ERR_NO_MEM;CHECK(caller_start(true)==ESP_ERR_NO_MEM);CHECK(boot_failed==1 && !ui_ready && network_status.last_error==ESP_ERR_NO_MEM);
+ reset_startup();test_core_start_error=ESP_ERR_NO_MEM;CHECK(caller_start(false)==ESP_ERR_NO_MEM);CHECK(boot_failed==1 && ui_ready==1 && !initialized && !test_usb_starts);
+ reset_startup();test_worker_start_error=ESP_ERR_NO_MEM;CHECK(caller_start(false)==ESP_ERR_NO_MEM);CHECK(boot_failed==1 && ui_ready==1 && !storage_ready);
+ reset_startup();test_network_task_start_error=ESP_ERR_NO_MEM;CHECK(caller_start(true)==ESP_ERR_NO_MEM);CHECK(boot_failed==1 && ui_ready==1 && network_status.last_error==ESP_ERR_NO_MEM);
  /* Runtime configure executes the same production path as initial startup. */
  reset_startup();CHECK(caller_start(false)==ESP_OK);
  tab5_network_config_t on=config.network;on.ap_enabled=true;

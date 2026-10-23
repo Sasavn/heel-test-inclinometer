@@ -1,0 +1,5 @@
+version: "1.3.0"
+description: "Pinned MSC 1.3.0 with actual mounted-drive accessor"
+dependencies:
+  idf: "5.5.2"
+  espressif/usb: "^1.4.1"

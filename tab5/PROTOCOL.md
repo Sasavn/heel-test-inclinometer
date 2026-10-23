@@ -28,7 +28,7 @@ is local and its authentication policy belongs to main.
 | `ota status` | `OK ota offset=N active=1` or `active=0` |
 
 `ota info` JSON keys are `board:"tab5"`, `chip:"esp32p4"`, `proto:2`,
-`chip_revision:<actual numeric eFuse revision>`, `version:"1.5.0-esp32"`,
+`chip_revision:<actual numeric eFuse revision>`, `version:"1.6.15-esp32"` (release example),
 `max_size:<inactive partition size>`, `recording:<boolean>`, and
 `boot_confirmed:<boolean>`. When idle, recording is false. Errors are terminal
 `ERR ...` lines, with no trailing OK.
@@ -69,6 +69,11 @@ is true only for actual VALID metadata or successful local health confirmation;
 an API read error never implies confirmation. There is no battery threshold:
 normal operation uses external power.
 
+There is no automatic SD firmware update, at boot or after mount/retry. Files
+named `Firmware*.bin` do not trigger an update; a marker such as
+`no_auto_update` is not needed to disable it. OTA requires an explicit command
+sequence above.
+
 ## Files
 
 Files and get are forbidden during recording and OTA. SD is preferred; USB is the
@@ -81,6 +86,13 @@ the date field may be empty, but its leading comma is always present.
 0xEDB88320 CRC (initial/final complement), compatible with the PC DownloadSink.
 No offset resume is implemented. `get abort` returns `OK get aborted`.
 
+exFAT does not extend protocol 2 size fields to 64 bits. Before opening a file,
+production reads its original FatFs `FILINFO.fsize`, before the VFS conversion
+to `off_t`. Files beyond the uint32 wire range, or beyond signed INT32_MAX when
+`sizeof(off_t)<=4`, are refused: `get` returns `ERR file`, and `files` omits
+the entry. This is at most 2,147,483,647 bytes with a signed 32-bit offset.
+The library's 64-bit `FSIZE_t` is not a promise of large-file transfer support.
+
 Transfers are cooperative: services_poll emits at most one line per call. Main
 pumps USB only when its TX queue has room; TCP pumps below its pending-output
 watermark. Disconnect closes transfer state. Five seconds without pumping progress
@@ -89,7 +101,8 @@ releases the transfer. A read failure returns ERR rather than a successful check
 ## Recording format
 
 Files are `<YYYY-MM-DD_MNNN>_D2.CSV` and `_D3.CSV`, independently mirrored to
-SDMMC and USB-A MSC FAT32. Exclusive create prevents overwriting. No autoformat.
+SDMMC and USB-A MSC, using FAT32 or exFAT. Exclusive create prevents overwriting.
+FAT12/16 are refused without formatting. No autoformat.
 Each fresh sample belongs to sensor address 2 or 3 and carries DD.MM.YYYY date.
 CSV header is exactly (LF ending):
 
@@ -104,6 +117,19 @@ avoids negative zero. Nonfinite battery maps to 0,0. Main's R lines share
 `tab5_services_scaled` with CSV.
 
 ## Startup fault isolation
+
+Display/input start before optional storage/radio initialization. SD mount runs
+on its medium worker; root classification uses `f_opendir`/`FF_DIR` and
+`f_closedir`, never `f_getfree`. SD command timeout is capped at 1000 ms and
+the attempt uses a 4000 ms deadline to bound subsequent command dispatch. These
+are command/deadline checks, not a hard total wall-clock limit on SDK internals.
+Retry acceptance does not itself prove that a medium has mounted; inspect status.
+
+USB-A remains the MSC host. Ordinary passive storage through stock USB-C is
+unsupported: the published Tab5 schematic has fixed sink Rd on CC and an input
+VBUS path (sheets 4–5). USB-C retains the PC Serial/JTAG connection. See
+[release evidence and primary sources](docs/storage-1.6.15/README.md).
+No physical SD/USB or timing validation was performed for 1.6.15.
 
 USB host/MSC and network peripheral initialization failures are reported through
 storage/network status and do not fail service-core initialization. Main may keep

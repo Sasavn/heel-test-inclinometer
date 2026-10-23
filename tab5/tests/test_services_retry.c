@@ -10,9 +10,9 @@ int main(void) {
     tab5_services_config_t cfg={0};CHECK(tab5_services_init(&cfg)==ESP_OK);
     CHECK(auto_retry[0]&&auto_retry[1]);
     test_present[TAB5_SD]=false;
-    test_now=10000;CHECK(tab5_services_retry(TAB5_SD)==ESP_FAIL);
+    test_now=10000;CHECK(tab5_services_retry(TAB5_SD)==ESP_OK);CHECK(mount_requested[TAB5_SD]);storage_worker_step(TAB5_SD);CHECK(media[TAB5_SD].status.failed&&media[TAB5_SD].status.error==ESP_FAIL);
     CHECK(sd_retry.at_ms==10000&&sd_retry.wait_ms==2000);
-    test_now=12000;CHECK(tab5_services_retry(TAB5_SD)==ESP_FAIL);
+    test_now=12000;CHECK(tab5_services_retry(TAB5_SD)==ESP_OK);CHECK(mount_requested[TAB5_SD]);storage_worker_step(TAB5_SD);CHECK(media[TAB5_SD].status.failed&&media[TAB5_SD].status.error==ESP_FAIL);
     CHECK(sd_retry.wait_ms==4000);
     tab5_retry_backoff_t previous=sd_retry;
     tab5_medium_status_t before=media[TAB5_SD].status;
@@ -30,7 +30,7 @@ int main(void) {
     recording=files_busy=false;
     CHECK(tab5_services_set_auto_retry(TAB5_SD,false)==ESP_OK);
     test_present[TAB5_SD]=true;
-    CHECK(tab5_services_retry(TAB5_SD)==ESP_OK); /* Manual retry still works. */
+    CHECK(tab5_services_retry(TAB5_SD)==ESP_OK);CHECK(mount_requested[TAB5_SD]);storage_worker_step(TAB5_SD); /* Manual retry remains explicit while auto retry is off. */
     CHECK(media[0].status.mounted&&!auto_retry[0]&&sd_retry.next_wait_ms==2000);
     CHECK(tab5_services_set_auto_retry(TAB5_USB,false)==ESP_OK);
     CHECK(!auto_retry[1]);

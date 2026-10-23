@@ -1,0 +1,89 @@
+{
+  "verified_utc": "2026-10-23T07:56:34.243901+00:00",
+  "build_exit_code": 0,
+  "delivery_version": "1.6.15-esp32",
+  "source_sha256": {
+    "tab5/main/main.c": "8502bc71a7a2484c8a1794f0b012773cbd4cc6dba01a1c0d06c836853d4b91c4",
+    "tab5/main/tab5_services.c": "cb1dce977bf185c54b1c91821cddccffb04eaaffc2470f96ddec4de01d07f78f",
+    "tab5/main/tab5_services.h": "ad42169e9c7caf6ba1dc077f6d65196696ba0316e10d4044840fbcf13230fcc3",
+    "tab5/components/usb_host_msc/msc_vfs_owned.c": "b284ad280b2cedf6c93b08d8ca1de6d0195ac93d9224ffd4f59dac01ec4c78e8",
+    "tab5/main/native/native_ui.c": "0dee13b5fd02652656d6315830813445fe339676145f2bf34c4994308e642992",
+    "tab5/main/native/native_ui.h": "1dd8d7d3b216033490db7db9ac872404c53003490c444ea2a89b82c04134a590",
+    "tab5/main/tab5_ui.c": "b9d1434572c66b7e25de6c326224f62f8af2490b6f84402811aaa01d3d821c25",
+    "tab5/main/tab5_native_port.c": "44cec2695ae18aa5e5f8dc220d1b6dacedca8449a9ded3b7df6bd402d392a2dc",
+    "tab5/CMakeLists.txt": "130ca64d096cd89c76e7da26c5e8fd029ec62d4c1aec479a3a97ba383b60b433",
+    "tab5/main/idf_component.yml": "cbd0286a75684d032b704430127ff051089dd122e535e909d9e53f0eb5cd0e88"
+  },
+  "build_dir": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\build-rev3",
+  "sdkconfig": "C:/Projects/ClaudeExp/diplom_project_tab5/tab5/build-rev3/sdkconfig",
+  "package": {
+    "format": 1,
+    "board": "tab5",
+    "chip": "esp32p4",
+    "protocol": 2,
+    "version": "1.6.15-esp32",
+    "kind": "ota-app",
+    "size": 1443424,
+    "sha256": "07f13dae760be83230e0d65d926ea7d36e45f1b57af321a2f7fc0d65fdb2f10b",
+    "factory_parts": {
+      "0x2000": "bootloader.bin",
+      "0x20000": "krenomer-esp32.bin",
+      "0x8000": "partition-table.bin",
+      "0xf000": "ota_data_initial.bin"
+    },
+    "warning": "Untested on hardware; never send factory image to OTA",
+    "revision_min": 300,
+    "revision_max": 399,
+    "parts_sha256": {
+      "bootloader.bin": "e7955123d3f565b24e0fc0817b502902f462a24da648551bf065b2e8d497c0dd",
+      "krenomer-esp32.bin": "07f13dae760be83230e0d65d926ea7d36e45f1b57af321a2f7fc0d65fdb2f10b",
+      "partition-table.bin": "f1572c83b8e4718acde1887b9238701bc7a53f03afd086330432a3148b8165a3",
+      "ota_data_initial.bin": "7d2c7ac4888bfd75cd5f56e8d61f69595121183afc81556c876732fd3782c62f"
+    }
+  },
+  "package_verified": true,
+  "artifacts": {
+    "krenomer-esp32.elf": {
+      "path": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\build-rev3\\krenomer-esp32.elf",
+      "sha256": "6ecae02091f0c92e5f0ccd5974376768ae79ce63c2706e68e602a59e057d3f34",
+      "size": 16532604
+    },
+    "krenomer-esp32.bin": {
+      "path": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\build-rev3\\krenomer-esp32.bin",
+      "sha256": "07f13dae760be83230e0d65d926ea7d36e45f1b57af321a2f7fc0d65fdb2f10b",
+      "size": 1443424
+    },
+    "native-link-audit.json": {
+      "path": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\build-rev3\\native-link-audit.json",
+      "sha256": "ffd0cc1c7e06112dbb79cd1b3eeb865a089b69ff82c17b372ee2ea1202a6e3a8",
+      "size": 205
+    },
+    "native-compile-flags-proof.json": {
+      "path": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\build-rev3\\native-compile-flags-proof.json",
+      "sha256": "4f312a99142bfa107442a1a84bdcbb94f23f3529fddbcd6b75b87e865c8cb787",
+      "size": 41435
+    },
+    "fatfs-dependency-proof.json": {
+      "path": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\build-rev3\\fatfs-dependency-proof.json",
+      "sha256": "71c9c438b95fff535cbc93dd0afd6e3f5ef9449a8c527087c67653732b5ddac3",
+      "size": 12060
+    }
+  },
+  "logs": {
+    "stdout": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\build-rev3\\log\\idf_py_stdout_output_43900",
+    "stderr": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\build-rev3\\log\\idf_py_stderr_output_43900"
+  },
+  "msc_component": "C:/Projects/ClaudeExp/diplom_project_tab5/tab5/components/usb_host_msc",
+  "msc_fatfs_dependencies_verified": true,
+  "parent_verifiers": {
+    "fatfs": "C:\\Projects\\ClaudeExp\\tab5-feedback\\2026-10-23-storage\\fatfs-build-verification.json",
+    "packages": "C:\\Projects\\ClaudeExp\\tab5-feedback\\2026-10-23-storage\\package-verification.json"
+  },
+  "managed_sources_proof": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\build\\managed-sources-proof.json",
+  "lock": {
+    "sha256": "626c918ec0b684f514cd62586cb9cef0216b4150d6c714047d1bd5550a180b16",
+    "portable": false,
+    "note": "Manager-generated absolute MSC local path requires owner normalization before commit"
+  },
+  "no_device_access": true
+}

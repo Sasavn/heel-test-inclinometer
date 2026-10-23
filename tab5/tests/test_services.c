@@ -29,9 +29,14 @@ static void begin(void){char s[200];image_hash();snprintf(s,sizeof(s),"ota begin
 static void chunk(unsigned offset,unsigned n){char s[1100];int at=snprintf(s,sizeof(s),"ota chunk %u ",offset);for(unsigned i=0;i<n;i++)sprintf(s+at+i*2,"%02x",image[offset+i]);line(1,s);}
 static void upload(void){for(unsigned i=0;i<sizeof(image);i+=256)chunk(i,256);}
 static void reset_ota(void){abort_ota();memset(&ota,0,sizeof(ota));test_flash_fail=test_verify_fail=test_boot_fail=0;test_boot_selected=test_restarted=0;}
+/* Legacy scenario helpers now wait by pumping the REAL worker, never by
+ * restoring synchronous production init/retry/stop behavior. */
+static void pump_initial_media(void){test_now+=2500;storage_worker_step(TAB5_SD);storage_worker_step(TAB5_USB);}
+static int retry_and_complete(tab5_medium_t medium){int e=tab5_services_retry(medium);if(e!=ESP_OK)return e;storage_worker_step(medium);return media[medium].status.failed?media[medium].status.error:media[medium].status.mounted?ESP_OK:ESP_ERR_INVALID_STATE;}
+static void stop_and_drain(void){tab5_services_record_stop();unsigned guard=0;while(stopping&&guard++<DEPTH*2+8){storage_worker_step(TAB5_SD);storage_worker_step(TAB5_USB);}CHECK(!stopping);}
 int main(void){
  _mkdir("test-sd");_mkdir("test-usb");
- tab5_services_config_t cfg={0};CHECK(tab5_services_init(&cfg)==0);
+ tab5_services_config_t cfg={0};CHECK(tab5_services_init(&cfg)==0);pump_initial_media();
  memset(image,0,sizeof(image));image[0]=0xe9;image[1]=3;image[12]=0x12;image[15]=100;image[17]=0x8f;image[18]=1;uint32_t magic=0xabcd5432,segment_size=256;memcpy(image+28,&segment_size,4);memcpy(image+32,&magic,4);strcpy((char*)image+48,VERSION);strcpy((char*)image+80,"krenomer-esp32");
  tab5_service_sample_t s={.sensor=2,.date="01.06.2026",.time="09:05:07",.raw_x=-.46,.raw_y=1.25,.offset_x=.125,.battery=12.4,.ms=1234};char row[320];
  CHECK(tab5_services_format_csv(row,sizeof(row),&s)>0);CHECK(!strcmp(row,"01.06.2026;09:05:07;-0,46;1,25;0,125;0,000;-0,585;1,250;12,4;1234\n"));
@@ -66,18 +71,18 @@ int main(void){
  begin();upload();test_boot_fail=1;line(1,"ota end");CHECK(!test_boot_selected);reset_ota();
  CHECK(tab5_services_record_start("2026-10-21_M001")==0);
  line(1,"ota begin tab5 esp32p4 2 1.5.0-esp32 768 0000000000000000000000000000000000000000000000000000000000000000");CHECK(!strcmp(answer,"ERR ota busy"));
- CHECK(tab5_services_retry(0)!=0);CHECK(tab5_services_submit(&s)==0);media_step(0);media_step(1);CHECK(media[0].status.written==1 && media[1].status.written==1);
+ CHECK(retry_and_complete(0)!=0);CHECK(tab5_services_submit(&s)==0);media_step(0);media_step(1);CHECK(media[0].status.written==1 && media[1].status.written==1);
  test_lock_busy=1;CHECK(tab5_services_submit(&s)==ESP_ERR_NO_MEM);test_lock_busy=0;CHECK(!media[0].count && !media[1].count);
- test_present[0]=false;CHECK(tab5_services_submit(&s)==0);media_step(0);media_step(1);CHECK(media[0].status.failed && media[1].status.written==2);test_present[0]=true;CHECK(tab5_services_retry(0)!=0);tab5_services_record_stop();CHECK(tab5_services_retry(0)==0);
- CHECK(tab5_services_record_start("2026-10-21_M002")==0);CHECK(!media[0].status.written && !media[1].status.written && !media[0].status.dropped);test_fault[1]=ENOSPC;CHECK(tab5_services_submit(&s)==0);media_step(1);media_step(0);CHECK(media[1].status.failed && !media[0].status.failed);tab5_services_record_stop();test_fault[1]=0;CHECK(tab5_services_retry(1)==0);
- CHECK(tab5_services_record_start("2026-10-21_M003")==0);for(unsigned i=0;i<DEPTH;i++)CHECK(tab5_services_submit(&s)==0);CHECK(tab5_services_submit(&s)!=0);CHECK(media[0].status.dropped==1 && media[1].status.dropped==1);media_step(1);CHECK(tab5_services_submit(&s)==0);CHECK(media[0].status.dropped==2 && media[1].status.dropped==1);tab5_services_record_stop();
- CHECK(tab5_services_record_start("2026-10-21_M001")!=0);CHECK(media[0].status.error==EEXIST);CHECK(tab5_services_retry(0)==0);CHECK(tab5_services_retry(1)==0);
+ test_present[0]=false;CHECK(tab5_services_submit(&s)==0);media_step(0);media_step(1);CHECK(media[0].status.failed && media[1].status.written==2);test_present[0]=true;CHECK(retry_and_complete(0)!=0);stop_and_drain();CHECK(retry_and_complete(0)==0);
+ CHECK(tab5_services_record_start("2026-10-21_M002")==0);CHECK(!media[0].status.written && !media[1].status.written && !media[0].status.dropped);test_fault[1]=ENOSPC;CHECK(tab5_services_submit(&s)==0);media_step(1);media_step(0);CHECK(media[1].status.failed && !media[0].status.failed);stop_and_drain();test_fault[1]=0;CHECK(retry_and_complete(1)==0);
+ CHECK(tab5_services_record_start("2026-10-21_M003")==0);for(unsigned i=0;i<DEPTH;i++)CHECK(tab5_services_submit(&s)==0);CHECK(tab5_services_submit(&s)!=0);CHECK(media[0].status.dropped==1 && media[1].status.dropped==1);media_step(1);CHECK(tab5_services_submit(&s)==0);CHECK(media[0].status.dropped==2 && media[1].status.dropped==1);stop_and_drain();
+ CHECK(tab5_services_record_start("2026-10-21_M001")!=0);CHECK(media[0].status.error==EEXIST);CHECK(retry_and_complete(0)==0);CHECK(retry_and_complete(1)==0);
  line(1,"get 2026-10-21_M001_D2.CSV");CHECK(!strncmp(answer,"G,",2));unsigned guard=0;while(files_busy && guard++<100)tab5_services_poll(1,reply,NULL);CHECK(!files_busy && !strcmp(answer,"OK"));
  CHECK(received_bytes==final_bytes && received_crc==final_crc && received_bytes>0);
  FILE *large=fopen("test-sd/large.CSV","wb");CHECK(large!=NULL);uint32_t expected_crc=0;for(unsigned i=0;i<100000;i++){uint8_t byte=i%251;CHECK(fputc(byte,large)!=EOF);expected_crc=crc32_update(expected_crc,&byte,1);}fclose(large);
  line(2,"get large.CSV");guard=0;while(files_busy && guard++<1000){unsigned before=replies;tab5_services_poll(2,reply,NULL);CHECK(replies<=before+1);}CHECK(!files_busy && !strcmp(answer,"OK"));CHECK(received_bytes==100000 && final_bytes==100000 && received_crc==expected_crc && final_crc==expected_crc);
  line(2,"get large.CSV");transfer_cancel(0,0);tab5_services_poll(2,reply,NULL);CHECK(!strcmp(answer,"ERR media removed") && !files_busy);
- line(2,"get large.CSV");test_now+=5001;maintenance();CHECK(!files_busy);tab5_services_poll(2,reply,NULL);CHECK(!strcmp(answer,"ERR file timeout"));
+ line(2,"get large.CSV");test_now+=5001;maintenance();storage_worker_step(TAB5_USB);CHECK(!files_busy);tab5_services_poll(2,reply,NULL);CHECK(!strcmp(answer,"ERR file timeout"));
  line(1,"get ../bad");CHECK(!strcmp(answer,"ERR filename"));line(1,"files");tab5_services_disconnect(1);CHECK(!files_busy);
  line(1,"files");test_now+=5001;tab5_services_poll(1,reply,NULL);CHECK(!strcmp(answer,"ERR file timeout") && !files_busy);
  reset_ota();begin();upload();line(1,"ota end");CHECK(!strcmp(answer,"OK ota committed scheduled reboot"));CHECK(test_boot_selected==1);test_now+=10000;maintenance();CHECK(!test_restarted);tab5_services_response_flushed(1);test_now+=499;maintenance();CHECK(!test_restarted);test_now++;maintenance();CHECK(test_restarted==1);CHECK(tab5_services_confirm_boot()==0);

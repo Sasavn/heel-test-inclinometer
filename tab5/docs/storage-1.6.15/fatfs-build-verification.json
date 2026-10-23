@@ -1,0 +1,160 @@
+[
+  {
+    "build": "build",
+    "source": "config_guard.c",
+    "component": "C:/Projects/ClaudeExp/diplom_project_tab5/tab5/components/fatfs",
+    "macros": {
+      "FF_FS_EXFAT": 1,
+      "FF_USE_LFN": 3,
+      "FF_LFN_UNICODE": 2,
+      "FF_MAX_LFN": 255,
+      "CONFIG_FATFS_LFN_HEAP": 1
+    },
+    "headers": [
+      "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\build\\tab5-fatfs-generated\\ff.h",
+      "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\build\\tab5-fatfs-generated\\ffconf.h"
+    ],
+    "command_sha256": "33f28f4c35f72a6c63fc19dd9c05f55369e790b2396f1b1e17ae730634933997",
+    "result": "PASS"
+  },
+  {
+    "build": "build",
+    "source": "tab5_services.c",
+    "component": "C:/Projects/ClaudeExp/diplom_project_tab5/tab5/components/fatfs",
+    "macros": {
+      "FF_FS_EXFAT": 1,
+      "FF_USE_LFN": 3,
+      "FF_LFN_UNICODE": 2,
+      "FF_MAX_LFN": 255,
+      "CONFIG_FATFS_LFN_HEAP": 1
+    },
+    "headers": [
+      "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\build\\tab5-fatfs-generated\\ff.h",
+      "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\build\\tab5-fatfs-generated\\ffconf.h",
+      "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\build\\tab5-fatfs-generated\\diskio.h",
+      "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\build\\tab5-fatfs-generated\\ff.h"
+    ],
+    "command_sha256": "af6742de580ecc426a2ab5555be55f596d5833efd3e0b7dcf9920af72b450ebb",
+    "result": "PASS"
+  },
+  {
+    "build": "build",
+    "source": "vfs_fat.c",
+    "component": "C:/Projects/ClaudeExp/diplom_project_tab5/tab5/components/fatfs",
+    "macros": {
+      "FF_FS_EXFAT": 1,
+      "FF_USE_LFN": 3,
+      "FF_LFN_UNICODE": 2,
+      "FF_MAX_LFN": 255,
+      "CONFIG_FATFS_LFN_HEAP": 1
+    },
+    "headers": [
+      "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\build\\tab5-fatfs-generated\\ff.h",
+      "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\build\\tab5-fatfs-generated\\ffconf.h",
+      "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\build\\tab5-fatfs-generated\\diskio.h",
+      "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\build\\tab5-fatfs-generated\\ff.h"
+    ],
+    "command_sha256": "90cd4d851ab19173d2f60bc4a9f84a0d3095b0a72b61420ce01e86bb123c36ed",
+    "result": "PASS"
+  },
+  {
+    "build": "build",
+    "source": "diskio_sdmmc.c",
+    "component": "C:/Projects/ClaudeExp/diplom_project_tab5/tab5/components/fatfs",
+    "macros": {
+      "FF_FS_EXFAT": 1,
+      "FF_USE_LFN": 3,
+      "FF_LFN_UNICODE": 2,
+      "FF_MAX_LFN": 255,
+      "CONFIG_FATFS_LFN_HEAP": 1
+    },
+    "headers": [
+      "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\build\\tab5-fatfs-generated\\diskio.h",
+      "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\build\\tab5-fatfs-generated\\ff.h",
+      "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\build\\tab5-fatfs-generated\\ffconf.h",
+      "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\build\\tab5-fatfs-generated\\ffconf.h",
+      "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\build\\tab5-fatfs-generated\\ff.h"
+    ],
+    "command_sha256": "5ffed717868a43ce71dfbcdbf968fc64f94b8d7747c2e344cdd311f141fc59b8",
+    "result": "PASS"
+  },
+  {
+    "build": "build-rev3",
+    "source": "config_guard.c",
+    "component": "C:/Projects/ClaudeExp/diplom_project_tab5/tab5/components/fatfs",
+    "macros": {
+      "FF_FS_EXFAT": 1,
+      "FF_USE_LFN": 3,
+      "FF_LFN_UNICODE": 2,
+      "FF_MAX_LFN": 255,
+      "CONFIG_FATFS_LFN_HEAP": 1
+    },
+    "headers": [
+      "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\build-rev3\\tab5-fatfs-generated\\ff.h",
+      "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\build-rev3\\tab5-fatfs-generated\\ffconf.h"
+    ],
+    "command_sha256": "211ec33f66450b2bd28eeb516848861f7011317f65a486e5892e2aa03408724e",
+    "result": "PASS"
+  },
+  {
+    "build": "build-rev3",
+    "source": "tab5_services.c",
+    "component": "C:/Projects/ClaudeExp/diplom_project_tab5/tab5/components/fatfs",
+    "macros": {
+      "FF_FS_EXFAT": 1,
+      "FF_USE_LFN": 3,
+      "FF_LFN_UNICODE": 2,
+      "FF_MAX_LFN": 255,
+      "CONFIG_FATFS_LFN_HEAP": 1
+    },
+    "headers": [
+      "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\build-rev3\\tab5-fatfs-generated\\ff.h",
+      "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\build-rev3\\tab5-fatfs-generated\\ffconf.h",
+      "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\build-rev3\\tab5-fatfs-generated\\diskio.h",
+      "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\build-rev3\\tab5-fatfs-generated\\ff.h"
+    ],
+    "command_sha256": "dd4154c62fc9d6c7a44822feaf3055347d0c365ef6cfc1d589b06a42b50c1d93",
+    "result": "PASS"
+  },
+  {
+    "build": "build-rev3",
+    "source": "vfs_fat.c",
+    "component": "C:/Projects/ClaudeExp/diplom_project_tab5/tab5/components/fatfs",
+    "macros": {
+      "FF_FS_EXFAT": 1,
+      "FF_USE_LFN": 3,
+      "FF_LFN_UNICODE": 2,
+      "FF_MAX_LFN": 255,
+      "CONFIG_FATFS_LFN_HEAP": 1
+    },
+    "headers": [
+      "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\build-rev3\\tab5-fatfs-generated\\ff.h",
+      "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\build-rev3\\tab5-fatfs-generated\\ffconf.h",
+      "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\build-rev3\\tab5-fatfs-generated\\diskio.h",
+      "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\build-rev3\\tab5-fatfs-generated\\ff.h"
+    ],
+    "command_sha256": "4a4dfc1d914258987783b489dbb003be479b168c28f598bc9b6cb94959e2b59b",
+    "result": "PASS"
+  },
+  {
+    "build": "build-rev3",
+    "source": "diskio_sdmmc.c",
+    "component": "C:/Projects/ClaudeExp/diplom_project_tab5/tab5/components/fatfs",
+    "macros": {
+      "FF_FS_EXFAT": 1,
+      "FF_USE_LFN": 3,
+      "FF_LFN_UNICODE": 2,
+      "FF_MAX_LFN": 255,
+      "CONFIG_FATFS_LFN_HEAP": 1
+    },
+    "headers": [
+      "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\build-rev3\\tab5-fatfs-generated\\diskio.h",
+      "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\build-rev3\\tab5-fatfs-generated\\ff.h",
+      "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\build-rev3\\tab5-fatfs-generated\\ffconf.h",
+      "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\build-rev3\\tab5-fatfs-generated\\ffconf.h",
+      "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\build-rev3\\tab5-fatfs-generated\\ff.h"
+    ],
+    "command_sha256": "75bd38c4bac995a3f9d2dc2e5b480565d32a3d3157518f5e89280e4a274a5989",
+    "result": "PASS"
+  }
+]
