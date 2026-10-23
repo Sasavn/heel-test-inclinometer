@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <exception>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -27,7 +28,7 @@
 #include <imgui.h>
 #include <implot.h>
 
-#include "../core/FileBusy.hpp"
+#include "../core/ExportTarget.hpp"
 #include "../core/HeelReport.hpp"
 #include "../core/HeelProtocol.hpp"
 #include "../core/Png.hpp"
@@ -675,6 +676,9 @@ void App::TickProcess()
         proc_.projPending.reset();
         if (r.folder != proc_.outDir || pend || proc_.freshStart) // другой опыт: плечи и снятые замеры — заново (или из проекта)
         {
+            proc_.reportParent.clear();
+            proc_.reportDir.clear();
+            proc_.reportName[0] = 0;
             proc_.arm.clear();
             proc_.off.clear();
             proc_.rsManual.clear();
@@ -789,17 +793,38 @@ void App::TickProcess()
         const auto pos = proc_.pos;
         const int rec = proc_.rec;
         const auto s = ProcSettings();
-        const fs::path dir = text::PathFromUtf8(proc_.outDir);
+        const fs::path parent = text::PathFromUtf8(proc_.reportParent.empty() ? proc_.outDir : proc_.reportParent);
+        auto recordName = [](const heel::Measurement& m) {
+            return m.number > heel::kPcRunBase ? m.label : Fmt("M%03d", m.number);
+        };
+        std::string exportName = "Отчёт_Опыт";
+        if (!meas.empty())
+        {
+            exportName = "Отчёт_" + recordName(meas[cont ? static_cast<std::size_t>(rec) : 0]);
+            if (!cont && meas.size() > 1)
+                exportName += "_" + recordName(meas.back());
+        }
+        if (proc_.reportName[0])
+            exportName = proc_.reportName;
         // Полный отчёт: лист «Расчёт по шагам» — из тех же чисел, что окна «Подробнее»
         const bool full = settings_.reportFull;
         const steps::Steps stepsAll = full ? ProcSteps() : steps::Steps{};
-        proc_.save = std::async(std::launch::async, [=]() {
-            std::vector<std::string> out;
-            std::error_code ec;
-            fs::create_directories(dir, ec);
+        proc_.save = std::async(std::launch::async, [=]() -> ReportResult {
+            ReportResult result;
+            auto& out = result.lines;
+            try
+            {
+            const auto target = exporttarget::Reserve(parent, exportName);
+            if (!target)
+            {
+                out.push_back("✗ Не удалось создать папку отчёта: " + target.error);
+                return result;
+            }
+            const fs::path dir = target.dir;
+            result.dir = text::PathToUtf8(dir);
             std::string warn, err;
-            // Книга или картинка открыта в другой программе (Excel держит книгу) — весь комплект под следующим
-            // свободным номером: «Отчет_Кренование (2).xlsx», «График_Нос (2).png», …
+            // Each export owns a freshly reserved directory. Existing report
+            // sets and source files are never reused, truncated or removed.
             std::vector<std::string> names = {heel::kReportName};
             if (ctrlFrame)
                 names.push_back(heel::kControlPlotName);
@@ -810,16 +835,15 @@ void App::TickProcess()
                 if (posFrames[post])
                     names.push_back(posName[post]);
             }
-            const int n = std::max(1, filebusy::FreeSuffix(dir, names));
-            const std::string reportName = filebusy::SuffixName(heel::kReportName, n);
-            if (n > 1)
+            const auto unique = exporttarget::UniqueFileNames(names);
+            const std::string& reportName = unique.front();
+            std::size_t nextName = 1;
+            const std::string controlName = ctrlFrame ? unique[nextName++] : std::string{};
+            std::string plotFiles[heel::kMaxPosts], posFiles[heel::kMaxPosts];
+            for (int post = 0; post < heel::kMaxPosts; post++)
             {
-                std::string busy;
-                for (const auto& nm : names)
-                    if (filebusy::Busy(dir / text::PathFromUtf8(nm)))
-                        busy += (busy.empty() ? "" : ", ") + nm;
-                out.push_back("⚠ Отчёт открыт в другой программе (" + busy + ") — сохранено как " + reportName +
-                              (names.size() > 1 ? " и картинки с тем же номером (" + std::to_string(n) + ")" : std::string()));
+                if (frames[post]) plotFiles[post] = unique[nextName++];
+                if (posFrames[post]) posFiles[post] = unique[nextName++];
             }
             // Картинки: PNG-файлами рядом и в книгу (лист «Протокол» — контроль и запись основного поста, «Графики» — все)
             std::vector<heel::ReportImage> images;
@@ -840,6 +864,8 @@ void App::TickProcess()
                 {
                     std::ofstream f(dir / text::PathFromUtf8(file), std::ios::binary | std::ios::trunc);
                     f.write(reinterpret_cast<const char*>(im.png.data()), static_cast<std::streamsize>(im.png.size()));
+                    f.flush();
+                    f.close();
                     ok = static_cast<bool>(f);
                 }
                 if (ok)
@@ -849,32 +875,63 @@ void App::TickProcess()
                 if (!im.png.empty())
                     images.push_back(std::move(im));
             };
-            picture(ctrlFrame, filebusy::SuffixName(heel::kControlPlotName, n),
+            picture(ctrlFrame, controlName,
                     "График контроля замеров: кренящий момент – tg θ (п. 5.5 прил. 3)", true, false, "График контроля");
             for (int post = 0; post < heel::kMaxPosts; post++)
             {
                 const std::string pn = s.PostName(post);
-                picture(frames[post], filebusy::SuffixName(plotName[post], n),
+                picture(frames[post], plotFiles[post],
                         (cont ? "Запись крена с положениями груза — пост «" : "Крен по замерам — пост «") + pn + "»", false,
                         true, "График");
-                picture(posFrames[post], filebusy::SuffixName(posName[post], n), "Положения крупно — пост «" + pn + "»",
+                picture(posFrames[post], posFiles[post], "Положения крупно — пост «" + pn + "»",
                         false, false, "Положения");
             }
             const auto sheets = heel::BuildBook(s, *files, meas, cont, rec, pos, sum, rsCase, info, images, &warn,
                                                 full ? &stepsAll : nullptr);
-            const std::size_t at = n > 1 ? 1 : 0; // после строки «⚠ … сохранено как …»
             if (xlsx::Write(dir / text::PathFromUtf8(reportName), sheets, &err))
-                out.insert(out.begin() + static_cast<std::ptrdiff_t>(at), "✓ Отчёт сохранён: " + reportName);
+                out.insert(out.begin(), "✓ Отчёт сохранён: " + reportName);
             else
-                out.insert(out.begin() + static_cast<std::ptrdiff_t>(at), "✗ " + reportName + " не сохранён: " + err);
+                out.insert(out.begin(), "✗ " + reportName + " не сохранён: " + err);
             if (!warn.empty())
                 out.push_back(warn);
-            return out;
+            }
+            catch (const std::bad_alloc&)
+            {
+                out.push_back("✗ Недостаточно памяти для отчёта. Уже созданные файлы сохранены в папке комплекта.");
+            }
+            catch (const std::exception& e)
+            {
+                out.push_back(std::string("✗ Ошибка сохранения отчёта: ") + e.what());
+            }
+            catch (...)
+            {
+                out.push_back("✗ Неизвестная ошибка сохранения отчёта");
+            }
+            return result;
         });
     }
     if (proc_.save.valid() && proc_.save.wait_for(0s) == std::future_status::ready)
     {
-        const auto lines = proc_.save.get();
+        ReportResult saved;
+        try
+        {
+            saved = proc_.save.get();
+        }
+        catch (const std::exception& e)
+        {
+            saved.lines.push_back(std::string("✗ Ошибка фонового сохранения отчёта: ") + e.what());
+        }
+        catch (...)
+        {
+            saved.lines.push_back("✗ Неизвестная ошибка фонового сохранения отчёта");
+        }
+        const auto& lines = saved.lines;
+        if (!saved.dir.empty())
+        {
+            proc_.reportDir = saved.dir;
+            ProcLog("Папка отчёта: " + Shown(saved.dir));
+        }
+        const std::string noticeDir = !saved.dir.empty() ? saved.dir : proc_.reportParent.empty() ? proc_.outDir : proc_.reportParent;
         bool ok = true;
         std::string failed;
         for (const auto& l : lines)
@@ -889,15 +946,9 @@ void App::TickProcess()
         // Не молчать: ошибка и «сохранено под другим именем» — заметным сообщением с «Открыть папку» (журнал — на
         // вкладке, его не видно)
         if (!ok)
-            Notify("Отчёт сохранён не полностью:\n" + failed, 2, 12000, proc_.outDir);
-        else if (!lines.empty() && lines.front().rfind("⚠", 0) == 0)
-        {
-            const std::string& l = lines.front();
-            const std::size_t k = l.find("сохранено как ");
-            Notify("Отчёт открыт в другой программе — " + (k == std::string::npos ? l : l.substr(k)), 0, 12000, proc_.outDir);
-        }
+            Notify("Отчёт сохранён не полностью:\n" + failed, 2, 12000, noticeDir);
         else
-            Notify("Отчёт и графики сохранены в папку " + Shown(proc_.outDir), 1, 6000, proc_.outDir);
+            Notify("Отчёт и графики сохранены в папку " + Shown(saved.dir), 1, 10000, noticeDir);
     }
     if (proc_.dirty && !proc_.load.valid())
         ProcRecompute();
@@ -932,7 +983,7 @@ void App::ProcParams(float w)
             ImGui::SetTooltip("Читаются все *.CSV и *.TXT папки: формат узнаётся по содержимому (все прошивки, файлы\n"
                               "после Excel). Имена «ГГГГ-ММ-ДД_MNNN_Dk.CSV», «M_NNN_k.CSV», «M_NNN.CSV» — номер замера\n"
                               "и датчик; записи на ПК «…_PC_Dk.CSV» и файлы с другими именами — каждый свой замер.\n"
-                              "Сюда же сохраняется отчёт.");
+                              "Отчёт сохраняется отдельным комплектом в новой подпапке; другую папку можно выбрать в меню отчёта.");
         ImGui::SameLine(0, S(12));
         const float btnW = S(130) + S(8); // «Записи ▼»
         ImGui::SetNextItemWidth(std::max(S(120), right - ImGui::GetCursorScreenPos().x - btnW));
@@ -2683,7 +2734,8 @@ void App::ProcessSetSensorInvert(int key, bool inverted)
     SaveSettingsSoon();
     ProcApplyInvert();
     if (proc_.files)
-        ProcLog(heel::SensorName(key) + (inverted ? ": знак обратный (ось +X — к левому борту)" : ": знак прямой"));
+        ProcLog(SensorTitle(key) + ": ось " + (settings_.heelAxis == 1 ? "Y" : "X") +
+                (inverted ? ": реверс угла включён" : ": реверс угла выключен"));
     proc_.dirty = true;
 }
 
@@ -2769,14 +2821,15 @@ void App::ProcRefreshLogNames()
 // «Датчики: Д2 [Нос ▼]  Д3 [Корма ▼]» — название поста каждого датчика (своё или из списка) и «учитывать».
 void App::ProcSensorNames(float right, const std::function<void(float)>& flow)
 {
-    (void) right;
     const std::vector<int> keys = proc_.keys; // копия: смена учёта пересобирает proc_.keys
     if (keys.empty())
         return;
     const float fw = S(128);
     float need = ImGui::CalcTextSize("Датчики:").x;
     for (const int k : keys)
-        need += S(12) + ImGui::CalcTextSize(heel::SensorShort(k).c_str()).x + S(6) + fw + ImGui::GetFrameHeight();
+        need += S(12) + ImGui::CalcTextSize(heel::SensorShort(k).c_str()).x + S(6) + fw +
+                ImGui::GetFrameHeight() * 2 + S(6) + ImGui::CalcTextSize("Реверс угла (X)").x +
+                ImGui::GetStyle().ItemInnerSpacing.x;
     flow(need);
     ImGui::BeginGroup();
     ImGui::AlignTextToFramePadding();
@@ -2788,7 +2841,13 @@ void App::ProcSensorNames(float right, const std::function<void(float)>& flow)
     bool regroup = false;
     for (const int k : keys)
     {
-        ImGui::SameLine(0, S(12));
+        // Keep a post's name and reversal together, wrapping inside the sensor group.
+        const float entryW = ImGui::CalcTextSize(heel::SensorShort(k).c_str()).x + S(6) + fw +
+                             ImGui::GetFrameHeight() * 2 + S(6) +
+                             ImGui::CalcTextSize("Реверс угла (X)").x + ImGui::GetStyle().ItemInnerSpacing.x;
+        if (ImGui::GetItemRectMax().x + S(12) + entryW <= right)
+            ImGui::SameLine(0, S(12));
+        ImGui::BeginGroup();
         ImGui::AlignTextToFramePadding();
         const bool off = proc_.skip.count(k) > 0;
         const int addr = k >= 100 ? k - 100 : k;
@@ -2835,13 +2894,6 @@ void App::ProcSensorNames(float right, const std::function<void(float)>& flow)
                     proc_.dirty = true;
                 }
             ImGui::Separator();
-            bool inv = proc_.invert.count(k) > 0;
-            if (ui::Checkbox("Обратный знак (ось +X — к левому борту)", &inv))
-                ProcessSetSensorInvert(k, inv);
-            if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("Датчик поставлен «задом наперёд»: крен на правый борт он показывает с минусом.\n"
-                                  "Углы его файлов (X и Y) берутся с обратным знаком — файлы не меняются.\n"
-                                  "Проверка: груз к правому борту должен давать крен «+» (правый борт).");
             bool use = !off;
             if (ui::Checkbox("Учитывать в расчёте", &use))
             {
@@ -2853,7 +2905,20 @@ void App::ProcSensorNames(float right, const std::function<void(float)>& flow)
             }
             ImGui::EndPopup();
         }
+        ImGui::SameLine(0, S(6));
+        bool inv = proc_.invert.count(k) > 0;
+        const char* axis = settings_.heelAxis == 1 ? "Y" : "X";
+        const std::string reverseLabel = std::string("Реверс угла (") + axis + ")";
+        if (ui::Checkbox(reverseLabel.c_str(), &inv))
+            ProcessSetSensorInvert(k, inv);
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Пост: %s. Выбранная ось: %s.\n"
+                              "Включите, если крен влево положительный, а вправо отрицательный.\n"
+                              "Реверс меняет знак углов этого датчика (X и Y) один раз; исходные файлы не меняются.\n"
+                              "После реверса: правый борт — плюс, левый — минус. Ноль остаётся нулём.",
+                              SensorTitle(k).c_str(), axis);
         ImGui::PopID();
+        ImGui::EndGroup();
     }
     ImGui::EndGroup();
     if (regroup)

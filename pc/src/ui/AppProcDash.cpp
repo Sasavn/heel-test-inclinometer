@@ -162,8 +162,8 @@ void App::ProcHeader(float w)
         ProcessSaveReport();
     if (ImGui::IsItemHovered() && !saving && canSave)
         ImGui::SetTooltip("Сохранить отчёт (Ctrl+R; полный — Ctrl+Shift+R)\n"
-                          "В папку с файлами: %s (лист «Протокол» с графиками, «Графики», таблицы, «Проверки»%s),\n"
-                          "картинки графиков — PNG рядом. Краткий / полный — стрелка рядом",
+                          "В новую отдельную папку опыта: %s (лист «Протокол» с графиками, «Графики», таблицы, «Проверки»%s),\n"
+                          "картинки графиков — PNG рядом. Папку и краткий / полный отчёт можно выбрать стрелкой",
                           heel::kReportName, settings_.reportFull ? ", «Расчёт по шагам»" : "");
     ImGui::SameLine(0, S(2));
     const ImVec2 sm0 = ImGui::GetCursorScreenPos();
@@ -192,6 +192,26 @@ void App::ProcHeader(float w)
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("Краткий и ещё лист «Расчёт по шагам»: исходные данные → уровни положений → Δθ по приборам →\n"
                               "h_i → h_k → 6.6.1 … 6.6.5 → поправки → итог; формулы, подстановка чисел, пункты Правил");
+        ImGui::Separator();
+        ImGui::SetNextItemWidth(S(270));
+        ImGui::InputTextWithHint("Имя комплекта", "по имени замеров", proc_.reportName, sizeof(proc_.reportName));
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Имя новой папки отчёта. Если имя уже занято, добавится номер; старые файлы сохранятся.");
+        if (ImGui::MenuItem("Сохранить в другую папку…"))
+        {
+            std::string folder = proc_.reportParent.empty() ? proc_.outDir : proc_.reportParent;
+            if (dialogs::PickFolder(folder, L"Где создать отдельную папку отчёта"))
+            {
+                ProcessSetReportFolder(folder);
+                ProcessSaveReport();
+            }
+        }
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("В выбранной папке создаётся новый комплект по имени замеров. Старые файлы не заменяются.");
+        if (ImGui::MenuItem("Рядом с записями", nullptr, proc_.reportParent.empty()))
+            ProcessSetReportFolder("");
+        if (ImGui::MenuItem("Открыть папку последнего отчёта", nullptr, false, !proc_.reportDir.empty()))
+            dialogs::OpenFolder(proc_.reportDir);
         if (proc_.saveMenu < 0)
             ImGui::CloseCurrentPopup();
         ImGui::EndPopup();

@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -93,6 +94,8 @@ public:
     // Ячейка (c0…c1 — объединение) со стилем; у объединённых — стиль во всех (рамка по всему прямоугольнику).
     void Put(int r, int c0, int c1, Cell v, const Style& st)
     {
+        if (r < 0 || static_cast<std::size_t>(r) >= sh_.rows.size() || c0 < 0 || c1 < c0 || c1 >= cols_)
+            throw std::out_of_range("report grid cell outside its row");
         auto& row = sh_.rows[static_cast<std::size_t>(r)];
         if (static_cast<int>(row.size()) <= c1)
             row.resize(static_cast<std::size_t>(c1) + 1);
@@ -150,11 +153,25 @@ public:
     };
     int Row(const std::vector<Col>& cells, double height = 0)
     {
+        // A table can gain columns (e.g. distances from a side as well as
+        // centreline arms). Reserve all of them before writing any cell.
+        std::size_t needed = 0;
+        for (const Col& x : cells)
+        {
+            if (x.span <= 0 || static_cast<std::size_t>(x.span) > 16384 - needed)
+                throw std::length_error("invalid report grid width");
+            needed += static_cast<std::size_t>(x.span);
+        }
+        if (needed > static_cast<std::size_t>(cols_))
+        {
+            cols_ = static_cast<int>(needed);
+            sh_.widths.resize(needed, kColWidth);
+        }
         const int r = NewRow(height);
         int c = 0;
         for (const Col& x : cells)
         {
-            const int c1 = std::min(cols_ - 1, c + x.span - 1);
+            const int c1 = c + x.span - 1;
             Put(r, c, c1, x.v, x.st);
             c = c1 + 1;
         }
@@ -628,7 +645,8 @@ inline std::vector<xlsx::Sheet> BuildBook(const Settings& s, const std::vector<F
 
     // ---------------- Протокол
     xlsx::Sheet pr("Протокол");
-    const int G = std::max(kGridCols, 8 + np);
+    const bool side = s.armFrom != 0 && s.B > 0 && !s.rsGroupMode;
+    const int G = std::max(kGridCols, 8 + np + (side && cont ? 1 : 0));
     {
         Grid g(pr, G);
         g.Title("Протокол обработки опыта кренования");
@@ -698,7 +716,7 @@ inline std::vector<xlsx::Sheet> BuildBook(const Settings& s, const std::vector<F
                 for (const Measurement& m : ms)
                     look(m.post[p].file);
             sensors += (sensors.empty() ? "" : "; ") + SensorShort(key) + " — «" + s.PostName(p) + "», знак " +
-                       (inv ? "обратный (ось +X — к ЛБ)" : "прямой");
+                       (inv ? std::string("обратный (реверс угла по оси ") + (s.axis == 0 ? "X" : "Y") + ")" : "прямой");
         }
         g.KV("Датчики (посты)", xlsx::Text(sensors), S(false, 0, true, true, 1), 4, np > 2 ? 30 : 0);
         g.KV("Крен", xlsx::Text(std::string("ось ") + (s.axis == 0 ? "X (CalcX)" : "Y (CalcY)") +
@@ -773,7 +791,6 @@ inline std::vector<xlsx::Sheet> BuildBook(const Settings& s, const std::vector<F
             }
         g.Gap();
         g.Title(cont ? "Положения груза" : "Замеры", 12);
-        const bool side = s.armFrom != 0 && s.B > 0 && !s.rsGroupMode; // плечи вводились от борта — оба столбца
         {
             std::vector<Grid::Col> h = {H("№"), H(cont ? "Участок, с" : "Файл", 2)};
             if (side)

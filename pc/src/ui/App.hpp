@@ -6,6 +6,7 @@
 // кадрах; скачивание файлов и перепрошивка — конечные автоматы, которые двигает Tick() (и при свёрнутом окне).
 #include <atomic>
 #include <cstdint>
+#include <cstdio>
 #include <ctime>
 #include <future>
 #include <functional>
@@ -32,7 +33,7 @@ struct ImVec4;
 namespace ui
 {
 
-inline constexpr const char* kAppVersion = "1.8.2";
+inline constexpr const char* kAppVersion = "1.8.3";
 
 enum class Page
 {
@@ -145,6 +146,12 @@ public:
         ProcRefreshLogNames();
     }
     void ProcessSaveReport();
+    void ProcessSetReportFolder(const std::string& folder) { proc_.reportParent = folder; }
+    void ProcessSetReportName(const std::string& name)
+    {
+        std::snprintf(proc_.reportName, sizeof(proc_.reportName), "%s", name.c_str());
+    }
+    const std::string& ProcessReportDir() const { return proc_.reportDir; }
     const heel::Summary& ProcessSummary() const { return proc_.sum; }
     std::size_t ProcessMeasurements() const { return proc_.meas.size(); }
     bool ProcessContinuous() const { return proc_.mode == 1 && proc_.rec >= 0; } // «одна запись — весь опыт»
@@ -552,12 +559,19 @@ private:
         bool focusInput = false;
     } term_;
 
+    struct ReportResult
+    {
+        std::vector<std::string> lines;
+        std::string dir;
+    };
     // Обработка
     struct
     {
         char dir[1024] = {};                                  // папка с файлами замеров
         std::vector<std::string> picked;                      // выбранные файлы (пусто — все *.CSV папки)
-        std::string outDir;                                   // папка прочитанных файлов — туда отчёт
+        std::string outDir;                                   // папка прочитанных файлов
+        std::string reportParent, reportDir;                  // выбранная папка и последний комплект отчёта
+        char reportName[256] = {};                            // пусто — имя по замерам
         std::shared_ptr<const std::vector<heel::File>> files; // прочитанные файлы (обращённые датчики — с обратным знаком)
         std::shared_ptr<const std::vector<heel::File>> filesRaw; // как прочитаны
         std::set<int> invert;                                 // датчики с обратным знаком (ось +X — к ЛБ)
@@ -583,7 +597,7 @@ private:
         std::future<heel::Loaded> load;
         std::shared_ptr<std::atomic<int>> loadDone;
         int loadTotal = 0;
-        std::future<std::vector<std::string>> save; // отчёт: строки для журнала
+        std::future<ReportResult> save; // отчёт: строки для журнала и папка комплекта
         bool saveRequested = false;                 // картинки графиков — в Tick, между кадрами
         int show = 0;                               // графики: 0 — нос, 1 — корма
         bool opened = false, dirty = false, logScroll = false;
