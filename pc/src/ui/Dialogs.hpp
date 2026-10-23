@@ -16,7 +16,7 @@
 namespace dialogs
 {
 
-inline bool PickFolder(std::string& path)
+inline bool PickFolder(std::string& path, const wchar_t* title = L"Папка для файлов замеров")
 {
 #ifdef _WIN32
     bool ok = false;
@@ -26,7 +26,7 @@ inline bool PickFolder(std::string& path)
         DWORD opts = 0;
         dlg->GetOptions(&opts);
         dlg->SetOptions(opts | FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM | FOS_PATHMUSTEXIST);
-        dlg->SetTitle(L"Папка для файлов замеров");
+        dlg->SetTitle(title);
         if (!path.empty())
         {
             IShellItem* start = nullptr;
@@ -56,6 +56,7 @@ inline bool PickFolder(std::string& path)
     return ok;
 #else
     (void) path;
+    (void) title;
     return false;
 #endif
 }

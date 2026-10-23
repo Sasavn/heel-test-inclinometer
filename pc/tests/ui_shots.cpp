@@ -447,6 +447,49 @@ int main(int argc, char** argv)
         CHECK(app.ProcessOpenProject(reportProject));
         waitBusy();
         st.Run(1000);
+        if (_wgetenv(L"KRENOMER_M025_DIAGNOSTIC"))
+        {
+            SECTION("M025 manual diagnostic: NOT an experimental h result");
+            CHECK(app.ProcessAxis() == 1);
+            CHECK(app.ProcessPositions().size() == 9);
+            const auto direct = app.ProcessPositions();
+            app.ProcessSetSensorInvert(2, true);
+            app.ProcessSetSensorInvert(3, true);
+            app.ProcessSetShip(100.0, 1.0); // DIAGNOSTIC values only: actual D/P/B unknown.
+            app.ProcessSetArmFrom(1, 600.0);
+            const double left[] = {231.42,212.63,202.14,188.93,170.63,242.11,253.24,262.40,271.89};
+            for (int i = 0; i < 9; ++i) app.ProcessSetPositionArmInput(i, left[i]);
+            st.Run(500);
+            for (std::size_t i = 0; i < direct.size() && i < app.ProcessPositions().size(); ++i)
+                for (int post = 0; post < 2; ++post)
+                    CHECK_NEAR(app.ProcessPositions()[i].Level(post), -direct[i].Level(post), 1e-9,
+                               "M025 selected Y reversed once");
+            const auto saved = fs::path(g_out) / "M025_DIAGNOSTIC_manual.krenomer";
+            CHECK(app.ProcessSaveProject(text::PathToUtf8(saved)));
+            CHECK(app.ProcessOpenProject(text::PathToUtf8(saved)));
+            waitBusy(); st.Run(500);
+            CHECK(app.ProcessAxis() == 1 && app.ProcessSensorInverted(2) && app.ProcessSensorInverted(3));
+            CHECK(app.ProcessPositions().size() == 9);
+            fs::create_directories(fs::path(g_out) / "reports", ec);
+            app.ProcessSetReportFolder(text::PathToUtf8(fs::path(g_out) / "reports"));
+            std::ofstream manifest(fs::path(g_out) / "M025_DIAGNOSTIC_exports.txt", std::ios::binary);
+            manifest << "DIAGNOSTIC ONLY. Actual D/P/B unknown; test D=100 kg P=1 kg B=600 mm.\n"
+                        "Y; both posts reversed once; arms from port side. Nine MANUAL settled interiors from analysis-detector/REPORT.md.\n"
+                        "Not automatic detection; h is NOT an experimental result.\n";
+            for (int full = 0; full < 2; ++full)
+            {
+                app.ProcessSetReportFull(full != 0);
+                app.ProcessSetReportName(full ? "Техническая проверка M025 НЕ РЕЗУЛЬТАТ ОПЫТА полный" :
+                                               "Техническая проверка M025 НЕ РЕЗУЛЬТАТ ОПЫТА краткий");
+                app.ProcessSaveReport(); st.Run(100); waitBusy(); st.Run(300);
+                const auto dir = text::PathFromUtf8(app.ProcessReportDir());
+                CHECK(!dir.empty());
+                CHECK(fs::file_size(dir / L"Отчет_Кренование.xlsx", ec) > 10000);
+                manifest << (full ? "full=" : "brief=") << text::PathToUtf8(dir) << "\n";
+                st.Shot(full ? "M025_DIAGNOSTIC_full" : "M025_DIAGNOSTIC_brief");
+            }
+            return TestSummary();
+        }
         std::printf("h от начального %.5f (МНК %.5f), основной %.5f, h_k %.5f\n", app.ProcessPositionsSummary().h,
                     app.ProcessPositionsSummary().ls.h, app.ProcessRs().hMain, app.ProcessRs().r.hk);
         for (const auto& q : app.ProcessPositions())
@@ -737,12 +780,12 @@ int main(int argc, char** argv)
         wait();
         CHECK(!app.ProcessBusy());
         for (const wchar_t* f : {L"Отчет_Кренование.xlsx", L"График_Нос.png", L"График_Корма.png"})
-            CHECK_MSG(fs::file_size(dir / f, ec) > 10000, "нет файла отчёта %s", text::PathToUtf8(f).c_str());
-        fs::copy_file(dir / L"График_Нос.png", fs::path(g_out) / "18_process_export_bow.png",
+            CHECK_MSG(fs::file_size(text::PathFromUtf8(app.ProcessReportDir()) / f, ec) > 10000, "нет файла отчёта %s", text::PathToUtf8(f).c_str());
+        fs::copy_file(text::PathFromUtf8(app.ProcessReportDir()) / L"График_Нос.png", fs::path(g_out) / "18_process_export_bow.png",
                       fs::copy_options::overwrite_existing, ec);
-        fs::copy_file(dir / L"График_Корма.png", fs::path(g_out) / "18_process_export_stern.png",
+        fs::copy_file(text::PathFromUtf8(app.ProcessReportDir()) / L"График_Корма.png", fs::path(g_out) / "18_process_export_stern.png",
                       fs::copy_options::overwrite_existing, ec);
-        fs::copy_file(dir / L"Отчет_Кренование.xlsx", fs::path(g_out) / "18_process_report.xlsx",
+        fs::copy_file(text::PathFromUtf8(app.ProcessReportDir()) / L"Отчет_Кренование.xlsx", fs::path(g_out) / "18_process_report.xlsx",
                       fs::copy_options::overwrite_existing, ec);
         st.Shot("18_process_saved", true);
     }
@@ -793,10 +836,10 @@ int main(int argc, char** argv)
         st.Run(100);
         wait();
         for (const wchar_t* f : {L"Отчет_Кренование.xlsx", L"График_Нос.png"})
-            CHECK_MSG(fs::file_size(dir / f, ec) > 10000, "нет файла отчёта %s", text::PathToUtf8(f).c_str());
-        fs::copy_file(dir / L"График_Нос.png", fs::path(g_out) / "19_process_continuous_export.png",
+            CHECK_MSG(fs::file_size(text::PathFromUtf8(app.ProcessReportDir()) / f, ec) > 10000, "нет файла отчёта %s", text::PathToUtf8(f).c_str());
+        fs::copy_file(text::PathFromUtf8(app.ProcessReportDir()) / L"График_Нос.png", fs::path(g_out) / "19_process_continuous_export.png",
                       fs::copy_options::overwrite_existing, ec);
-        fs::copy_file(dir / L"Отчет_Кренование.xlsx", fs::path(g_out) / "19_process_continuous_report.xlsx",
+        fs::copy_file(text::PathFromUtf8(app.ProcessReportDir()) / L"Отчет_Кренование.xlsx", fs::path(g_out) / "19_process_continuous_report.xlsx",
                       fs::copy_options::overwrite_existing, ec);
 
         // Правила РС на синтетике: плечи со знаком под h = 0,8 м по табл. 6.5, перенос 5 записан на 12 % длиннее —
@@ -830,10 +873,10 @@ int main(int argc, char** argv)
             app.ProcessSaveReport();
             st.Run(100);
             wait();
-            CHECK_MSG(fs::file_size(dir / L"График_контроля.png", ec) > 10000, "нет графика контроля");
-            fs::copy_file(dir / L"График_контроля.png", fs::path(g_out) / "26_rules_control_export.png",
+            CHECK_MSG(fs::file_size(text::PathFromUtf8(app.ProcessReportDir()) / L"График_контроля.png", ec) > 10000, "нет графика контроля");
+            fs::copy_file(text::PathFromUtf8(app.ProcessReportDir()) / L"График_контроля.png", fs::path(g_out) / "26_rules_control_export.png",
                           fs::copy_options::overwrite_existing, ec);
-            fs::copy_file(dir / L"Отчет_Кренование.xlsx", fs::path(g_out) / "26_rules_report.xlsx",
+            fs::copy_file(text::PathFromUtf8(app.ProcessReportDir()) / L"Отчет_Кренование.xlsx", fs::path(g_out) / "26_rules_report.xlsx",
                           fs::copy_options::overwrite_existing, ec);
             app.ProcessSetView(0);
         }
@@ -883,11 +926,11 @@ int main(int argc, char** argv)
         app.ProcessSaveReport();
         st.Run(100);
         wait();
-        fs::copy_file(real / L"График_Нос.png", fs::path(g_out) / "21_process_real_export.png",
+        fs::copy_file(text::PathFromUtf8(app.ProcessReportDir()) / L"График_Нос.png", fs::path(g_out) / "21_process_real_export.png",
                       fs::copy_options::overwrite_existing, ec);
-        fs::copy_file(real / L"Положения_Нос.png", fs::path(g_out) / "22_process_positions_export.png",
+        fs::copy_file(text::PathFromUtf8(app.ProcessReportDir()) / L"Положения_Нос.png", fs::path(g_out) / "22_process_positions_export.png",
                       fs::copy_options::overwrite_existing, ec);
-        CHECK_MSG(fs::file_size(real / L"Положения_Нос.png", ec) > 10000, "нет картинки положений");
+        CHECK_MSG(fs::file_size(text::PathFromUtf8(app.ProcessReportDir()) / L"Положения_Нос.png", ec) > 10000, "нет картинки положений");
         // Положение 2 крупно: исходный сигнал, обработанный (медиана + EMA), среднее по обработанному
         app.ProcessSelectPosition(1);
         st.Run(7000); // уведомление о сохранении погасло
@@ -1010,7 +1053,7 @@ int main(int argc, char** argv)
         app.ProcessSaveReport();
         st.Run(100);
         wait();
-        fs::copy_file(vd / L"Отчет_Кренование.xlsx", fs::path(g_out) / "28_vodnik_report.xlsx",
+        fs::copy_file(text::PathFromUtf8(app.ProcessReportDir()) / L"Отчет_Кренование.xlsx", fs::path(g_out) / "28_vodnik_report.xlsx",
                       fs::copy_options::overwrite_existing, ec);
         app.ProcessSetView(0);
         app.ProcessSetRsGroupMode(false);
@@ -1415,50 +1458,67 @@ int main(int argc, char** argv)
             st.Run(300);
             st.Shot("29_m021_control", true);
             app.ProcessSetView(0);
+            // Each post reverses once from raw data; toggling off restores the same levels.
+            const auto directPositions = app.ProcessPositions();
+            for (int key : {2, 3}) app.ProcessSetSensorInvert(key, true);
+            st.Run(300);
+            CHECK(app.ProcessSensorInverted(2) && app.ProcessSensorInverted(3));
+            CHECK(app.ProcessPositions().size() == directPositions.size());
+            for (std::size_t i = 0; i < directPositions.size() && i < app.ProcessPositions().size(); ++i)
+                for (int post = 0; post < 2; ++post)
+                    CHECK_NEAR(app.ProcessPositions()[i].Level(post), -directPositions[i].Level(post), 1e-9,
+                               "reversed post angle");
+            // Repeating the same choice must not apply a second flip.
+            for (int key : {2, 3}) app.ProcessSetSensorInvert(key, true);
+            st.Run(300);
+            for (std::size_t i = 0; i < directPositions.size() && i < app.ProcessPositions().size(); ++i)
+                for (int post = 0; post < 2; ++post)
+                    CHECK_NEAR(app.ProcessPositions()[i].Level(post), -directPositions[i].Level(post), 1e-9,
+                               "idempotent reverse selection");
+            for (int key : {2, 3}) app.ProcessSetSensorInvert(key, false);
+            st.Run(300);
             app.ProcessSaveReport();
             st.Run(100);
             wait();
             for (const wchar_t* f : {L"Отчет_Кренование.xlsx", L"График_Д2.png", L"График_Д3.png", L"Положения_Д2.png",
                                      L"График_контроля.png"})
-                if (fs::exists(md / f, ec))
-                    fs::copy_file(md / f, fs::path(g_out) / (L"29_m021_" + std::wstring(f)),
+                if (fs::exists(text::PathFromUtf8(app.ProcessReportDir()) / f, ec))
+                    fs::copy_file(text::PathFromUtf8(app.ProcessReportDir()) / f, fs::path(g_out) / (L"29_m021_" + std::wstring(f)),
                                   fs::copy_options::overwrite_existing, ec);
-            CHECK_MSG(fs::file_size(md / L"Отчет_Кренование.xlsx", ec) > 10000, "нет отчёта M021");
+            CHECK_MSG(fs::file_size(text::PathFromUtf8(app.ProcessReportDir()) / L"Отчет_Кренование.xlsx", ec) > 10000, "нет отчёта M021");
             // Полный отчёт: + лист «Расчёт по шагам» (больше краткого); копия — для превью в Excel
             {
-                const auto brief = fs::file_size(md / L"Отчет_Кренование.xlsx", ec);
+                const auto brief = fs::file_size(text::PathFromUtf8(app.ProcessReportDir()) / L"Отчет_Кренование.xlsx", ec);
                 app.ProcessSetReportFull(true);
                 app.ProcessSaveReport();
                 st.Run(100);
                 wait();
                 app.ProcessSetReportFull(false);
-                CHECK_MSG(fs::file_size(md / L"Отчет_Кренование.xlsx", ec) > brief, "полный отчёт не больше краткого");
-                fs::copy_file(md / L"Отчет_Кренование.xlsx", fs::path(g_out) / L"37_m021_full_report.xlsx",
+                CHECK_MSG(fs::file_size(text::PathFromUtf8(app.ProcessReportDir()) / L"Отчет_Кренование.xlsx", ec) > brief, "полный отчёт не больше краткого");
+                fs::copy_file(text::PathFromUtf8(app.ProcessReportDir()) / L"Отчет_Кренование.xlsx", fs::path(g_out) / L"37_m021_full_report.xlsx",
                               fs::copy_options::overwrite_existing, ec);
                 st.Run(7000);
             }
 #ifdef _WIN32
-            // Отчёт открыт в Excel (файл держат без совместной записи и удаления): сохранение не молчит — весь
-            // комплект под «(2)», в журнале и всплывающем сообщении «сохранено как …» с «Открыть папку»
+            // A locked previous export stays untouched; a new export owns a new directory.
             {
-                HANDLE held = CreateFileW((md / L"Отчет_Кренование.xlsx").c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr,
+                const auto previousDir = text::PathFromUtf8(app.ProcessReportDir());
+                const auto previousBook = previousDir / L"Отчет_Кренование.xlsx";
+                HANDLE held = CreateFileW(previousBook.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr,
                                           OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
                 CHECK(held != INVALID_HANDLE_VALUE);
-                CHECK(filebusy::Busy(md / L"Отчет_Кренование.xlsx") && !filebusy::Busy(md / L"График_Нос.png"));
-                const auto before = fs::last_write_time(md / L"Отчет_Кренование.xlsx", ec);
+                const auto before = fs::last_write_time(previousBook, ec);
                 app.ProcessSaveReport();
                 st.Run(100);
                 wait();
                 st.Run(100);
                 CloseHandle(held);
-                CHECK(fs::last_write_time(md / L"Отчет_Кренование.xlsx", ec) == before);
-                CHECK_MSG(fs::file_size(md / L"Отчет_Кренование (2).xlsx", ec) > 10000, "нет «Отчет_Кренование (2).xlsx»");
-                CHECK(fs::exists(md / L"График_Нос (2).png", ec) && fs::exists(md / L"Положения_Нос (2).png", ec) &&
-                      fs::exists(md / L"График_контроля (2).png", ec));
-                bool toast = false;
-                for (const auto& t : app.Toasts())
-                    toast |= t.text.find("сохранено как Отчет_Кренование (2).xlsx") != std::string::npos && !t.folder.empty();
-                CHECK_MSG(toast, "нет сообщения «сохранено как …»");
+                CHECK(fs::last_write_time(previousBook, ec) == before);
+                const auto newDir = text::PathFromUtf8(app.ProcessReportDir());
+                CHECK(newDir != previousDir);
+                CHECK_MSG(fs::file_size(newDir / L"Отчет_Кренование.xlsx", ec) > 10000, "missing new report");
+                CHECK(fs::exists(newDir / L"График_Нос.png", ec) && fs::exists(newDir / L"Положения_Нос.png", ec) &&
+                      fs::exists(newDir / L"График_контроля.png", ec));
                 st.Shot("35_report_busy", true);
                 st.Run(13000); // сообщение погасло
             }
