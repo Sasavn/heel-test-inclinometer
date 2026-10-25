@@ -9,6 +9,7 @@
 #include <imgui.h>
 
 #include "../core/TextUtil.hpp"
+#include "../core/ClockSync.hpp"
 #include "Widgets.hpp"
 
 namespace ui
@@ -133,8 +134,23 @@ void App::SyncTime()
 {
     if (!Connected() || set_.timeReq)
         return;
-    // Секунда в секунду: команда уходит в ближайшие миллисекунды
-    set_.timeReq = link_->Send("set time " + text::LocalTimeString(std::time(nullptr)));
+    // A cached capability from a previous Tab5 must never reach a reconnected STM32.
+    if (!clockpc::CurrentStatus(snap_.haveStatus, snap_.statusAtMs, snap_.connectedAtMs))
+    {
+        set_.timeOk = false;
+        set_.timeMsg = "Дождитесь ответа status от подключённого прибора";
+        return;
+    }
+    const auto command = clockpc::Command(std::time(nullptr), snap_.status.timeTzOffset);
+    set_.timeOk = false;
+    if (!command)
+    {
+        set_.timeMsg = "Не удалось: дата ПК вне 2000–2099 или часовой пояс не поддерживается прибором";
+        Notify(set_.timeMsg, 2);
+        return;
+    }
+    set_.timeMsg = "Ожидание подтверждения часов и RTC от прибора…";
+    set_.timeReq = link_->Send(*command);
 }
 
 void App::StartAddressChange(int from, int to)
@@ -167,9 +183,13 @@ void App::TickSettings()
     }
     if (set_.timeReq && set_.timeReq->done.load())
     {
-        set_.timeOk = set_.timeReq->ok;
-        set_.timeMsg = set_.timeReq->ok ? "Часы прибора установлены: " + set_.timeReq->final.substr(std::min<std::size_t>(8, set_.timeReq->final.size()))
-                                        : "Не удалось: " + set_.timeReq->final;
+        const auto& r = set_.timeReq;
+        const auto ack = clockpc::Acknowledgement(r->ok, r->final);
+        set_.timeOk = ack == clockpc::Ack::Complete;
+        set_.timeMsg = set_.timeOk ? "Прибор подтвердил установку времени: " + r->final
+                      : ack == clockpc::Ack::SystemOnly ? "Время установлено, но модуль RTC недоступен: " + r->final
+                      : r->ok ? "Нет явного подтверждения установки времени: " + r->final
+                              : "Не удалось: " + r->final;
         Notify(set_.timeOk ? "Время прибора синхронизировано с ПК" : set_.timeMsg, set_.timeOk ? 1 : 2);
         set_.timeReq.reset();
     }
@@ -436,14 +456,18 @@ void App::SettingsClockCard()
     if (BeginCard("##s_clock"))
     {
         CardTitle("Часы и ноль");
-        const bool have = snap_.haveStatus;
+        const bool have = Connected() && clockpc::CurrentStatus(snap_.haveStatus, snap_.statusAtMs, snap_.connectedAtMs);
         if (BeginKV("##kvclk", S(150)))
         {
-            KV("Часы прибора", have ? snap_.status.time + (snap_.status.rtc ? "  (DS3231)" : "  (без DS3231)") : "—");
+            KV("Часы прибора", have ? snap_.status.time + (snap_.status.rtc ? "  (модуль RTC)" : "  (RTC недоступен)") : "—");
+            if (have && snap_.status.timezoneMinutes)
+                KV("Пояс прибора", Fmt("UTC%c%02d:%02d", *snap_.status.timezoneMinutes < 0 ? '-' : '+',
+                                      std::abs(*snap_.status.timezoneMinutes) / 60,
+                                      std::abs(*snap_.status.timezoneMinutes) % 60));
             KV("Часы ПК", text::LocalTimeString(std::time(nullptr)));
             if (have)
             {
-                const std::time_t dev = text::ParseLocalTime(snap_.status.time);
+                const std::time_t dev = clockpc::StatusTime(snap_.status);
                 const std::time_t pc = std::time(nullptr) - static_cast<std::time_t>((snap_.nowMs - snap_.statusAtMs) / 1000);
                 if (dev > 0)
                 {
@@ -460,7 +484,7 @@ void App::SettingsClockCard()
         if (Button("Синхронизировать время с ПК", BtnKind::Primary, ImVec2(0, 0), !have || set_.timeReq != nullptr))
             SyncTime();
         if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("set time: часы прибора (и модуль DS3231) = время этого ПК");
+            ImGui::SetTooltip("Без интернета: время ПК → прибор и модуль RTC по USB или локальному TCP; пояс — при поддержке прибора");
         if (!set_.timeMsg.empty())
         {
             FontScope f(fontSmall);
