@@ -279,6 +279,8 @@ struct DeviceStatus
     std::uint64_t upS = 0, ms = 0;
     std::string time; // «ГГГГ-ММ-ДД ЧЧ:ММ:СС» по часам прибора
     bool rtc = false;
+    bool timeTzOffset = false; // explicit capability, absent on legacy STM32
+    std::optional<int> timezoneMinutes;
     // Настройки
     int freq = 0, gap = 0, rollWin = 0, rollHz = 0;
     double alpha = 0.0, batAlarm = 0.0, rollCalm = 0.0, rollHyst = 0.0;
@@ -363,6 +365,11 @@ inline bool ParseStatus(std::string_view line, DeviceStatus& out, std::string* e
     s.ms = static_cast<std::uint64_t>(j["ms"].Num());
     s.time = j["time"].Str();
     s.rtc = j["rtc"].Bool();
+    s.timeTzOffset = j["time_tz_offset"].IsBool() && j["time_tz_offset"].Bool();
+    const auto& tz = j["timezone_minutes"];
+    if (tz.IsNumber() && tz.n >= -720 && tz.n <= 840 && std::floor(tz.n) == tz.n &&
+        static_cast<int>(tz.n) % 15 == 0)
+        s.timezoneMinutes = static_cast<int>(tz.n);
     s.freq = static_cast<int>(j["freq"].Int());
     s.alpha = j["alpha"].Num();
     s.gap = static_cast<int>(j["gap"].Int());
