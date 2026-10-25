@@ -3,7 +3,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#define TAB5_PLOT_WIDTH 1040
+#define TAB5_PLOT_WIDTH 960
 #define TAB5_PLOT_HEIGHT 364
 #define TAB5_PLOT_SERIES 4
 #define TAB5_PLOT_MAX_POINTS 1200

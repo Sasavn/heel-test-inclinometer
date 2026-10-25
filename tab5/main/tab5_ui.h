@@ -5,7 +5,7 @@
 extern "C" {
 #endif
 typedef enum { TAB5_UI_START, TAB5_UI_STOP, TAB5_UI_ZERO, TAB5_UI_ZERO_RESET,
-    TAB5_UI_SETTINGS, TAB5_UI_NETWORK, TAB5_UI_TIME } tab5_ui_action_kind_t;
+    TAB5_UI_SETTINGS, TAB5_UI_NETWORK, TAB5_UI_TIME, TAB5_UI_TIME_SYNC } tab5_ui_action_kind_t;
 typedef struct {
     bool ap_enabled, sta_enabled;
     char ap_ssid[33], ap_password[65], sta_ssid[33], sta_password[65];
@@ -20,6 +20,9 @@ typedef struct {
     bool light_theme;
     tab5_ui_network_t network;
     tab5_ui_datetime_t datetime; /* TAB5_UI_TIME: main validates and writes RTC */
+    uint8_t brightness_pct; /* 0 preserves current backend brightness; otherwise 10..100. */
+    int16_t timezone_minutes; /* UTC offset, -720..840 in 15 minute steps. */
+    bool timezone_set; /* false preserves backend timezone. */
 } tab5_ui_action_t;
 /* Runs in the UI task. Borrowed action: copy to main's queue before returning.
  * main owns validation, persistence, recording and network services. */
@@ -98,6 +101,11 @@ typedef struct {
      * zero offsets. Input snapshot, EMA, roll, zero and recording stay owned
      * by measurement/main. False preserves the filtered presentation. */
     bool live_unfiltered;
+    uint8_t brightness_pct; /* 0 = unknown; otherwise 10..100. */
+    int16_t timezone_minutes; /* 0 is valid UTC when timezone_known. */
+    bool time_sync_busy;
+    char time_sync_status[128]; /* backend result; UI never infers NTP success. */
+    bool timezone_known; /* false: window defaults to UTC+03:00. */
 } tab5_ui_state_t;
 /* All calls require the UI task lock. Display already started
  * and rotated to 1280x720 by main. No task or display created here; a short-lived stepper repeat timer is UI-owned.
@@ -105,6 +113,14 @@ typedef struct {
 void tab5_ui_init(tab5_ui_action_cb_t callback, void *user);
 void tab5_ui_update(const tab5_ui_state_t *state);
 void tab5_ui_destroy(void);
+/* UI-task only, under the same lock as update/touch. delta is signed detents;
+ * time_ms is monotonic (uint32 wrap supported). IDLE polls the 15s timeout.
+ * TOUCH hides the ring; the native action callbacks transfer element focus. */
+typedef enum { TAB5_UI_INPUT_ROT, TAB5_UI_INPUT_PRESS, TAB5_UI_INPUT_LONG,
+    TAB5_UI_INPUT_IDLE, TAB5_UI_INPUT_TOUCH } tab5_ui_input_event_t;
+void tab5_ui_input(tab5_ui_input_event_t event, int32_t delta, uint32_t time_ms);
+/* Route touch samples here for tap focus transfer and list swipes. */
+void tab5_ui_touch(int32_t x, int32_t y, bool pressed, uint32_t time_ms);
 #ifdef __cplusplus
 }
 #endif

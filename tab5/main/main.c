@@ -4,6 +4,7 @@
 #include "tab5_services.h"
 #include "tab5_panel.h"
 #include "tab5_time.h"
+#include "tab5_time_sync.h"
 #include "tab5_resources.h"
 #include "tab5_draw_profile.h"
 #include "tab5_native_port.h"
@@ -40,6 +41,10 @@ static uint64_t route_start_us;
 static float route_battery=NAN;
 static tab5_network_config_t network;
 static bool recording, samples_on, light_theme;
+static uint8_t brightness_pct=60;
+static uint32_t rejected_actions; /* atomic bitset, UI producer/main consumer */
+static int sync_offset_minutes=180;
+static char time_sync_status[128]="NTP: синхронизация по кнопке «По WiFi»";
 static unsigned stream_ms, measurement_number;
 static uint32_t sample_drops, usb_drops, storage_drops, route_drops;
 static uint64_t record_start_us;
@@ -143,7 +148,17 @@ static void sample_callback(unsigned i,const tab5_measure_sensor_t *s,void *unus
     if(xQueueSend(storage_samples,&e,0)!=pdTRUE)__atomic_add_fetch(&route_drops,1,__ATOMIC_RELAXED);
 }
 static void ui_callback(const tab5_ui_action_t *a,void *unused) {
-    (void)unused;xQueueSend(actions,a,0);
+    (void)unused;
+    if(xQueueSend(actions,a,0)!=pdTRUE&&(unsigned)a->kind<32)
+        __atomic_fetch_or(&rejected_actions,1u<<(unsigned)a->kind,__ATOMIC_RELEASE);
+}
+static void consume_rejected_actions(void){
+    uint32_t rejected=__atomic_exchange_n(&rejected_actions,0,__ATOMIC_ACQ_REL);
+    for(unsigned kind=0;kind<32;kind++)if(rejected&(1u<<kind)){
+        ui_result_kind=(tab5_ui_action_kind_t)kind;ui_result_success=false;ui_result_serial++;
+        snprintf(notice,sizeof(notice),"Очередь команд переполнена; повторите");
+        if(kind==TAB5_UI_TIME||kind==TAB5_UI_TIME_SYNC)snprintf(time_sync_status,sizeof(time_sync_status),"Очередь команд переполнена; повторите");
+    }
 }
 static void broadcast(const char *line) { usb_reply(NULL,line);tab5_services_publish(line); }
 static bool persist(void) {
@@ -153,10 +168,32 @@ static bool persist(void) {
     esp_err_t e=nvs_set_blob(n,"measure",&s.config,sizeof(s.config));
     if(e==ESP_OK)e=nvs_set_blob(n,"network",&network,sizeof(network));
     if(e==ESP_OK)e=nvs_set_u8(n,"theme",light_theme);
+    if(e==ESP_OK)e=nvs_set_u8(n,"brightness",brightness_pct);
     if(e==ESP_OK)e=nvs_set_u32(n,"session",measurement_number);
     if(e==ESP_OK)e=nvs_commit(n);
     nvs_close(n);if(e!=ESP_OK)snprintf(notice,sizeof(notice),"Настройки не сохранены: %s",esp_err_to_name(e));
     return e==ESP_OK;
+}
+/* Only the offset is durable: never save an epoch pretending to advance while
+ * powered off. Main/app_mutex owns all clock and RTC writes. */
+static bool persist_timezone(int offset){
+    nvs_handle_t n;if(nvs_open("tab5",NVS_READWRITE,&n)!=ESP_OK)return false;
+    esp_err_t e=nvs_set_i16(n,"timezone",(int16_t)offset);
+    if(e==ESP_OK)e=nvs_commit(n);
+    nvs_close(n);return e==ESP_OK;
+}
+static bool apply_wall_time(int64_t utc,int offset){
+    tab5_time_apply_result_t r=tab5_board_set_utc(utc,offset);
+    if(!r.valid){snprintf(time_sync_status,sizeof(time_sync_status),"Недопустимая дата/пояс: RTC поддерживает 2000–2099");return false;}
+    if(!r.system_ok){snprintf(time_sync_status,sizeof(time_sync_status),"Не удалось установить системные часы");return false;}
+    tab5_time_set_offset(offset);
+    bool saved=persist_timezone(offset);
+    if(!r.rtc_ok)snprintf(time_sync_status,sizeof(time_sync_status),"Системные часы установлены; ошибка записи/флагов RTC%s",saved?"":"; пояс не сохранён");
+    else if(!saved)snprintf(time_sync_status,sizeof(time_sync_status),"Часы и RTC установлены; пояс не сохранён во flash");
+    else snprintf(time_sync_status,sizeof(time_sync_status),"%s",recording?"Время скорректировано; запись продолжается":"Дата, время и часовой пояс установлены");
+    /* Ms, record_start_us, record_name and measurement timebase stay unchanged.
+     * Date/Time columns may jump; protocol analysis uses monotonic Ms. */
+    return r.rtc_ok&&saved;
 }
 static void load_config(tab5_measure_config_t *cfg) {
     tab5_measure_config_default(cfg);
@@ -177,6 +214,8 @@ static void load_config(tab5_measure_config_t *cfg) {
        memchr(net.sta_ssid,0,sizeof(net.sta_ssid)) && memchr(net.sta_password,0,sizeof(net.sta_password)) &&
        memchr(net.auth_token,0,sizeof(net.auth_token)) && strlen(net.ap_password)>=8 && strlen(net.auth_token)>=8)network=net;
     uint8_t theme=0;nvs_get_u8(n,"theme",&theme);light_theme=theme==1;
+    uint8_t brightness=60;if(nvs_get_u8(n,"brightness",&brightness)==ESP_OK&&brightness>=10&&brightness<=100)brightness_pct=brightness;
+    int16_t offset=180;if(nvs_get_i16(n,"timezone",&offset)==ESP_OK&&tab5_time_offset_valid(offset))tab5_time_set_offset(offset);
     uint32_t session=0;nvs_get_u32(n,"session",&session);measurement_number=session;nvs_close(n);
 }
 static esp_err_t set_recording(bool on) {
@@ -186,7 +225,7 @@ static esp_err_t set_recording(bool on) {
         recording=false;snprintf(notice,sizeof(notice),"Запись остановлена");return ESP_OK;}
     if(!tab5_board_time_valid()){snprintf(notice,sizeof(notice),"Перед записью установите дату и время");return ESP_ERR_INVALID_STATE;}
     measurement_number++;persist();
-    time_t now=time(NULL);struct tm t;localtime_r(&now,&t);char session[64];
+    time_t now=time(NULL);struct tm t;tab5_time_local_now(now,&t);char session[64];
     snprintf(session,sizeof(session),"%04d-%02d-%02d_M%03u",t.tm_year+1900,t.tm_mon+1,t.tm_mday,measurement_number);
     esp_err_t e=tab5_services_record_start(session);
     if(e==ESP_OK){recording=true;record_start_us=esp_timer_get_time();
@@ -207,9 +246,10 @@ static void status(tab5_service_reply_fn reply,void *ctx) {
     cJSON *j=cJSON_CreateObject();if(!j){reply(ctx,"ERR memory");return;}
     cJSON_AddNumberToObject(j,"v",2);cJSON_AddStringToObject(j,"fw",FW_VERSION);
     cJSON_AddStringToObject(j,"board","tab5");cJSON_AddStringToObject(j,"platform","esp32p4");
+    cJSON_AddBoolToObject(j,"time_tz_offset",true);cJSON_AddNumberToObject(j,"timezone_minutes",tab5_time_offset());
     cJSON_AddNumberToObject(j,"proto",2);cJSON_AddNumberToObject(j,"chip_revision",chip.revision);
     cJSON_AddNumberToObject(j,"ms",esp_timer_get_time()/1000);cJSON_AddNumberToObject(j,"up",esp_timer_get_time()/1000000);
-    char date[32]="unsynchronized";time_t now=time(NULL);struct tm t;localtime_r(&now,&t);
+    char date[32]="unsynchronized";time_t now=time(NULL);struct tm t;tab5_time_local_now(now,&t);
     if(tab5_board_time_valid())strftime(date,sizeof(date),"%Y-%m-%d %H:%M:%S",&t);
     cJSON_AddStringToObject(j,"time",date);cJSON_AddBoolToObject(j,"rtc",tab5_board_rtc_valid());
     cJSON_AddNumberToObject(j,"freq",s.config.frequency_hz);cJSON_AddNumberToObject(j,"alpha",s.config.alpha);
@@ -280,9 +320,16 @@ static void command(void *unused,const char *line,tab5_service_reply_fn reply,vo
     else if(strcmp(line,"rec on")==0 || strcmp(line,"rec off")==0){reply(ctx,set_recording(strcmp(line,"rec on")==0)==ESP_OK?"OK recording":"ERR recording unavailable");}
     else if(strcmp(line,"samples on")==0 || strcmp(line,"samples off")==0){samples_on=strcmp(line,"samples on")==0;reply(ctx,samples_on?"OK samples on, dropped 0":"OK samples off, dropped 0");}
     else if(strncmp(line,"stream ",7)==0){char *end;unsigned long ms=strtoul(line+7,&end,10);if(*end || (ms && (ms<50 || ms>5000)))reply(ctx,"ERR stream range 0 or 50..5000");else{stream_ms=ms;reply(ctx,"# S,t_ms,s2,x2,y2,s3,x3,y3,bat_v");reply(ctx,"OK stream");}}
-    else if(strncmp(line,"set time ",9)==0){int y,mo,d,h,mi,se;char extra;struct tm t={0};
-        if(sscanf(line+9,"%d-%d-%d %d:%d:%d%c",&y,&mo,&d,&h,&mi,&se,&extra)!=6 || y<2000 || y>2099 || mo<1 || mo>12 || d<1 || d>31 || h<0 || h>23 || mi<0 || mi>59 || se<0 || se>59)reply(ctx,"ERR time");
-        else{t.tm_year=y-1900;t.tm_mon=mo-1;t.tm_mday=d;t.tm_hour=h;t.tm_min=mi;t.tm_sec=se;reply(ctx,tab5_board_set_time(&t)?"OK time":"ERR date");}}
+    else if(strncmp(line,"set time ",9)==0){
+        struct tm t;int offset;bool explicit_offset;int64_t utc;
+        if(tab5_time_sync_busy())reply(ctx,"ERR time sync busy");
+        else if(!tab5_time_parse_command(line+9,tab5_time_offset(),&t,&offset,&explicit_offset)||
+                !tab5_time_local_to_utc(&t,offset,&utc))reply(ctx,"ERR time/calendar/timezone");
+        else{
+            bool ok=apply_wall_time(utc,offset);
+            snprintf(notice,sizeof(notice),"%s",time_sync_status);
+            reply(ctx,ok?"OK time":"ERR clock/RTC/timezone; system clock may be updated");
+        }}
     else if(strcmp(line,"set theme light")==0 || strcmp(line,"set theme dark")==0){light_theme=strstr(line,"light")!=NULL;persist();reply(ctx,"OK theme");}
     else if(strncmp(line,"set ",4)==0){char key[20],tail;double value;
         if(sscanf(line+4,"%19s %lf %c",key,&value,&tail)!=2 || !isfinite(value))reply(ctx,"ERR set syntax");
@@ -296,7 +343,7 @@ static void command(void *unused,const char *line,tab5_service_reply_fn reply,vo
             else if(strcmp(key,"rollhyst")==0 && value>=0 && value<=2)c.roll_hysteresis_deg=value;
             else ok=false;
             if(ok){tab5_measure_configure(&c);persist();reply(ctx,"OK set");}else reply(ctx,"ERR setting/range");}}
-    else if(strcmp(line,"help")==0){reply(ctx,"ver status stream N samples on|off zero [reset] rec on|off set time YYYY-MM-DD HH:MM:SS set freq|alpha|gap|rollwin|rollhz|rollcalm|rollhyst N");reply(ctx,"OTA: ota info/begin/chunk/end/abort; network configured on touchscreen");reply(ctx,"OK");}
+    else if(strcmp(line,"help")==0){reply(ctx,"ver status stream N samples on|off zero [reset] rec on|off set time YYYY-MM-DD HH:MM:SS [tz=minutes] set freq|alpha|gap|rollwin|rollhz|rollcalm|rollhyst N");reply(ctx,"OTA: ota info/begin/chunk/end/abort; network configured on touchscreen");reply(ctx,"OK");}
     else reply(ctx,"ERR unsupported command on esp32");
     xSemaphoreGive(app_mutex);
 }
@@ -320,7 +367,7 @@ static void usb_task(void *unused) {
     }
 }
 static tab5_service_sample_t make_row(const sample_event_t *e,float voltage) {
-    time_t now=time(NULL);struct tm t;localtime_r(&now,&t);
+    time_t now=time(NULL);struct tm t;tab5_time_local_now(now,&t);
     const tab5_measure_sensor_t *p=&e->value;tab5_service_sample_t row={.sensor=e->index+2,
         .raw_x=p->decoded_x,.raw_y=p->decoded_y,.offset_x=p->zero_x,.offset_y=p->zero_y,
         .calc_x=p->decoded_x-p->zero_x,.calc_y=p->decoded_y-p->zero_y,.battery=isfinite(voltage)?voltage:0,.ms=p->timestamp_us/1000};
@@ -354,6 +401,7 @@ void app_main(void) {
     samples=xQueueCreate(64,sizeof(sample_event_t));storage_samples=xQueueCreate(64,sizeof(sample_event_t));
     actions=xQueueCreate(8,sizeof(tab5_ui_action_t));usb_tx=xQueueCreate(16,sizeof(tx_line_t));
     if(!app_mutex || !route_mutex || !samples || !storage_samples || !actions || !usb_tx){boot_failed();return;}
+    tab5_time_set_offset(180); /* local-wall RTC compatibility before board_init */
     tab5_measure_config_t cfg;load_config(&cfg);
     if(bsp_i2c_init()!=ESP_OK){boot_failed();return;}
     tab5_board_init();
@@ -366,6 +414,7 @@ void app_main(void) {
      * to its service worker; the UI initially shows unknown/not-ready media. */
     ui_perf.since=esp_timer_get_time();
     if(tab5_native_port_start(ui_callback,NULL)!=ESP_OK){boot_failed();return;}
+    if(bsp_display_brightness_set(brightness_pct)!=ESP_OK)snprintf(notice,sizeof(notice),"Не удалось восстановить яркость экрана");
     tab5_services_config_t services={.command=command,.network=network};
     esp_err_t services_result=tab5_services_init(&services);
     if(services_result!=ESP_OK){boot_failed();return;}
@@ -383,26 +432,65 @@ void app_main(void) {
                 ui_result_kind=a.kind;ui_result_serial++;}
             else if(a.kind==TAB5_UI_ZERO || a.kind==TAB5_UI_ZERO_RESET)tab5_measure_zero(a.kind==TAB5_UI_ZERO_RESET);
             else if(a.kind==TAB5_UI_SETTINGS){if(a.config.gap_ms<15)a.config.gap_ms=15;tab5_measure_configure(&a.config);light_theme=a.light_theme;
-                ui_result_success=persist();ui_result_kind=a.kind;ui_result_serial++;
+                bool backlight_ok=true;
+                if(a.brightness_pct){
+                    if(a.brightness_pct<10||a.brightness_pct>100)backlight_ok=false;
+                    else if(bsp_display_brightness_set(a.brightness_pct)!=ESP_OK)backlight_ok=false;
+                    else brightness_pct=a.brightness_pct;
+                }
+                ui_result_success=persist()&&backlight_ok;ui_result_kind=a.kind;ui_result_serial++;
+                if(!backlight_ok)snprintf(notice,sizeof(notice),"Яркость не применена: проверьте дисплей");
                 if(ui_result_success)snprintf(notice,sizeof(notice),"Настройки сохранены");}
-            else if(a.kind==TAB5_UI_TIME){
-                const tab5_ui_datetime_t *d=&a.datetime;
-                ui_result_success=false;ui_result_kind=a.kind;ui_result_serial++;
-                if(!tab5_time_fields_valid(d->year,d->month,d->day,d->hour,d->minute,d->second))
-                    snprintf(notice,sizeof(notice),"Недопустимая дата или время");
-                else {struct tm t={.tm_year=d->year-1900,.tm_mon=d->month-1,.tm_mday=d->day,
-                                  .tm_hour=d->hour,.tm_min=d->minute,.tm_sec=d->second};
-                    bool ok=tab5_board_set_time(&t);ui_result_success=ok;
-                    snprintf(notice,sizeof(notice),"%s",!ok?"Часы не установлены":tab5_board_rtc_valid()?"Дата и время установлены":"Часы установлены; RTC недоступны");}}
+            else if(a.kind==TAB5_UI_TIME || a.kind==TAB5_UI_TIME_SYNC){
+                ui_result_success=false;ui_result_kind=a.kind;
+                int offset=a.timezone_set?a.timezone_minutes:tab5_time_offset();
+                if(tab5_time_sync_busy()){
+                    snprintf(notice,sizeof(notice),"%s",tab5_time_sync_message(TAB5_TIME_SYNC_BUSY));
+                    /* Do not turn a second click into a completed NTP result. */
+                    if(a.kind!=TAB5_UI_TIME_SYNC)ui_result_serial++;
+                }else if(!tab5_time_offset_valid(offset)){
+                    snprintf(time_sync_status,sizeof(time_sync_status),"Пояс: UTC−12:00…+14:00, шаг 15 мин");
+                    snprintf(notice,sizeof(notice),"%s",time_sync_status);ui_result_serial++;
+                }else if(a.kind==TAB5_UI_TIME_SYNC){
+                    tab5_network_snapshot_t net;tab5_services_network_snapshot(&net);
+                    if(!network.sta_enabled||!net.sta_connected){
+                        snprintf(time_sync_status,sizeof(time_sync_status),"%s",tab5_time_sync_message(TAB5_TIME_SYNC_NO_STA));ui_result_serial++;
+                    }else if(!tab5_time_sync_start(true)){
+                        snprintf(time_sync_status,sizeof(time_sync_status),"%s",tab5_time_sync_message(TAB5_TIME_SYNC_RESOURCE));ui_result_serial++;
+                    }else{sync_offset_minutes=offset;snprintf(time_sync_status,sizeof(time_sync_status),"NTP: ожидание pool.ntp.org (до 8 с)");}
+                    snprintf(notice,sizeof(notice),"%s",time_sync_status);
+                }else{
+                    const tab5_ui_datetime_t *d=&a.datetime;
+                    struct tm t={.tm_year=d->year-1900,.tm_mon=d->month-1,.tm_mday=d->day,
+                                 .tm_hour=d->hour,.tm_min=d->minute,.tm_sec=d->second};
+                    int64_t utc;
+                    if(!tab5_time_local_to_utc(&t,offset,&utc))snprintf(time_sync_status,sizeof(time_sync_status),"Недопустимая дата или время");
+                    else ui_result_success=apply_wall_time(utc,offset);
+                    snprintf(notice,sizeof(notice),"%s",time_sync_status);ui_result_serial++;
+                }}
             else if(a.kind==TAB5_UI_NETWORK){tab5_network_config_t next=network;next.ap_enabled=a.network.ap_enabled;next.sta_enabled=a.network.sta_enabled;
                 memcpy(next.ap_ssid,a.network.ap_ssid,sizeof(next.ap_ssid));memcpy(next.ap_password,a.network.ap_password,sizeof(next.ap_password));
                 memcpy(next.sta_ssid,a.network.sta_ssid,sizeof(next.sta_ssid));memcpy(next.sta_password,a.network.sta_password,sizeof(next.sta_password));strcpy(next.auth_token,next.ap_password);
                 ui_result_success=false;ui_result_kind=a.kind;ui_result_serial++;
                 if(tab5_services_network_configure(&next)==ESP_OK){network=next;ui_result_success=persist();
                     if(ui_result_success)snprintf(notice,sizeof(notice),"Настройки сети применены");}else snprintf(notice,sizeof(notice),"Настройки сети не применены");}}
+        tab5_time_sync_result_t sync;
+        if(tab5_time_sync_poll(&sync)){
+            ui_result_kind=TAB5_UI_TIME_SYNC;ui_result_serial++;ui_result_success=false;
+            int64_t age=esp_timer_get_time()-sync.received_us;
+            if(sync.code==TAB5_TIME_SYNC_OK&&age>=0&&age<=10000000){
+                tab5_network_snapshot_t current;tab5_services_network_snapshot(&current);
+                if(!network.sta_enabled||!current.sta_connected)snprintf(time_sync_status,sizeof(time_sync_status),"%s",tab5_time_sync_message(TAB5_TIME_SYNC_NO_STA));
+                else ui_result_success=apply_wall_time(sync.utc_seconds+age/1000000,sync_offset_minutes);
+            }else snprintf(time_sync_status,sizeof(time_sync_status),"%s",tab5_time_sync_message(sync.code==TAB5_TIME_SYNC_OK?TAB5_TIME_SYNC_TIMEOUT:sync.code));
+            snprintf(notice,sizeof(notice),"%s",time_sync_status);
+        }
+        consume_rejected_actions();
         uint64_t now=esp_timer_get_time();resources_refresh(now);if(now-last_battery>=1000000){battery=tab5_board_battery();last_battery=now;
             xSemaphoreTake(route_mutex,portMAX_DELAY);route_battery=battery;xSemaphoreGive(route_mutex);}
-        tab5_ui_state_t ui={.recording=recording,.light_theme=light_theme};tab5_measure_snapshot(&ui.measurement);
+        tab5_ui_state_t ui={.recording=recording,.light_theme=light_theme,.brightness_pct=brightness_pct};tab5_measure_snapshot(&ui.measurement);
+        ui.timezone_known=true;ui.timezone_minutes=(int16_t)tab5_time_offset();ui.time_sync_busy=tab5_time_sync_busy();
+        snprintf(ui.time_sync_status,sizeof(ui.time_sync_status),"%s",time_sync_status);
         ui.resources_known=resources.known;ui.cpu_known=resources.cpu_known;ui.cpu_load_pct=resources.cpu;
         ui.ram_used_bytes=resources.ram_used;ui.ram_total_bytes=resources.ram_total;
         ui.psram_used_bytes=resources.psram_used;ui.psram_total_bytes=resources.psram_total;
@@ -412,7 +500,7 @@ void app_main(void) {
         snprintf(ui.rec_file,sizeof(ui.rec_file),"%s",record_name);
         ui.rec_duration_known=record_name[0]!=0;
         ui.rec_duration_s=recording?(uint32_t)((now-record_start_us)/1000000):record_duration_s;
-        char clock_text[64]="Установите часы";time_t wall=time(NULL);struct tm wall_tm;localtime_r(&wall,&wall_tm);
+        char clock_text[64]="Установите часы";time_t wall=time(NULL);struct tm wall_tm;tab5_time_local_now(wall,&wall_tm);
         if(tab5_board_time_valid())strftime(clock_text,sizeof(clock_text),"%d.%m.%Y %H:%M:%S",&wall_tm);
         ui.datetime_known=tab5_board_time_valid();
         if(ui.datetime_known)ui.datetime=(tab5_ui_datetime_t){.year=wall_tm.tm_year+1900,.month=wall_tm.tm_mon+1,

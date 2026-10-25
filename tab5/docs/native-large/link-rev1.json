@@ -1,0 +1,9 @@
+{
+  "build": "build-native",
+  "project_version": "1.7.0-esp32",
+  "component_count": 97,
+  "forbidden_components": [],
+  "forbidden_link_inputs": [],
+  "forbidden_symbols": [],
+  "passed": true
+}

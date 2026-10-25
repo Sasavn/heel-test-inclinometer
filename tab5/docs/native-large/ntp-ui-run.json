@@ -1,0 +1,51 @@
+{
+  "kind": "production native RGB565 renderer with injected backend snapshots; no network or device",
+  "profiles": [
+    0,
+    1
+  ],
+  "themes": [
+    "dark",
+    "light"
+  ],
+  "states": [
+    "pending",
+    "success",
+    "error"
+  ],
+  "rgb565_profiles_equal": true,
+  "source_sha256": {
+    "tab5\\tests\\run_native_encoder.py": "dbce843764f16b11f12b80bfab2a016d0e1c49e36328cdb513b17f3d3389ca6f",
+    "tab5\\tests\\test_native_encoder.c": "7442f31d87e2b77a4cc7c298406a62d0c1af694fdbcc9eab363b8a34a81af1d0",
+    "tab5\\main\\tab5_ui_graph.c": "d598ce2e0b98ed1087d45680e4bd39c718ffaf54273d8572aa7209a7fa18977e",
+    "tab5\\main\\tab5_measure.c": "ed8c7d1a7c7185d8ada762a7c81c3464757ffc6588c835ab6e32e84d9b59bc9c",
+    "tab5\\main\\tab5_time.c": "16ac287e5bd5bd5286e9fa8f2050b1c16ec757a31d12557a7202d3fdacd33563",
+    "tab5\\main\\tab5_plot.c": "800bb30dc1710f49c0febd3ed689088c591fda706a01d73d8403c7406f8d2a1a",
+    "tab5\\main\\tab5_level.c": "fe633422cb7183348212165aa9051305150a48abaf273ab0f89f28d552f15bb3",
+    "tab5\\main\\native\\native_ui.c": "0dee13b5fd02652656d6315830813445fe339676145f2bf34c4994308e642992",
+    "tab5\\main\\native\\font_native_fallback14.c": "673ac2c4f7da55e63379a3153838291db35c39aa0a70efed3ebcafe101580bcc",
+    "tab5\\main\\font_tab5_108.c": "b7d1ba1770e86079bec8b0896991c0f2323eb564136cadb722e2cadda231c473",
+    "tab5\\main\\font_tab5_16.c": "04b40893246e902b783df884c9c56843c73c13df28ee652334a820f455c9c31c",
+    "tab5\\main\\font_tab5_16m.c": "9d17ba4a5f654ecf0bae07116c66017e9b7500f73b84fa7e524cdec58a056205",
+    "tab5\\main\\font_tab5_20.c": "6ccfb9e61afcd0a314f028e5414d23517979130d7496785fd398147990f0e7bf",
+    "tab5\\main\\font_tab5_20m.c": "871fa01f2ea8105c726c51e3de6a0764ebc87d0d33a720ea8d477cdd0538435c",
+    "tab5\\main\\font_tab5_24.c": "95262932de22282ceedc5802dd739f3158075d9dbb8508a0961431943703fd83",
+    "tab5\\main\\font_tab5_28.c": "ff504c873fba2c84ffdc9244874864581d3f3119816211bcdcab5f6224e61b0a",
+    "tab5\\main\\font_tab5_32.c": "512db05fb4651c1592c92e3de9c9dce716f35a09d3e4c6da50e42517ec44f27f",
+    "tab5\\main\\font_tab5_36.c": "457e4b643c0c2c197c534c42d51dac251c81f26d022a5ecacbf0ef796aa7d1b3",
+    "tab5\\main\\font_tab5_40.c": "8960d644c9c294ada550f9cef342b5da996a7ce4551494b6f39ba942d6499e6f",
+    "tab5\\main\\font_tab5_48.c": "811278a538d84dbbeb4f0e5c13aed79fede0de70422927a9bbd399adb3e94df8",
+    "tab5\\main\\font_tab5_56.c": "a75c37133561017abfb384d06816b0000de281652740238802ebcd31d5c4bc5c",
+    "tab5\\main\\font_tab5_64.c": "5bcfa4442db7a49469c9cbe939693598c010417e9ddcbdefb7b471d2b23f1c92",
+    "tab5\\main\\tab5_ui.c": "cd01cd92c65dc822721c50b49e8d2168507f9ea53d9875c7a55127ac57a77cba",
+    "tab5\\main\\tab5_ui.h": "f32504216d5d7d58fb5053ea245dd7116e2c79b4a6176a303a2db8a4c3b7a56c"
+  },
+  "frames": {
+    "dark_ntp_error": "e822671c69553d8156599d9293ce7f321ab38c4e14c66c479dd0a4ba1fa07f7f",
+    "dark_ntp_pending": "5c8fed758f039ce3307b9a4b16747eb1be962174d47b79a21904b22c3af4ddbf",
+    "dark_ntp_success": "6558c9f7afa605aa18a6f319389590ad449b3c69dd5028ddb896fc55a03731bc",
+    "light_ntp_error": "8b21b8504a555597fd6d859f13df55ddd152e8e505fdf2a6347bb93d51b4089f",
+    "light_ntp_pending": "dd1ed699c3f32f21cd959d6f7bfa11392668c1920f561e23089fd201a23e5d74",
+    "light_ntp_success": "b5e456bbbddb72572e1f511e474291fa5214eda9b97de61f5f99df17568466d9"
+  }
+}
