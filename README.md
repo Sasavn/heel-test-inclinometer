@@ -1,5 +1,14 @@
 # Регистратор крена для опыта кренования (STM32F411 + BWM427)
 
+## Версии прибора в этом репозитории
+
+- **STM32F411:** эта ветка [`main`](https://github.com/Sasavn/heel-test-inclinometer/tree/main).
+- **M5Stack Tab5 / ESP32-P4:** ветка [`tab5-esp32`](https://github.com/Sasavn/heel-test-inclinometer/tree/tab5-esp32), [описание и сборка Tab5](https://github.com/Sasavn/heel-test-inclinometer/blob/tab5-esp32/tab5/README.md), [крупный интерфейс](https://github.com/Sasavn/heel-test-inclinometer/blob/tab5-esp32/tab5/UI_LARGE_NATIVE.md).
+
+Обе версии ведутся в одном проекте «Креномер». Прошивки для STM32 и Tab5
+невзаимозаменяемы. Проверяйте платформу и статус проверки на устройстве в
+описании соответствующего [релиза](https://github.com/Sasavn/heel-test-inclinometer/releases).
+
 Прошивка переносного прибора для опыта кренования судна: прибор опрашивает два
 инклинометра BWM427 по RS485 (Modbus RTU), фильтрует углы, показывает их на
 экране и пишет замер на SD-карту — по CSV-файлу на каждый датчик, с привязкой
