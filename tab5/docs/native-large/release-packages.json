@@ -1,0 +1,68 @@
+{
+  "version": "1.7.0-esp32",
+  "prerelease": true,
+  "packages": [
+    {
+      "asset": "Krenomer-Tab5-1.7.0-esp32-p4-rev1.zip",
+      "bytes": 856766,
+      "archive_sha256": "404630e0508dde46618e3e0eb671f54662937017c0054f3b25717edcb69d5819",
+      "profile": "p4-rev1",
+      "hardware_tested": false,
+      "flashed": false,
+      "format": 1,
+      "board": "tab5",
+      "chip": "esp32p4",
+      "protocol": 2,
+      "version": "1.7.0-esp32",
+      "kind": "ota-app",
+      "size": 1783552,
+      "sha256": "241f2e7b5d0020882997152e5eaf045a3c12d1ecfb73e994723fca4131a19d92",
+      "factory_parts": {
+        "0x2000": "bootloader.bin",
+        "0x20000": "krenomer-esp32.bin",
+        "0x8000": "partition-table.bin",
+        "0xf000": "ota_data_initial.bin"
+      },
+      "warning": "Untested on hardware; never send factory image to OTA",
+      "revision_min": 100,
+      "revision_max": 199,
+      "parts_sha256": {
+        "bootloader.bin": "75409daf3d4707f91585d998c687d45a8cf1dbd26a4e8d80a96c2047a8a16541",
+        "krenomer-esp32.bin": "241f2e7b5d0020882997152e5eaf045a3c12d1ecfb73e994723fca4131a19d92",
+        "partition-table.bin": "f1572c83b8e4718acde1887b9238701bc7a53f03afd086330432a3148b8165a3",
+        "ota_data_initial.bin": "7d2c7ac4888bfd75cd5f56e8d61f69595121183afc81556c876732fd3782c62f"
+      }
+    },
+    {
+      "asset": "Krenomer-Tab5-1.7.0-esp32-p4-rev3.zip",
+      "bytes": 858257,
+      "archive_sha256": "84245f3d43fac6491db3e156bc8c6925ee3a7b4d59a22fb9145b58a7f8cdbe55",
+      "profile": "p4-rev3",
+      "hardware_tested": false,
+      "flashed": false,
+      "format": 1,
+      "board": "tab5",
+      "chip": "esp32p4",
+      "protocol": 2,
+      "version": "1.7.0-esp32",
+      "kind": "ota-app",
+      "size": 1785712,
+      "sha256": "04c02f5f00aa3ff8212e98a96660af673f6dbd1dcd8010804ab68a4d3afba49a",
+      "factory_parts": {
+        "0x2000": "bootloader.bin",
+        "0x20000": "krenomer-esp32.bin",
+        "0x8000": "partition-table.bin",
+        "0xf000": "ota_data_initial.bin"
+      },
+      "warning": "Untested on hardware; never send factory image to OTA",
+      "revision_min": 300,
+      "revision_max": 399,
+      "parts_sha256": {
+        "bootloader.bin": "3cedbb7b960e3f669831ced204418989334cca0cb26a84674d17ccd3a0773a05",
+        "krenomer-esp32.bin": "04c02f5f00aa3ff8212e98a96660af673f6dbd1dcd8010804ab68a4d3afba49a",
+        "partition-table.bin": "f1572c83b8e4718acde1887b9238701bc7a53f03afd086330432a3148b8165a3",
+        "ota_data_initial.bin": "7d2c7ac4888bfd75cd5f56e8d61f69595121183afc81556c876732fd3782c62f"
+      }
+    }
+  ]
+}

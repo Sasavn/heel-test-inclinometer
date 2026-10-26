@@ -1,5 +1,20 @@
 # Регистратор крена для опыта кренования (STM32F411 + BWM427)
 
+Оба прибора разрабатываются в **одном репозитории**
+[Sasavn/heel-test-inclinometer](https://github.com/Sasavn/heel-test-inclinometer):
+
+| Ветка | Прибор и программа |
+|---|---|
+| [main](https://github.com/Sasavn/heel-test-inclinometer/tree/main) | STM32F411, экран 320×240, `krenomer.exe` |
+| [tab5-esp32](https://github.com/Sasavn/heel-test-inclinometer/tree/tab5-esp32) — текущая | M5Stack Tab5 / ESP32-P4, экран 1280×720, `krenomer-esp32.exe` |
+
+**Прошивки несовместимы:** `bwm427-fw.bin` предназначен для STM32;
+`krenomer-esp32.bin` — для Tab5 с подходящей ревизией ESP32-P4.
+Tab5-пакеты публикуются отдельно как предварительные релизы; ссылка
+`releases/latest` ниже относится к стабильной STM32/PC-версии.
+[Скачать Tab5 1.7.0 и PC 1.8.4](https://github.com/Sasavn/heel-test-inclinometer/releases/tag/tab5-v1.7.0)
+— предварительная версия без аппаратной проверки.
+
 Ветка **`tab5-esp32`** добавляет локальный тестовый порт для **M5Stack Tab5**:
 [прошивка ESP32-P4, сборка и ограничения](tab5/README.md),
 [план работ](tab5/STATUS.md). Программа ПК этой ветки собирается как

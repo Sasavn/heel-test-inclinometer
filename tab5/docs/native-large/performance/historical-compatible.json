@@ -1,0 +1,89 @@
+{
+  "evidence": "historical same-layout v1 comparison, not rerun for 1.7.0",
+  "source": "WORKSPACE/.tools/native-optimization-1.6.14/final-0dee13b5/table.json",
+  "sha256": "85d136347dcdc4fcd906644985245d8ee9b0534014d90b1f9c069f80e815e762",
+  "raw_logical_steps": 54000,
+  "new_large_ui_comparable": false,
+  "rows": [
+    {
+      "scene": "idle",
+      "theme": "dark",
+      "lvgl_p50_ms": 0.005800001,
+      "lvgl_p95_ms": 0.006000005,
+      "old_native_optimized_p50_ms": 0.008099996,
+      "old_native_optimized_p95_ms": 0.013400003
+    },
+    {
+      "scene": "idle",
+      "theme": "light",
+      "lvgl_p50_ms": 0.005999997,
+      "lvgl_p95_ms": 0.010199994,
+      "old_native_optimized_p50_ms": 0.008100003,
+      "old_native_optimized_p95_ms": 0.008500002
+    },
+    {
+      "scene": "angles",
+      "theme": "dark",
+      "lvgl_p50_ms": 0.570699997,
+      "lvgl_p95_ms": 0.636799999,
+      "old_native_optimized_p50_ms": 0.456699997,
+      "old_native_optimized_p95_ms": 0.508599997
+    },
+    {
+      "scene": "angles",
+      "theme": "light",
+      "lvgl_p50_ms": 0.6589,
+      "lvgl_p95_ms": 1.022699997,
+      "old_native_optimized_p50_ms": 0.457999997,
+      "old_native_optimized_p95_ms": 0.564599998
+    },
+    {
+      "scene": "graph",
+      "theme": "dark",
+      "lvgl_p50_ms": 0.397500001,
+      "lvgl_p95_ms": 1.023700006,
+      "old_native_optimized_p50_ms": 0.2456,
+      "old_native_optimized_p95_ms": 0.8785
+    },
+    {
+      "scene": "graph",
+      "theme": "light",
+      "lvgl_p50_ms": 0.548099995,
+      "lvgl_p95_ms": 1.586400002,
+      "old_native_optimized_p50_ms": 0.367799997,
+      "old_native_optimized_p95_ms": 1.198800005
+    },
+    {
+      "scene": "modal",
+      "theme": "dark",
+      "lvgl_p50_ms": 0.211099997,
+      "lvgl_p95_ms": 0.229099996,
+      "old_native_optimized_p50_ms": 0.191699997,
+      "old_native_optimized_p95_ms": 0.2082
+    },
+    {
+      "scene": "modal",
+      "theme": "light",
+      "lvgl_p50_ms": 0.224399999,
+      "lvgl_p95_ms": 0.356699996,
+      "old_native_optimized_p50_ms": 0.2042,
+      "old_native_optimized_p95_ms": 0.337200001
+    },
+    {
+      "scene": "transition",
+      "theme": "dark",
+      "lvgl_p50_ms": 2.656899996,
+      "lvgl_p95_ms": 3.559100002,
+      "old_native_optimized_p50_ms": 2.169,
+      "old_native_optimized_p95_ms": 2.7465
+    },
+    {
+      "scene": "transition",
+      "theme": "light",
+      "lvgl_p50_ms": 3.031400003,
+      "lvgl_p95_ms": 4.0757,
+      "old_native_optimized_p50_ms": 2.595399998,
+      "old_native_optimized_p95_ms": 3.707600005
+    }
+  ]
+}
