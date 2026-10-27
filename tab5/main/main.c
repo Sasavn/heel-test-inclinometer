@@ -44,7 +44,8 @@ static bool recording, samples_on, light_theme;
 static uint8_t brightness_pct=60;
 static uint32_t rejected_actions; /* atomic bitset, UI producer/main consumer */
 static int sync_offset_minutes=180;
-static char time_sync_status[128]="NTP: синхронизация по кнопке «По WiFi»";
+static bool automatic_time_attempted;
+static char time_sync_status[128]="NTP: автоматически при подключении WiFi";
 static unsigned stream_ms, measurement_number;
 static uint32_t sample_drops, usb_drops, storage_drops, route_drops;
 static uint64_t record_start_us;
@@ -248,6 +249,8 @@ static void status(tab5_service_reply_fn reply,void *ctx) {
     cJSON_AddStringToObject(j,"board","tab5");cJSON_AddStringToObject(j,"platform","esp32p4");
     cJSON_AddBoolToObject(j,"time_tz_offset",true);cJSON_AddNumberToObject(j,"timezone_minutes",tab5_time_offset());
     cJSON_AddNumberToObject(j,"proto",2);cJSON_AddNumberToObject(j,"chip_revision",chip.revision);
+    cJSON_AddBoolToObject(j,"time_sync_busy",tab5_time_sync_busy());
+    cJSON_AddStringToObject(j,"time_sync_status",time_sync_status);
     cJSON_AddNumberToObject(j,"ms",esp_timer_get_time()/1000);cJSON_AddNumberToObject(j,"up",esp_timer_get_time()/1000000);
     char date[32]="unsynchronized";time_t now=time(NULL);struct tm t;tab5_time_local_now(now,&t);
     if(tab5_board_time_valid())strftime(date,sizeof(date),"%Y-%m-%d %H:%M:%S",&t);
@@ -475,6 +478,15 @@ void app_main(void) {
                 ui_result_success=false;ui_result_kind=a.kind;ui_result_serial++;
                 if(tab5_services_network_configure(&next)==ESP_OK){network=next;ui_result_success=persist();
                     if(ui_result_success)snprintf(notice,sizeof(notice),"Настройки сети применены");}else snprintf(notice,sizeof(notice),"Настройки сети не применены");}}
+        tab5_network_snapshot_t time_net;tab5_services_network_snapshot(&time_net);
+        if(tab5_time_sync_auto_due(&automatic_time_attempted,
+                network.sta_enabled&&time_net.sta_connected,tab5_time_sync_busy(),recording)){
+            sync_offset_minutes=tab5_time_offset();
+            if(tab5_time_sync_start(true))
+                snprintf(time_sync_status,sizeof(time_sync_status),"NTP: автоматическая синхронизация (до 8 с)");
+            else snprintf(time_sync_status,sizeof(time_sync_status),"%s",tab5_time_sync_message(TAB5_TIME_SYNC_RESOURCE));
+            snprintf(notice,sizeof(notice),"%s",time_sync_status);
+        }
         tab5_time_sync_result_t sync;
         if(tab5_time_sync_poll(&sync)){
             ui_result_kind=TAB5_UI_TIME_SYNC;ui_result_serial++;ui_result_success=false;

@@ -97,4 +97,16 @@ static void core_tests(void){
 }
 /* Implemented by the host runner's board I/O shim. The actual board.c is linked. */
 void test_board_io(void);
-int main(void){core_tests();test_board_io();return 0;}
+int main(void){
+    bool attempted=false;
+    assert(!tab5_time_sync_auto_due(NULL,true,false,false));
+    assert(!tab5_time_sync_auto_due(&attempted,false,false,false)&&!attempted);
+    assert(!tab5_time_sync_auto_due(&attempted,true,true,false)&&!attempted);
+    assert(!tab5_time_sync_auto_due(&attempted,true,false,true)&&!attempted);
+    assert(tab5_time_sync_auto_due(&attempted,true,false,false)&&attempted);
+    for(unsigned i=0;i<100;i++)assert(!tab5_time_sync_auto_due(&attempted,true,false,false));
+    assert(!tab5_time_sync_auto_due(&attempted,false,false,false));
+    assert(!tab5_time_sync_auto_due(&attempted,true,false,false));
+    puts("PASS: automatic NTP waits for STA/idle/no recording, one attempt per boot, no retry loop");
+    core_tests();test_board_io();return 0;
+}

@@ -36,6 +36,10 @@ tab5_time_sync_result_t tab5_time_sync_fetch(const tab5_time_sync_transport_t *t
     if(tx<rx||tx-rx>8)return r;
     r.code=TAB5_TIME_SYNC_OK;r.utc_seconds=tx;r.received_us=received;return r;
 }
+bool tab5_time_sync_auto_due(bool *attempted,bool sta_connected,bool busy,bool recording){
+    if(!attempted||*attempted||!sta_connected||busy||recording)return false;
+    *attempted=true;return true;
+}
 const char *tab5_time_sync_message(tab5_time_sync_code_t c){
     switch(c){
     case TAB5_TIME_SYNC_OK:return "NTP: получено время UTC";

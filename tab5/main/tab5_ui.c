@@ -1016,7 +1016,7 @@ static void update_notice(const char *s){
     snprintf(u.last_notice,sizeof(u.last_notice),"%s",s);
     if(!*s){if(u.notice)nui_obj_delete(u.notice);u.notice=u.notice_text=NULL;return;}
     bool error=backend_failure();
-    if(!u.notice){u.notice=box(u.root,240,616,1024,88,INFO);nui_obj_add_flag(u.notice,NUI_OBJ_FLAG_CLICKABLE);u.notice_text=label(u.notice,"",20,14,912,64,F20,TEXT);button(u.notice,"✗",948,16,56,56,GHOST,A_NOTICE_CLOSE);}
+    if(!u.notice){u.notice=box(u.root,240,584,1024,120,INFO);nui_obj_add_flag(u.notice,NUI_OBJ_FLAG_CLICKABLE);u.notice_text=label(u.notice,"",20,14,912,92,F36,TEXT);button(u.notice,"✗",948,32,56,56,GHOST,A_NOTICE_CLOSE);}
     role(u.notice,error?ERR:INFO);style_color(u.notice_text,NUI_STYLE_TEXT_COLOR,nui_color_hex(error?u.err:u.info),0);text(u.notice_text,s);nui_obj_move_foreground(u.notice);
 }
 void tab5_ui_update(const tab5_ui_state_t *s){

@@ -2,7 +2,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stddef.h>
-/* No clock setters in the worker. Explicit button only; no periodic sync. */
+/* No clock setters in the worker. Manual button or one automatic boot attempt. */
 typedef enum {
     TAB5_TIME_SYNC_OK, TAB5_TIME_SYNC_NO_STA, TAB5_TIME_SYNC_BUSY,
     TAB5_TIME_SYNC_DNS, TAB5_TIME_SYNC_TIMEOUT, TAB5_TIME_SYNC_IO,
@@ -24,6 +24,8 @@ typedef struct {
 } tab5_time_sync_transport_t;
 tab5_time_sync_result_t tab5_time_sync_fetch(const tab5_time_sync_transport_t *transport,bool sta_connected);
 const char *tab5_time_sync_message(tab5_time_sync_code_t code);
+/* Consume one boot attempt only after STA connects and recording/other sync end. */
+bool tab5_time_sync_auto_due(bool *attempted,bool sta_connected,bool busy,bool recording);
 /* Start/poll/busy are serialized by main. start refuses outstanding completion.
  * On false start, no worker ran; main chooses NO_STA/BUSY/RESOURCE status. */
 bool tab5_time_sync_start(bool sta_connected);
