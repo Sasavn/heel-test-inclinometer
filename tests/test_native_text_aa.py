@@ -1,10 +1,10 @@
-"""Test current production four-level text AA; no hardware, git or old sources.
+"""Validate rollback to original 16-level (4bpp) production text AA; no hardware, git or old sources.
 
 Run: python tests/test_native_text_aa.py [--cc gcc]
 Requires only Python stdlib and a C11 GCC/Clang compiler. Temporary snapshots
 compile the actual renderer unchanged, then force its generic branch for 4bpp
 in a test-only copy. All RGB565 frames must match each other and independent
-mathematical expectations in the C harness. No repository files are written.
+original sample/max then label/layer opacity math in the C harness. No repository files are written.
 """
 import argparse
 import hashlib

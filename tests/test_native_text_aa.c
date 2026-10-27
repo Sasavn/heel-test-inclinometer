@@ -1,19 +1,18 @@
 /* Production glyph AA regression: synthetic bpp1/2/4/8 font fixtures and
- * independent four-coverage RGB565 math. No snapshots or git history needed.
+ * independent original coverage/opacity RGB565 math (4bpp: 16 levels). No snapshots or git history needed.
  * The white-box include exposes the real fast palette and generic glyph path. */
 #ifndef TEXT_AA_RENDERER
 #define TEXT_AA_RENDERER "../tab5/main/native/native_ui.c"
 #endif
 #include TEXT_AA_RENDERER
 enum { TW=32, TH=24, GW=17, GH=16 };
-static uint16_t frame[TW*TH],old[TW*TH],seed[TW*TH],saved[TW*TH];
+static uint16_t frame[TW*TH],seed[TW*TH],saved[TW*TH];
 typedef struct {unsigned bpp;uint8_t bitmap[GW*GH];} fixture_t;
 static bool description(const nui_font_t *f,nui_font_glyph_dsc_t *d,uint32_t cp,uint32_t next){
     (void)cp;fixture_t *s=f->user_data;
     *d=(nui_font_glyph_dsc_t){.adv_w=23+(next=='B'),.box_w=GW,.box_h=GH,.ofs_x=-2,.ofs_y=1,.bpp=s->bpp,.resolved_font=f};return true;
 }
 static const uint8_t *bitmap(const nui_font_t *f,uint32_t cp){(void)cp;return ((fixture_t*)f->user_data)->bitmap;}
-static unsigned reference_q(unsigned c){return c<43?0:c<128?85:c<213?170:255;}
 static uint16_t reference_blend(uint16_t d,uint16_t s,unsigned a){
     unsigned m=(a+4)>>3,v=32-m;
     return (uint16_t)((((((s>>11)&31)*m+((d>>11)&31)*v)>>5)<<11)|
@@ -29,7 +28,7 @@ static void prepare(fixture_t *s,unsigned bpp,bool equivalent){
         s->bitmap[bit/8]|=(uint8_t)(val<<(8-bpp-bit%8));
     }
 }
-static unsigned draws,changes;
+static unsigned draws;
 static FILE *dump;
 static void draw(unsigned bpp,unsigned opa,unsigned layer_opa,unsigned clip,unsigned theme,bool equivalent){
     fixture_t fixture;prepare(&fixture,bpp,equivalent);
@@ -40,7 +39,7 @@ static void draw(unsigned bpp,unsigned opa,unsigned layer_opa,unsigned clip,unsi
     if(clip==3)l.clip=(nui_area_t){10,10,9,9};
     int x=clip==4?-1:6,y=clip==4?-2:4,gx=x-2,gy=y;
     nui_color_t fg=theme?0x1A1D24:0xE8ECF4;uint16_t c=nui_color_to_u16(fg);
-    memcpy(frame,seed,sizeof(frame));memcpy(old,seed,sizeof(old));
+    memcpy(frame,seed,sizeof(frame));
     glyph_palette_t palette;glyph_palette_init(&palette,c,opa,layer_opa);
     nui_font_glyph_dsc_t before,after;description(&f,&before,'A','B');
     glyph_draw(&l,&f,'A','B',x,y,fg,opa,&palette);description(&f,&after,'A','B');
@@ -55,25 +54,25 @@ static void draw(unsigned bpp,unsigned opa,unsigned layer_opa,unsigned clip,unsi
         uint16_t expected=seed[at];
         if(inside){
             unsigned val=value((py-gy)*GW+px-gx,bpp,equivalent);
-            unsigned q=reference_q(val*255/max),a=(opa*q/255)*layer_opa/255;
+            unsigned a=(opa*val/max)*layer_opa/255;
             expected=reference_blend(seed[at],c,a);
-            old[at]=reference_blend(seed[at],c,(opa*val/max)*layer_opa/255);
             if(!val)assert(frame[at]==seed[at]);
         }else assert(frame[at]==seed[at]);
         assert(frame[at]==expected);
-        if(frame[at]!=old[at]){assert(inside);changes++;}
     }
     draws++;
     if(dump)assert(fwrite(frame,sizeof(frame),1,dump)==1);
 }
 int main(int argc,char **argv){
     if(argc==2){dump=fopen(argv[1],"wb");assert(dump);}
-    unsigned seen=0,previous=0;
-    for(unsigned c=0;c<256;c++){
-        unsigned q=glyph_coverage4(c);assert(q==reference_q(c));assert(q>=previous);previous=q;
-        assert(q==0||q==85||q==170||q==255);seen|=1u<<(q/85);
+    /* Original 4bpp palette: all sixteen distinct coverages, no re-quantizer.
+     * Generic bpp8 retains its original 256 sample values, not a new AA scheme. */
+    glyph_palette_t full;glyph_palette_init(&full,0xffff,255,255);
+    unsigned seen=0;
+    for(unsigned i=0;i<16;i++){
+        assert(full.alpha[i]==i*17);seen|=1u<<(full.alpha[i]/17);
     }
-    assert(seen==15);assert(nui_native_init(TW,TH,frame));
+    assert(seen==65535);assert(nui_native_init(TW,TH,frame));
     const unsigned opas[]={0,1,42,85,128,170,254,255},bpps[]={1,2,4,8};
     for(unsigned theme=0;theme<2;theme++){
         for(unsigned i=0;i<TW*TH;i++)seed[i]=(uint16_t)(theme?0xffff-i*13:0x1234+i*17);
@@ -84,8 +83,8 @@ int main(int argc,char **argv){
             draw(8,opas[a],opas[b],clip,theme,true);assert(!memcmp(saved,frame,sizeof(frame)));
         }
     }
-    assert(changes>0);nui_native_deinit();assert(!n.stats.allocation_count&&!n.stats.allocation_bytes);
+    nui_native_deinit();assert(!n.stats.allocation_count&&!n.stats.allocation_bytes);
     if(dump)fclose(dump);
-    printf("PASS four levels 0/85/170/255, 256 coverage inputs, %u draws: bpp1/2/4/8, both themes, opacity+clip; fast4 == slow8; %u expected changed pixels vs old AA, only inside glyph masks\n",draws,changes);
+    printf("PASS original 16-level 4bpp palette, 256 generic8 sample inputs, %u draws: bpp1/2/4/8, both themes, opacity+clip; fast4 == generic8; exact original coverage-before-opacity math; glyph masks/geometry preserved\n",draws);
     return 0;
 }
