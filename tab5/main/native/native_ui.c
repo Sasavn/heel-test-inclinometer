@@ -7,6 +7,9 @@
 #include <math.h>
 #include <time.h>
 #include <assert.h>
+#ifdef ESP_PLATFORM
+#include "esp_heap_caps.h"
+#endif
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
@@ -46,7 +49,22 @@ static struct {
     nui_native_flush_cb_t flush;void *flush_user;uint64_t (*clock_us)(void);nui_native_stats_t stats;
 } n;
 typedef union {max_align_t alignment;size_t size;} allocation_header;
-static void *mem_alloc(size_t size){allocation_header *h=calloc(1,sizeof(*h)+size);if(!h){n.stats.allocation_failures++;return NULL;}h->size=size;n.stats.allocation_bytes+=size;n.stats.allocation_count++;if(n.stats.allocation_bytes>n.stats.allocation_peak)n.stats.allocation_peak=n.stats.allocation_bytes;return h+1;}
+static void *mem_alloc(size_t size){
+    allocation_header *h;
+    /* Retained objects/styles/text and render caches are CPU-only data.
+     * Default calloc prefers internal RAM for these small allocations, starving
+     * the later 16*3072-byte service queue and internal-only task stacks.
+     * Keep them in PSRAM; do not fall back to scarce internal/DMA memory. */
+#ifdef ESP_PLATFORM
+    h=heap_caps_calloc(1,sizeof(*h)+size,MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+#else
+    h=calloc(1,sizeof(*h)+size);
+#endif
+    if(!h){n.stats.allocation_failures++;return NULL;}
+    h->size=size;n.stats.allocation_bytes+=size;n.stats.allocation_count++;
+    if(n.stats.allocation_bytes>n.stats.allocation_peak)n.stats.allocation_peak=n.stats.allocation_bytes;
+    return h+1;
+}
 static void mem_free(void *p){if(p){allocation_header *h=(allocation_header*)p-1;n.stats.allocation_bytes-=h->size;n.stats.allocation_count--;free(h);}}
 static char *str_copy(const char *s){if(!s)s="";size_t len=strlen(s)+1;char *r=mem_alloc(len);if(r)memcpy(r,s,len);return r;}
 static uint64_t now_us(void){

@@ -413,7 +413,8 @@ void app_main(void) {
      * startup behind a synchronous filesystem probe. Media mount is deferred
      * to its service worker; the UI initially shows unknown/not-ready media. */
     ui_perf.since=esp_timer_get_time();
-    if(tab5_native_port_start(ui_callback,NULL)!=ESP_OK){boot_failed();return;}
+    esp_err_t display_result=tab5_native_port_start(ui_callback,NULL);
+    if(display_result!=ESP_OK){printf("Native display startup: %s\n",esp_err_to_name(display_result));boot_failed();return;}
     if(bsp_display_brightness_set(brightness_pct)!=ESP_OK)snprintf(notice,sizeof(notice),"Не удалось восстановить яркость экрана");
     tab5_services_config_t services={.command=command,.network=network};
     esp_err_t services_result=tab5_services_init(&services);
