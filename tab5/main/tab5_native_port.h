@@ -39,6 +39,14 @@ typedef struct {
      * flush_us, but included in end-to-end refresh_us. No allocation or ISR scan. */
     uint32_t verify_checks,verify_errors;
     uint64_t verify_mismatches,verify_us;
+    uint32_t touch_reads,touch_read_gap_max_us;
+    /* First locally sampled/dequeued input in the rendered batch. Excludes
+     * physical/controller latency; LCD completion is copy EOF, NOT vsync.
+     * Render/PPA/verification and scheduling may still delay touch polling. */
+    uint32_t sample_render_count,sample_render_max_us,sample_lcd_count,sample_lcd_max_us;
+    uint64_t sample_render_us,sample_lcd_us;
+    uint32_t ppa_timeouts,lcd_timeouts,submit_errors;
+    uint32_t pipeline_state; /* 0 IDLE, 1 PPA_PENDING, 2 LCD_PENDING; timeout retains owner. */
 } tab5_native_port_stats_t;
 
 /* Queue 1..2 checks on future successful PPA frames; false for invalid count or
@@ -48,6 +56,7 @@ bool tab5_native_port_request_verify(unsigned frames);
 esp_err_t tab5_native_port_start(tab5_ui_action_cb_t callback,void *user);
 bool tab5_native_port_lock(uint32_t timeout_ms);
 void tab5_native_port_unlock(void);
-/* Atomic counters only, never takes the UI mutex. Reset returns zero counters. */
+/* Atomic counters only, never takes the UI mutex. Reset clears counters but
+ * retains pipeline_state: diagnostics cannot release DMA buffer ownership. */
 void tab5_native_port_stats(tab5_native_port_stats_t *out,bool reset);
 #endif

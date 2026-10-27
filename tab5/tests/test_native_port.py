@@ -19,6 +19,8 @@ STUB = r'''
 #include <string.h>
 typedef int esp_err_t;
 typedef int BaseType_t;
+typedef struct {int dummy;} ppa_event_data_t;
+typedef struct {bool (*on_trans_done)(void*,ppa_event_data_t*,void*);} ppa_event_callbacks_t;
 typedef int portMUX_TYPE;
 typedef struct {int tokens;} *SemaphoreHandle_t;
 typedef void *esp_lcd_panel_handle_t;
@@ -32,19 +34,26 @@ typedef struct {const void *buffer;size_t buffer_size;int pic_w,pic_h,block_w,bl
 typedef struct {ppa_buf_t in,out;int rotation_angle;float scale_x,scale_y;int mode;} ppa_srm_oper_config_t;
 typedef struct {void *panel;} bsp_lcd_handles_t;
 typedef struct {int dummy;} bsp_display_config_t;
-typedef struct {uint64_t render_us,flush_us,refresh_us,wait_us,rotate_us;uint32_t renders,flushes,refreshes,refresh_max_us,errors,interactive_renders,input_render_wait_max_us,verify_checks,verify_errors;uint64_t verify_mismatches,verify_us;} tab5_native_port_stats_t;
+typedef struct {uint64_t render_us,flush_us,refresh_us,wait_us,rotate_us;uint32_t renders,flushes,refreshes,refresh_max_us,errors,interactive_renders,input_render_wait_max_us,verify_checks,verify_errors;uint64_t verify_mismatches,verify_us;uint32_t touch_reads,touch_read_gap_max_us,sample_render_count,sample_render_max_us,sample_lcd_count,sample_lcd_max_us;uint64_t sample_render_us,sample_lcd_us;uint32_t ppa_timeouts,lcd_timeouts,submit_errors,pipeline_state;} tab5_native_port_stats_t;
 enum {ESP_OK=0,ESP_FAIL=-1,ESP_ERR_NO_MEM=1,ESP_ERR_INVALID_STATE=2,pdTRUE=1,pdFALSE=0,pdPASS=1,
  MALLOC_CAP_SPIRAM=1,MALLOC_CAP_8BIT=2,PPA_OPERATION_SRM=1,PPA_SRM_COLOR_MODE_RGB565=1,
- PPA_SRM_ROTATION_ANGLE_90=1,PPA_TRANS_MODE_BLOCKING=1,BSP_FEATURE_TOUCH=1,BSP_FEATURE_LCD=2};
+ PPA_SRM_ROTATION_ANGLE_90=1,PPA_TRANS_MODE_BLOCKING=1,PPA_TRANS_MODE_NON_BLOCKING=2,ESP_ERR_INVALID_ARG=0x102,BSP_FEATURE_TOUCH=1,BSP_FEATURE_LCD=2};
 #define portMUX_INITIALIZER_UNLOCKED 0
 #define portMAX_DELAY 0xffffffffu
 #define pdMS_TO_TICKS(n) (n)
 #define portENTER_CRITICAL(p) ((void)(p))
 #define portEXIT_CRITICAL(p) ((void)(p))
+#define portENTER_CRITICAL_ISR(p) ((void)(p))
+#define portEXIT_CRITICAL_ISR(p) ((void)(p))
 static int fail_at,step,live,display_live,io_live,renderer_live,ui_held;
 static ppa_srm_oper_config_t last_op;
 static int ppa_fault,lcd_fault,cache_fault;
 static bool emulate_pixels,corrupt_ppa;
+static bool ppa_inflight,lcd_inflight,auto_ppa_complete=true,accept_on_error;
+static uint64_t ppa_delay_us,ppa_due;
+static unsigned touches_while_ppa,touches_while_lcd;
+static bool (*ppa_done_cb)(void*,ppa_event_data_t*,void*);
+static void finish_ppa(void);static void finish_lcd(void);
 static unsigned cache_checks;
 #define ESP_CACHE_MSYNC_FLAG_DIR_M2C 1
 static int esp_cache_msync(void *p,size_t n,int flags){assert(p&&n==1280u*720u*2u&&flags==1&&!ui_held);cache_checks++;return cache_fault;}
@@ -80,7 +89,8 @@ static int esp_lcd_touch_del(esp_lcd_touch_handle_t t){released(t);return 0;}
 static int esp_lcd_panel_io_del(void *p){assert(p==(void*)2);io_live=0;return 0;}
 static int esp_lcd_dpi_panel_register_event_callbacks(void *p,const esp_lcd_dpi_panel_event_callbacks_t *cb,void *ctx){(void)p;(void)ctx;if(fails())return ESP_FAIL;done_cb=cb->on_color_trans_done;return 0;}
 static int ppa_register_client(const ppa_client_config_t *c,void **p){assert(c->oper_type==1);*p=allocated(1);return *p?0:ESP_FAIL;}
-static int ppa_unregister_client(void *p){released(p);return 0;}
+static int ppa_client_register_event_callbacks(void *p,const ppa_event_callbacks_t *c){assert(p);if(fails())return ESP_FAIL;ppa_done_cb=c->on_trans_done;return ESP_OK;}
+static int ppa_unregister_client(void *p){assert(!ppa_inflight);released(p);return 0;}
 static int esp_lcd_panel_disp_on_off(void *p,bool on){(void)p;assert(on);return fails()?ESP_FAIL:0;}
 static bool tab5_panel_ready(void){return !fails();}
 static void tab5_panel_observer_reset(void){}
@@ -92,28 +102,53 @@ void nui_native_set_clock_cb(uint64_t (*cb)(void)){assert(cb);}
 void tab5_ui_init(tab5_ui_action_cb_t cb,void *p){(void)cb;(void)p;}
 void tab5_ui_destroy(void){}
 void nui_native_tick(uint32_t ms){(void)ms;assert(ui_held);ticks++;}
-void nui_native_touch(int x,int y,bool p){(void)x;(void)y;assert(ui_held);touches++;if(touch_dirty&&(p||(input_end_loop&&loops==input_end_loop)))dirty=1;}
-size_t nui_native_render(void){assert(ui_held);renders++;unsigned n=dirty;dirty=0;if(n){assert(draw_count<256);draw_times[draw_count++]=test_now;}return n;}
+void nui_native_touch(int x,int y,bool p){(void)x;(void)y;assert(ui_held);touches++;if(ppa_inflight)touches_while_ppa++;if(lcd_inflight)touches_while_lcd++;if(touch_dirty&&(p||(input_end_loop&&loops==input_end_loop)))dirty=1;}
+size_t nui_native_render(void){assert(ui_held&&!ppa_inflight&&!lcd_inflight);renders++;unsigned n=dirty;dirty=0;if(n){assert(draw_count<256);draw_times[draw_count++]=test_now;}return n;}
 void nui_native_invalidate(const nui_area_t *a){assert(ui_held&&a&&a->x2==1279);dirty=1;}
 static int esp_lcd_touch_read_data(void *p){(void)p;assert(!ui_held);return 0;}
 static bool esp_lcd_touch_get_coordinates(void *p,uint16_t *x,uint16_t *y,uint16_t *s,uint8_t *n,unsigned cap){(void)p;assert(cap==1);if(!input_pressed)return false;*x=100;*y=100;*s=1;*n=1;return true;}
-static int ppa_do_scale_rotate_mirror(void *p,const ppa_srm_oper_config_t *c){assert(p&&!ui_held);assert(c->in.pic_w==1280&&c->in.pic_h==720&&c->out.pic_w==720&&c->out.pic_h==1280&&c->rotation_angle==1);last_op=*c;rotations++;
- if(emulate_pixels&&!ppa_fault){
-  const uint16_t *src=c->in.buffer;uint16_t *dst=(uint16_t*)c->out.buffer;
+static void finish_ppa(void){
+ assert(ppa_inflight&&!ui_held);const ppa_srm_oper_config_t *c=&last_op;
+ if(emulate_pixels){const uint16_t *src=c->in.buffer;uint16_t *dst=(uint16_t*)c->out.buffer;
   for(unsigned y=0;y<(unsigned)c->in.block_h;y++)for(unsigned x=0;x<(unsigned)c->in.block_w;x++)
    dst[(c->out.block_offset_y+c->in.block_w-1-x)*720+c->out.block_offset_x+y]=src[(c->in.block_offset_y+y)*1280+c->in.block_offset_x+x];
   if(corrupt_ppa)dst[0]^=1;
  }
- return ppa_fault;}
-static int esp_lcd_panel_draw_bitmap(void *p,int x,int y,int w,int h,void *buf){assert(p&&buf&&!ui_held&&x==0&&y==0&&w==720&&h==1280);submits++;return lcd_fault;}
-static void vTaskDelay(unsigned ms){assert(!ui_held);test_now+=(uint64_t)ms*1000;loops++;if((auto_complete||loops==complete_at_loop)&&done_cb)done_cb(NULL,NULL,NULL);if(input_begin_loop&&loops==input_begin_loop)input_pressed=true;if(input_end_loop&&loops==input_end_loop)input_pressed=false;if(stream_dirty)dirty=1;if(loops>=loop_limit)longjmp(stop_loop,1);}
+ ppa_inflight=false;assert(ppa_done_cb);ppa_done_cb(NULL,NULL,NULL);
+}
+static void finish_lcd(void){assert(lcd_inflight&&!ppa_inflight&&!ui_held);lcd_inflight=false;assert(done_cb);done_cb(NULL,NULL,NULL);}
+static int ppa_do_scale_rotate_mirror(void *p,const ppa_srm_oper_config_t *c){
+ assert(p&&!ui_held&&!ppa_inflight&&!lcd_inflight&&c->mode==PPA_TRANS_MODE_NON_BLOCKING);
+ assert(c->in.pic_w==1280&&c->in.pic_h==720&&c->out.pic_w==720&&c->out.pic_h==1280&&c->rotation_angle==1);
+ last_op=*c;rotations++;
+ if(!ppa_fault||accept_on_error){ppa_inflight=true;ppa_due=test_now+ppa_delay_us;if(auto_ppa_complete&&!ppa_delay_us)finish_ppa();}
+ return ppa_fault;
+}
+static int esp_lcd_panel_draw_bitmap(void *p,int x,int y,int w,int h,void *buf){
+ assert(p&&buf&&!ui_held&&!ppa_inflight&&!lcd_inflight&&x==0&&y==0&&w==720&&h==1280);submits++;
+ if(!lcd_fault||accept_on_error)lcd_inflight=true;
+ return lcd_fault;
+}
+static void vTaskDelay(unsigned ms){
+ assert(!ui_held);test_now+=(uint64_t)ms*1000;loops++;
+ if(ppa_inflight&&auto_ppa_complete&&test_now>=ppa_due)finish_ppa();
+ if(lcd_inflight&&(auto_complete||loops==complete_at_loop))finish_lcd();
+ if(input_begin_loop&&loops==input_begin_loop)input_pressed=true;
+ if(input_end_loop&&loops==input_end_loop)input_pressed=false;
+ if(stream_dirty)dirty=1;
+ if(loops>=loop_limit)longjmp(stop_loop,1);
+}
+
 #define free released
 '''
 TEST = r'''
 #undef free
-static void run_loop(unsigned count){loops=0;loop_limit=count;if(!setjmp(stop_loop))native_task(NULL);}
+static void run_loop(unsigned count){loops=0;loop_limit=count;if(!setjmp(stop_loop))native_task(NULL);pipeline_poll();}
 static void fresh_runtime(void){
+ if(ppa_inflight){finish_ppa();}pipeline_poll();if(lcd_inflight){finish_lcd();}pipeline_poll();
  startup_cleanup(true,true);started=false;assert(!live);
+ auto_ppa_complete=true;ppa_delay_us=0;accept_on_error=false;ppa_fault=lcd_fault=0;
+ touches_while_ppa=touches_while_lcd=0;
  stats=(tab5_native_port_stats_t){0};rotations=submits=ticks=touches=renders=draw_count=0;
  input_pressed=touch_dirty=stream_dirty=auto_complete=false;
  input_begin_loop=input_end_loop=complete_at_loop=0;test_now=1000000;dirty=1;
@@ -193,9 +228,9 @@ static void roi_port_regression(void){
     assert(last_op.in.block_offset_x==16&&last_op.in.block_offset_y==32);
     assert(last_op.out.block_offset_x==32&&last_op.out.block_offset_y==1248);
     assert(last_op.out.buffer==rotated&&last_op.out.buffer_size==FRAME_BYTES);
-    ppa_fault=ESP_FAIL;next_roi_frame();assert(!rotation_baseline_valid);
+    ppa_fault=ESP_ERR_INVALID_ARG;next_roi_frame();assert(!rotation_baseline_valid);
     ppa_fault=0;next_roi_frame();assert_full_op();assert(rotation_baseline_valid);
-    lcd_fault=ESP_FAIL;next_roi_frame();assert(!rotation_baseline_valid);
+    lcd_fault=ESP_ERR_INVALID_ARG;next_roi_frame();assert(!rotation_baseline_valid);
     lcd_fault=0;next_roi_frame();assert_full_op();assert(rotation_baseline_valid);
     test_dirty_count=0;next_roi_frame();assert_full_op();
     test_dirty_count=49;next_roi_frame();assert_full_op();
@@ -221,7 +256,7 @@ static void verify_port_regression(void){
     rotated[0]^=1;next_roi_frame();
     assert(stats.verify_checks==2&&stats.verify_mismatches==1&&cache_checks==2&&!verify_requested);
     next_roi_frame();assert(cache_checks==2); /* bounded request exhausted */
-    assert(tab5_native_port_request_verify(1));ppa_fault=ESP_FAIL;next_roi_frame();
+    assert(tab5_native_port_request_verify(1));ppa_fault=ESP_ERR_INVALID_ARG;next_roi_frame();
     assert(cache_checks==2&&verify_requested==1);ppa_fault=0;
     next_roi_frame();assert(stats.verify_checks==3&&stats.verify_mismatches==1&&cache_checks==3);
     assert(tab5_native_port_request_verify(1));cache_fault=ESP_FAIL;next_roi_frame();
@@ -236,8 +271,40 @@ static void verify_port_regression(void){
     puts("Bounded verifier: default-off, 1/2 requests, full/ROI retained pixels, injected mismatch, PPA failure, cache error, reset/lifecycle PASS");
 }
 
+static void async_regression(void){
+ fresh_runtime();ppa_delay_us=50000;auto_complete=true;touch_dirty=true;input_begin_loop=1;input_end_loop=2;
+ run_loop(25);
+ assert(touches==25&&touches_while_ppa>=8&&touches_while_lcd>=1);
+ assert(draw_count==2&&draw_times[1]==1060000);
+ assert(stats.touch_reads==25&&stats.touch_read_gap_max_us==10000);
+ assert(stats.sample_render_count==1&&stats.sample_render_max_us==50000);
+ assert(stats.sample_lcd_count==1&&stats.sample_lcd_max_us==110000);
+ assert(stats.rotate_us==100000&&!ppa_inflight&&!lcd_inflight);
+ fresh_runtime();auto_ppa_complete=false;stream_dirty=true;run_loop(140);
+ assert(rotations==1&&!submits&&touches==140&&pipeline.stage==PPA_PENDING);
+ assert(stats.ppa_timeouts==1&&frame&&rotated);
+ int allocated_before=live;startup_cleanup(true,true);assert(live==allocated_before&&frame&&rotated);
+ finish_ppa();pipeline_poll();assert(pipeline.stage==LCD_PENDING);finish_lcd();pipeline_poll();
+ assert(pipeline.stage==IDLE&&!rotation_baseline_valid&&dirty);
+ auto_ppa_complete=true;auto_complete=true;next_roi_frame();assert_full_op();
+ fresh_runtime();ppa_fault=ESP_FAIL;accept_on_error=true;auto_ppa_complete=false;stream_dirty=true;run_loop(30);
+ assert(rotations==1&&!submits&&pipeline.stage==PPA_PENDING&&touches==30);
+ finish_ppa();pipeline_poll();assert(pipeline.stage==IDLE&&!rotation_baseline_valid&&!submits);
+ ppa_fault=0;accept_on_error=false;auto_ppa_complete=true;auto_complete=true;next_roi_frame();assert_full_op();
+ fresh_runtime();lcd_fault=ESP_FAIL;accept_on_error=true;stream_dirty=true;run_loop(30);
+ assert(rotations==1&&submits==1&&pipeline.stage==LCD_PENDING&&touches==30);
+ finish_lcd();pipeline_poll();assert(pipeline.stage==IDLE&&!rotation_baseline_valid);
+ lcd_fault=0;accept_on_error=false;auto_complete=true;next_roi_frame();assert_full_op();
+ /* Verifier waits for PPA completion, not merely successful submission. */
+ fresh_runtime();auto_ppa_complete=false;auto_complete=true;emulate_pixels=true;cache_checks=0;
+ assert(tab5_native_port_request_verify(1));run_loop(5);assert(!cache_checks&&!submits);
+ finish_ppa();pipeline_poll();assert(cache_checks==1&&stats.verify_checks==1&&!stats.verify_mismatches&&submits==1);
+ finish_lcd();pipeline_poll();emulate_pixels=false;
+ puts("Async pipeline: delayed DMA copies config, continuous touch, no render overlap, measured sample->copy EOF, timeout ownership hold, rejection/ambiguous errors, late recovery, verifier ordering PASS");
+}
+
 int main(void){
- for(int fault=1;fault<=12;fault++){
+ for(int fault=1;fault<=14;fault++){
   fail_at=fault;step=0;assert(tab5_native_port_start(NULL,NULL)!=ESP_OK);
   assert(!live&&!display_live&&!io_live&&!renderer_live&&!started&&!ui_held);
  }
@@ -271,10 +338,11 @@ int main(void){
  run_loop(25);assert(draw_count==2&&draw_times[1]==1200000);
  assert(rotations==2&&submits==2&&stats.interactive_renders==1);
  assert(stats.input_render_wait_max_us==190000);
- cpu_rotation_regression();roi_port_regression();verify_port_regression();
+ cpu_rotation_regression();roi_port_regression();verify_port_regression();async_regression();
+ if(lcd_inflight){finish_lcd();}pipeline_poll();
  startup_cleanup(true,true);started=false;
  assert(!live&&!display_live&&!io_live&&!renderer_live);
- puts("native port source: 12 startup fault cleanups/restart, idle skip, no-lock PPA/flush, no reuse without completion, all PPA90 pixels PASS");
+ puts("native port source: 14 startup fault cleanups/restart, idle skip, no-lock PPA/flush, no reuse without completion, all PPA90 pixels PASS");
  puts("native scheduling: 40 ms input eligibility / 100 ms periodic; 25 Hz hold bound; late-DMA request preserved PASS (stub time, not hardware latency)");
  return 0;
 }

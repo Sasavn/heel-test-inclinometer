@@ -107,7 +107,7 @@ bool tab5_native_port_input_dispatch(uint32_t now_ms) {
  * render or rotation is allowed while the previous LCD transfer owns buffers. */
 #define PERIODIC_RENDER_US UINT64_C(100000)
 #define INTERACTION_RENDER_US UINT64_C(40000)
-static SemaphoreHandle_t ui_mutex,transfer_done;
+static SemaphoreHandle_t ui_mutex,transfer_done,ppa_done;
 static esp_lcd_panel_handle_t panel;
 static esp_lcd_touch_handle_t touch;
 static ppa_client_handle_t ppa;
@@ -116,6 +116,13 @@ static portMUX_TYPE stats_lock=portMUX_INITIALIZER_UNLOCKED;
 static tab5_native_port_stats_t stats;
 static bool started;
 static unsigned verify_requested;
+typedef enum { IDLE=0,PPA_PENDING=1,LCD_PENDING=2 } pipeline_stage_t;
+static struct {
+    pipeline_stage_t stage;
+    uint64_t render_start,ppa_start,submitted,lcd_submit_return,sample_us;
+    bool interactive,timed_out,submit_failed;
+} pipeline;
+static uint64_t ppa_completed_at,lcd_completed_at;
 /* Candidate: RGB565 dirty union, conservatively expanded to rev1 16x16
  * macroblocks. Buffers/strides remain full-frame and 64-byte aligned. */
 #define ROTATION_DIRTY_CAPACITY 48
@@ -157,7 +164,7 @@ bool tab5_native_port_lock(uint32_t timeout_ms) {
 void tab5_native_port_unlock(void) { xSemaphoreGive(ui_mutex); }
 void tab5_native_port_stats(tab5_native_port_stats_t *out,bool reset) {
     portENTER_CRITICAL(&stats_lock);
-    if(reset)stats=(tab5_native_port_stats_t){0};
+    if(reset){uint32_t state=stats.pipeline_state;stats=(tab5_native_port_stats_t){0};stats.pipeline_state=state;}
     if(out)*out=stats;
     portEXIT_CRITICAL(&stats_lock);
 }
@@ -189,108 +196,134 @@ static uint64_t verify_rotation_once(void){
     portEXIT_CRITICAL(&stats_lock);
     return elapsed;
 }
-static bool transfer_finished(esp_lcd_panel_handle_t handle,esp_lcd_dpi_panel_event_data_t *event,void *ctx) {
+static void pipeline_set(pipeline_stage_t stage){
+    pipeline.stage=stage;
+    portENTER_CRITICAL(&stats_lock);stats.pipeline_state=(uint32_t)stage;portEXIT_CRITICAL(&stats_lock);
+}
+static bool ppa_finished(ppa_client_handle_t client,ppa_event_data_t *event,void *ctx){
+    (void)client;(void)event;(void)ctx;BaseType_t wake=pdFALSE;
+    portENTER_CRITICAL_ISR(&stats_lock);ppa_completed_at=clock_us();portEXIT_CRITICAL_ISR(&stats_lock);
+    xSemaphoreGiveFromISR(ppa_done,&wake);return wake==pdTRUE;
+}
+static bool transfer_finished(esp_lcd_panel_handle_t handle,esp_lcd_dpi_panel_event_data_t *event,void *ctx){
     (void)handle;(void)event;(void)ctx;BaseType_t wake=pdFALSE;
+    portENTER_CRITICAL_ISR(&stats_lock);lcd_completed_at=clock_us();portEXIT_CRITICAL_ISR(&stats_lock);
     xSemaphoreGiveFromISR(transfer_done,&wake);return wake==pdTRUE;
 }
 static uint64_t clock_us(void){return (uint64_t)esp_timer_get_time();}
-static void native_task(void *arg) {
+static void invalidate_full(void){
+    rotation_baseline_valid=false;nui_area_t full={0,0,WIDTH-1,HEIGHT-1};
+    xSemaphoreTake(ui_mutex,portMAX_DELAY);nui_native_invalidate(&full);xSemaphoreGive(ui_mutex);
+}
+static void pipeline_error(esp_err_t error){
+    portENTER_CRITICAL(&stats_lock);stats.errors++;stats.submit_errors++;portEXIT_CRITICAL(&stats_lock);
+    pipeline.submit_failed=true;rotation_baseline_valid=false;
+    /* INVALID_ARG is rejected before DMA submission in the pinned PPA/DPI
+     * drivers. Any other failure has unknown ownership: retain both buffers
+     * until the corresponding completion; no cancel/free/retry on a timeout. */
+    if(error==ESP_ERR_INVALID_ARG){pipeline_set(IDLE);invalidate_full();}
+}
+static void pipeline_poll(void){
+    if(pipeline.stage==PPA_PENDING&&xSemaphoreTake(ppa_done,0)==pdTRUE){
+        portENTER_CRITICAL(&stats_lock);uint64_t done=ppa_completed_at;
+        stats.rotate_us+=done-pipeline.ppa_start;portEXIT_CRITICAL(&stats_lock);
+        if(pipeline.submit_failed){pipeline_set(IDLE);invalidate_full();return;}
+        /* PPA has stopped reading frame/writing rotated. Verify before LCD. */
+        verify_rotation_once();
+        xSemaphoreTake(transfer_done,0);
+        pipeline.submitted=clock_us();pipeline_set(LCD_PENDING);
+        esp_err_t error=esp_lcd_panel_draw_bitmap(panel,0,0,HEIGHT,WIDTH,rotated);
+        uint64_t submitted=clock_us();pipeline.lcd_submit_return=submitted;
+        portENTER_CRITICAL(&stats_lock);stats.flush_us+=submitted-pipeline.submitted;
+        if(error==ESP_OK)stats.flushes++;
+        portEXIT_CRITICAL(&stats_lock);
+        if(error!=ESP_OK)pipeline_error(error);
+    }
+    if(pipeline.stage==LCD_PENDING&&xSemaphoreTake(transfer_done,0)==pdTRUE){
+        portENTER_CRITICAL(&stats_lock);uint64_t done=lcd_completed_at;
+        uint64_t elapsed=done-pipeline.render_start;
+        stats.wait_us+=done>pipeline.lcd_submit_return?done-pipeline.lcd_submit_return:0;stats.refreshes++;stats.refresh_us+=elapsed;
+        if(elapsed>stats.refresh_max_us)stats.refresh_max_us=elapsed>UINT32_MAX?UINT32_MAX:(uint32_t)elapsed;
+        if(pipeline.interactive){uint64_t age=done-pipeline.sample_us;stats.sample_lcd_count++;stats.sample_lcd_us+=age;
+            if(age>stats.sample_lcd_max_us)stats.sample_lcd_max_us=age>UINT32_MAX?UINT32_MAX:(uint32_t)age;}
+        portEXIT_CRITICAL(&stats_lock);
+        bool recover=pipeline.timed_out||pipeline.submit_failed;pipeline_set(IDLE);
+        if(recover)invalidate_full();else rotation_baseline_valid=true;
+    }
+    uint64_t now=clock_us();
+    if(pipeline.stage!=IDLE&&!pipeline.timed_out&&
+       now-(pipeline.stage==PPA_PENDING?pipeline.ppa_start:pipeline.submitted)>=1000000){
+        pipeline.timed_out=true;rotation_baseline_valid=false;
+        portENTER_CRITICAL(&stats_lock);stats.errors++;
+        if(pipeline.stage==PPA_PENDING)stats.ppa_timeouts++;else stats.lcd_timeouts++;
+        portEXIT_CRITICAL(&stats_lock);
+    }
+}
+static void native_task(void *arg){
     (void)arg;uint32_t last_ms=(uint32_t)(clock_us()/1000);
-    uint64_t last_render=0,pending_start=0,pending_submitted=0;
-    bool pending=false,timeout_reported=false,was_pressed=false,input_requested=false;
-    uint64_t input_since=0;int x=0,y=0;
-    for(;;) {
-        uint64_t now=clock_us();
-        if(pending&&xSemaphoreTake(transfer_done,0)==pdTRUE) {
-            uint64_t elapsed=now-pending_start;
-            portENTER_CRITICAL(&stats_lock);
-            stats.wait_us+=now-pending_submitted;stats.refreshes++;stats.refresh_us+=elapsed;
-            if(elapsed>stats.refresh_max_us)stats.refresh_max_us=elapsed>UINT32_MAX?UINT32_MAX:(uint32_t)elapsed;
-            portEXIT_CRITICAL(&stats_lock);
-            pending=false;
-        }
-        if(pending&&!timeout_reported&&now-pending_submitted>=1000000) {
-            portENTER_CRITICAL(&stats_lock);stats.errors++;portEXIT_CRITICAL(&stats_lock);
-            timeout_reported=true;
-            /* No completion means no buffer reuse. Keep servicing input and
-             * state until the late completion arrives; never cancel DMA by
-             * freeing its source. No UI mutex is held during this interval. */
-        }
+    uint64_t last_render=0,last_touch_read=0,input_since=0;
+    bool was_pressed=false,input_requested=false;int x=0,y=0;
+    for(;;){
+        pipeline_poll();
+        uint64_t read_at=clock_us();
+        portENTER_CRITICAL(&stats_lock);stats.touch_reads++;
+        if(last_touch_read){uint64_t gap=read_at-last_touch_read;
+            if(gap>stats.touch_read_gap_max_us)stats.touch_read_gap_max_us=gap>UINT32_MAX?UINT32_MAX:(uint32_t)gap;}
+        portEXIT_CRITICAL(&stats_lock);last_touch_read=read_at;
         uint16_t tx=0,ty=0,strength=0;uint8_t points=0;
-        bool pressed=esp_lcd_touch_read_data(touch)==ESP_OK &&
+        bool pressed=esp_lcd_touch_read_data(touch)==ESP_OK&&
             esp_lcd_touch_get_coordinates(touch,&tx,&ty,&strength,&points,1)&&points;
         if(pressed)pressed=native_touch_position(tx,ty,&x,&y);
-        if(pressed||was_pressed){
-            if(!input_requested)input_since=clock_us();
-            input_requested=true;
-        }
+        if(pressed||was_pressed){if(!input_requested)input_since=clock_us();input_requested=true;}
 #ifdef ESP_PLATFORM
-        /* Preserve release for retry if a full FIFO rejects this sample. */
         if((pressed||was_pressed)&&tab5_native_port_post_touch(x,y,pressed,(uint32_t)(clock_us()/1000)))was_pressed=pressed;
 #else
         was_pressed=pressed;
 #endif
         xSemaphoreTake(ui_mutex,portMAX_DELAY);
-        uint32_t ms=(uint32_t)(clock_us()/1000);
-        nui_native_tick(ms-last_ms);last_ms=ms;
+        uint32_t ms=(uint32_t)(clock_us()/1000);nui_native_tick(ms-last_ms);last_ms=ms;
 #ifdef ESP_PLATFORM
-        if(tab5_native_port_input_dispatch(ms)){
-            if(!input_requested)input_since=clock_us();
-            input_requested=true;
-        }
+        if(tab5_native_port_input_dispatch(ms)){if(!input_requested)input_since=clock_us();input_requested=true;}
 #else
         nui_native_touch(x,y,pressed);
 #endif
         uint64_t start=clock_us();size_t dirty=0;
-        nui_area_t rotation_area={0,0,WIDTH-1,HEIGHT-1};
-        bool interactive=input_requested;
+        nui_area_t rotation_area={0,0,WIDTH-1,HEIGHT-1};bool interactive=input_requested;
         uint64_t interval=interactive?INTERACTION_RENDER_US:PERIODIC_RENDER_US;
         uint64_t input_wait=interactive?start-input_since:0;
-        if(!pending&&start-last_render>=interval) {
+        if(pipeline.stage==IDLE&&start-last_render>=interval){
             last_render=start;dirty=nui_native_render();
-            if(dirty&&rotation_baseline_valid){
-                nui_area_t areas[ROTATION_DIRTY_CAPACITY];
+            if(dirty&&rotation_baseline_valid){nui_area_t areas[ROTATION_DIRTY_CAPACITY];
                 size_t count=nui_native_get_dirty(areas,ROTATION_DIRTY_CAPACITY);
-                native_rotation_bounds(areas,count,&rotation_area);
-            }
+                native_rotation_bounds(areas,count,&rotation_area);}
             input_requested=false;
         }
-        uint64_t rendered=clock_us();
-        xSemaphoreGive(ui_mutex);
-        /* Only this task renders frame. Main updates retained state under
-         * ui_mutex, never framebuffer pixels. PPA/LCD waits need no UI lock. */
-        if(dirty) {
+        uint64_t rendered=clock_us();xSemaphoreGive(ui_mutex);
+        if(dirty){
+            pipeline.render_start=start;pipeline.ppa_start=rendered;pipeline.sample_us=input_since;
+            pipeline.interactive=interactive;pipeline.timed_out=false;pipeline.submit_failed=false;
+            portENTER_CRITICAL(&stats_lock);stats.renders++;stats.render_us+=rendered-start;
+            if(interactive){stats.interactive_renders++;stats.sample_render_count++;stats.sample_render_us+=input_wait;
+                if(input_wait>stats.input_render_wait_max_us)stats.input_render_wait_max_us=input_wait>UINT32_MAX?UINT32_MAX:(uint32_t)input_wait;
+                if(input_wait>stats.sample_render_max_us)stats.sample_render_max_us=input_wait>UINT32_MAX?UINT32_MAX:(uint32_t)input_wait;}
+            portEXIT_CRITICAL(&stats_lock);
+            xSemaphoreTake(ppa_done,0);pipeline_set(PPA_PENDING);
+            /* IDF copies this config into its transaction before returning.
+             * The two pixel buffers remain exclusively owned until both EOFs. */
             ppa_srm_oper_config_t op={
                 .in={.buffer=frame,.pic_w=WIDTH,.pic_h=HEIGHT,.block_w=(uint32_t)(rotation_area.x2-rotation_area.x1+1),.block_h=(uint32_t)(rotation_area.y2-rotation_area.y1+1),.block_offset_x=(uint32_t)rotation_area.x1,.block_offset_y=(uint32_t)rotation_area.y1,.srm_cm=PPA_SRM_COLOR_MODE_RGB565},
                 .out={.buffer=rotated,.buffer_size=FRAME_BYTES,.pic_w=HEIGHT,.pic_h=WIDTH,.block_offset_x=(uint32_t)rotation_area.y1,.block_offset_y=(uint32_t)(WIDTH-1-rotation_area.x2),.srm_cm=PPA_SRM_COLOR_MODE_RGB565},
-                .rotation_angle=PPA_SRM_ROTATION_ANGLE_90,.scale_x=1,.scale_y=1,.mode=PPA_TRANS_MODE_BLOCKING};
-            esp_err_t e=ppa_do_scale_rotate_mirror(ppa,&op);
-            uint64_t rotated_at=clock_us();
-            uint64_t verification_us=e==ESP_OK?verify_rotation_once():0;
-            xSemaphoreTake(transfer_done,0); /* Drain BEFORE submit. */
-            if(e==ESP_OK)e=esp_lcd_panel_draw_bitmap(panel,0,0,HEIGHT,WIDTH,rotated);
-            uint64_t submitted=clock_us();
-            portENTER_CRITICAL(&stats_lock);
-            stats.renders++;stats.render_us+=rendered-start;
-            if(interactive){
-                stats.interactive_renders++;
-                if(input_wait>stats.input_render_wait_max_us)
-                    stats.input_render_wait_max_us=input_wait>UINT32_MAX?UINT32_MAX:(uint32_t)input_wait;
-            }
-            stats.rotate_us+=rotated_at-rendered;stats.flush_us+=submitted-rotated_at-verification_us;
-            if(e==ESP_OK)stats.flushes++;else stats.errors++;
-            portEXIT_CRITICAL(&stats_lock);
-            if(e==ESP_OK){rotation_baseline_valid=true;pending=true;timeout_reported=false;pending_start=start;pending_submitted=submitted;}
-            else {
-                rotation_baseline_valid=false;
-                nui_area_t full={0,0,WIDTH-1,HEIGHT-1};
-                xSemaphoreTake(ui_mutex,portMAX_DELAY);nui_native_invalidate(&full);xSemaphoreGive(ui_mutex);
-            }
+                .rotation_angle=PPA_SRM_ROTATION_ANGLE_90,.scale_x=1,.scale_y=1,.mode=PPA_TRANS_MODE_NON_BLOCKING};
+            esp_err_t error=ppa_do_scale_rotate_mirror(ppa,&op);
+            if(error!=ESP_OK)pipeline_error(error);
+            pipeline_poll(); /* Includes immediate callback completion. */
         }
         vTaskDelay(pdMS_TO_TICKS(10));
     }
 }
 static void startup_cleanup(bool renderer_ready,bool display_attempted) {
+    /* Startup cleanup only. A live/unknown DMA owner must never be freed. */
+    if(pipeline.stage!=IDLE)return;
     rotation_baseline_valid=false;
     __atomic_store_n(&verify_requested,0,__ATOMIC_RELEASE);
 #ifdef ESP_PLATFORM
@@ -303,14 +336,15 @@ static void startup_cleanup(bool renderer_ready,bool display_attempted) {
     if(ppa){ppa_unregister_client(ppa);ppa=NULL;}
     free(frame);free(rotated);frame=rotated=NULL;
     if(transfer_done){vSemaphoreDelete(transfer_done);transfer_done=NULL;}
+    if(ppa_done){vSemaphoreDelete(ppa_done);ppa_done=NULL;}
     if(ui_mutex){vSemaphoreDelete(ui_mutex);ui_mutex=NULL;}
 }
 esp_err_t tab5_native_port_start(tab5_ui_action_cb_t callback,void *user) {
     if(started)return ESP_ERR_INVALID_STATE;
     tab5_panel_observer_reset();
     esp_err_t e=ESP_ERR_NO_MEM;bool renderer_ready=false,display_attempted=false;
-    ui_mutex=xSemaphoreCreateMutex();transfer_done=xSemaphoreCreateBinary();
-    if(!ui_mutex||!transfer_done)goto fail;
+    ui_mutex=xSemaphoreCreateMutex();transfer_done=xSemaphoreCreateBinary();ppa_done=xSemaphoreCreateBinary();
+    if(!ui_mutex||!transfer_done||!ppa_done)goto fail;
     frame=heap_caps_aligned_alloc(64,FRAME_BYTES,MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
     rotated=heap_caps_aligned_alloc(64,FRAME_BYTES,MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
     if(!frame||!rotated)goto fail;
@@ -323,6 +357,8 @@ esp_err_t tab5_native_port_start(tab5_ui_action_cb_t callback,void *user) {
     if((e=esp_lcd_dpi_panel_register_event_callbacks(panel,&cbs,NULL))!=ESP_OK)goto fail;
     ppa_client_config_t pcfg={.oper_type=PPA_OPERATION_SRM};
     if((e=ppa_register_client(&pcfg,&ppa))!=ESP_OK)goto fail;
+    ppa_event_callbacks_t ppa_cbs={.on_trans_done=ppa_finished};
+    if((e=ppa_client_register_event_callbacks(ppa,&ppa_cbs))!=ESP_OK)goto fail;
     if((e=esp_lcd_panel_disp_on_off(panel,true))!=ESP_OK)goto fail;
     if(!tab5_panel_ready()){e=ESP_ERR_INVALID_STATE;goto fail;}
     renderer_ready=true;

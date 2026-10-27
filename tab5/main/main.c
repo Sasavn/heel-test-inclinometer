@@ -123,6 +123,12 @@ static void ui_perf_reply(bool reset,tab5_service_reply_fn reply,void *ctx) {
              (unsigned long)native.verify_checks,(unsigned long)native.verify_errors,
              (unsigned long long)native.verify_mismatches,(unsigned long long)native.verify_us);
     reply(ctx,out);
+    snprintf(out,sizeof(out),"{\"input_timing\":\"sampled_to_copy_eof\",\"touch_reads\":%lu,\"touch_read_gap_max_us\":%lu,\"sample_render_count\":%lu,\"sample_render_us\":%llu,\"sample_render_max_us\":%lu,\"sample_lcd_count\":%lu,\"sample_lcd_us\":%llu,\"sample_lcd_max_us\":%lu,\"ppa_timeouts\":%lu,\"lcd_timeouts\":%lu,\"submit_errors\":%lu,\"pipeline_state\":%lu}",
+             (unsigned long)native.touch_reads,(unsigned long)native.touch_read_gap_max_us,
+             (unsigned long)native.sample_render_count,(unsigned long long)native.sample_render_us,(unsigned long)native.sample_render_max_us,
+             (unsigned long)native.sample_lcd_count,(unsigned long long)native.sample_lcd_us,(unsigned long)native.sample_lcd_max_us,
+             (unsigned long)native.ppa_timeouts,(unsigned long)native.lcd_timeouts,(unsigned long)native.submit_errors,(unsigned long)native.pipeline_state);
+    reply(ctx,out);
     tab5_draw_profile_snapshot_t draw;tab5_draw_profile_snapshot(&draw,false);
     for(unsigned i=0;i<TAB5_DRAW_PROFILE_COUNT;i++){
         tab5_draw_profile_format(out,sizeof(out),&draw.entries[i]);reply(ctx,out);
