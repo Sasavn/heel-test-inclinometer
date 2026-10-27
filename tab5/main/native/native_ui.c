@@ -424,7 +424,34 @@ static void span(nui_layer_t *l,int x1,int x2,int y,uint16_t c,unsigned alpha){i
 /* Coverage at 2x2 integer subpixels only in rounded corners. The central
  * spans use direct RGB565 stores; no mask/layer/framebuffer allocations. */
 static unsigned round_coverage(nui_area_t a,int r,int x,int y){if(r<=0)return 255;int cx=x<a.x1+r?a.x1+r:x>a.x2-r?a.x2-r:x,cy=y<a.y1+r?a.y1+r:y>a.y2-r?a.y2-r:y;if(cx==x||cy==y)return 255;unsigned hit=0;int64_t rr=(int64_t)(r*4)*(r*4);for(int sy=1;sy<=3;sy+=2)for(int sx=1;sx<=3;sx+=2){int64_t dx=4*(x-cx)+sx-2,dy=4*(y-cy)+sy-2;if(dx*dx+dy*dy<=rr)hit++;}return hit*255/4;}
-static void rectangle(nui_layer_t *l,nui_area_t a,int radius,uint16_t c,unsigned alpha){nui_area_t clip;if(!area_intersect(&clip,a,l->clip))return;radius=MAX(0,MIN(radius,MIN(nui_area_get_width(&a),nui_area_get_height(&a))/2));for(int y=clip.y1;y<=clip.y2;y++){if(!radius||(y>=a.y1+radius&&y<=a.y2-radius)){
+/* Lazy mathematical coverage tables, one quarter per radius <= 32.
+ * At most sum(r*r, r=1..32) = 11440 PSRAM bytes; no rendered pixels cached.
+ * Look up once per primitive, never allocate/retry inside a pixel loop. */
+#define ROUND_CACHE_RADIUS 32
+static uint8_t *round_cache[ROUND_CACHE_RADIUS+1];
+static const uint8_t *round_table(int r){
+    if(r<=0||r>ROUND_CACHE_RADIUS)return NULL;
+    if(!round_cache[r]){
+        uint8_t *table=mem_alloc((size_t)r*r);if(!table)return NULL;
+        nui_area_t canonical={0,0,2*r,2*r};
+        for(int dy=1;dy<=r;dy++)for(int dx=1;dx<=r;dx++)
+            table[(dy-1)*r+dx-1]=(uint8_t)round_coverage(canonical,r,r-dx,r-dy);
+        round_cache[r]=table;
+    }
+    return round_cache[r];
+}
+static void round_cache_clear(void){
+    for(int i=1;i<=ROUND_CACHE_RADIUS;i++){mem_free(round_cache[i]);round_cache[i]=NULL;}
+}
+static unsigned cached_round_coverage(nui_area_t a,int r,int x,int y,const uint8_t *table){
+    if(!table)return round_coverage(a,r,x,y);
+    int dx=x<a.x1+r?a.x1+r-x:x>a.x2-r?x-a.x2+r:0;
+    int dy=y<a.y1+r?a.y1+r-y:y>a.y2-r?y-a.y2+r:0;
+    if(!dx||!dy)return 255;
+    if(dx>r||dy>r)return round_coverage(a,r,x,y);
+    return table[(dy-1)*r+dx-1];
+}
+static void rectangle(nui_layer_t *l,nui_area_t a,int radius,uint16_t c,unsigned alpha){nui_area_t clip;if(!area_intersect(&clip,a,l->clip))return;radius=MAX(0,MIN(radius,MIN(nui_area_get_width(&a),nui_area_get_height(&a))/2));const uint8_t *coverage=round_table(radius);for(int y=clip.y1;y<=clip.y2;y++){if(!radius||(y>=a.y1+radius&&y<=a.y2-radius)){
     int last=radius?MIN(clip.y2,a.y2-radius):clip.y2;
     if(alpha*l->opa/255==255&&last>y){
         size_t count=(size_t)(clip.x2-clip.x1+1);uint16_t *first=n.fb+(size_t)y*n.width+clip.x1;
@@ -432,24 +459,25 @@ static void rectangle(nui_layer_t *l,nui_area_t a,int radius,uint16_t c,unsigned
         for(int py=y+1;py<=last;py++)memcpy(n.fb+(size_t)py*n.width+clip.x1,first,count*sizeof(*first));
         FINE_COUNT(n.stats.primitive[active_primitive].pixels+=(uint64_t)count*(last-y+1));y=last;
     }else span(l,clip.x1,clip.x2,y,c,alpha);
-    continue;}int left=MAX(clip.x1,a.x1+radius),right=MIN(clip.x2,a.x2-radius);if(left<=right)span(l,left,right,y,c,alpha);for(int x=clip.x1;x<left;x++)pixel(l,x,y,c,round_coverage(a,radius,x,y)*alpha/255);for(int x=MAX(clip.x1,right+1);x<=clip.x2;x++)pixel(l,x,y,c,round_coverage(a,radius,x,y)*alpha/255);}}
-static void border_pixel(nui_layer_t *l,nui_area_t a,nui_area_t inner,int radius,int width,int x,int y,uint16_t c,unsigned alpha){unsigned outer=round_coverage(a,radius,x,y),inside=0;if(x>=inner.x1&&x<=inner.x2&&y>=inner.y1&&y<=inner.y2)inside=round_coverage(inner,MAX(0,radius-width),x,y);if(outer>inside)pixel(l,x,y,c,(outer-inside)*alpha/255);}
+    continue;}int left=MAX(clip.x1,a.x1+radius),right=MIN(clip.x2,a.x2-radius);if(left<=right)span(l,left,right,y,c,alpha);for(int x=clip.x1;x<left;x++)pixel(l,x,y,c,cached_round_coverage(a,radius,x,y,coverage)*alpha/255);for(int x=MAX(clip.x1,right+1);x<=clip.x2;x++)pixel(l,x,y,c,cached_round_coverage(a,radius,x,y,coverage)*alpha/255);}}
+static void border_pixel(nui_layer_t *l,nui_area_t a,nui_area_t inner,int radius,int width,int x,int y,uint16_t c,unsigned alpha,const uint8_t *outer_table,const uint8_t *inner_table){unsigned outer=cached_round_coverage(a,radius,x,y,outer_table),inside=0;if(x>=inner.x1&&x<=inner.x2&&y>=inner.y1&&y<=inner.y2)inside=cached_round_coverage(inner,MAX(0,radius-width),x,y,inner_table);if(outer>inside)pixel(l,x,y,c,(outer-inside)*alpha/255);}
 static void border(nui_layer_t *l,nui_area_t a,int radius,int width,uint16_t c,unsigned alpha){
     if(width<=0)return;
     nui_area_t clip;if(!area_intersect(&clip,a,l->clip))return;
     radius=MAX(0,MIN(radius,MIN(nui_area_get_width(&a),nui_area_get_height(&a))/2));
     nui_area_t inner={a.x1+width,a.y1+width,a.x2-width,a.y2-width};
     int edge=MAX(radius,width);
+    const uint8_t *outer_table=round_table(radius),*inner_table=round_table(MAX(0,radius-width));
     for(int y=clip.y1;y<=clip.y2;y++){
         if(y<a.y1+edge||y>a.y2-edge){
             if(y<a.y1+width||y>a.y2-width){
                 int left=MAX(clip.x1,a.x1+radius),right=MIN(clip.x2,a.x2-radius);
                 if(left<=right)span(l,left,right,y,c,alpha);
-                for(int x=clip.x1;x<left;x++)border_pixel(l,a,inner,radius,width,x,y,c,alpha);
-                for(int x=MAX(right+1,clip.x1);x<=clip.x2;x++)border_pixel(l,a,inner,radius,width,x,y,c,alpha);
+                for(int x=clip.x1;x<left;x++)border_pixel(l,a,inner,radius,width,x,y,c,alpha,outer_table,inner_table);
+                for(int x=MAX(right+1,clip.x1);x<=clip.x2;x++)border_pixel(l,a,inner,radius,width,x,y,c,alpha,outer_table,inner_table);
             }else{
-                for(int x=clip.x1;x<=MIN(clip.x2,a.x1+edge);x++)border_pixel(l,a,inner,radius,width,x,y,c,alpha);
-                for(int x=MAX(clip.x1,a.x2-edge);x<=clip.x2;x++)border_pixel(l,a,inner,radius,width,x,y,c,alpha);
+                for(int x=clip.x1;x<=MIN(clip.x2,a.x1+edge);x++)border_pixel(l,a,inner,radius,width,x,y,c,alpha,outer_table,inner_table);
+                for(int x=MAX(clip.x1,a.x2-edge);x<=clip.x2;x++)border_pixel(l,a,inner,radius,width,x,y,c,alpha,outer_table,inner_table);
             }
         }else{
             span(l,clip.x1,MIN(clip.x2,a.x1+width-1),y,c,alpha);
@@ -675,11 +703,25 @@ static void shadow_render(nui_layer_t *l,nui_area_t a,int radius,int width,int o
     for(int y=clip.y1;y<=clip.y2;y++){
         int intervals[4]={clip.x1,clip.x2,1,0};
         if(y>=a.y1+edge&&y<=a.y2-edge){intervals[1]=MIN(clip.x2,a.x1+edge);intervals[2]=MAX(clip.x1,a.x2-edge);intervals[3]=clip.x2;if(intervals[2]<=intervals[1]){intervals[1]=clip.x2;intervals[2]=1;intervals[3]=0;}}
-        for(unsigned run=0;run<2;run++)for(int x=intervals[run*2];x<=intervals[run*2+1];x++){
-            unsigned alpha;
-            if(e){int sx=shadow_map(x-a.x1,w,e->cw,e->cap,e->narrow_w)+blur,sy=shadow_map(y-a.y1,h,e->ch,e->cap,e->narrow_h)+blur-offset;alpha=e->alpha[(size_t)sy*e->mw+sx];}
-            else alpha=shadow_alpha(a,radius,blur,offset,opa,x,y);
-            if(alpha)pixel(l,x,y,c,alpha);
+        for(unsigned run=0;run<2;run++){
+            int from=intervals[run*2],to=intervals[run*2+1];
+            for(int x=from;x<=to;x++){
+                unsigned alpha;
+                if(e){
+                    int sy=shadow_map(y-a.y1,h,e->ch,e->cap,e->narrow_h)+blur-offset;
+                    /* The canonical horizontal middle maps to one alpha sample.
+                     * Blend every destination pixel with the existing span path. */
+                    if(!e->narrow_w&&x>=a.x1+e->cap&&x<=a.x2-e->cap){
+                        int last=MIN(to,a.x2-e->cap);
+                        alpha=e->alpha[(size_t)sy*e->mw+e->cap+blur];
+                        if(alpha)span(l,x,last,y,c,alpha);
+                        x=last;continue;
+                    }
+                    int sx=shadow_map(x-a.x1,w,e->cw,e->cap,e->narrow_w)+blur;
+                    alpha=e->alpha[(size_t)sy*e->mw+sx];
+                }else alpha=shadow_alpha(a,radius,blur,offset,opa,x,y);
+                if(alpha)pixel(l,x,y,c,alpha);
+            }
         }
     }
 }
@@ -774,7 +816,7 @@ size_t nui_native_render(void){if(!n.fb||!n.root||!n.dirty_count){n.rendered_cou
     if(root_opaque)FINE_COUNT(n.stats.clear_pixels_skipped+=(uint64_t)nui_area_get_width(&a)*nui_area_get_height(&a));
     else for(int y=a.y1;y<=a.y2;y++){uint16_t *row=n.fb+(size_t)y*n.width+a.x1;memset(row,0,(size_t)nui_area_get_width(&a)*2);}
     object_render(n.root,layer);n.stats.dirty_pixels+=(uint64_t)nui_area_get_width(&a)*nui_area_get_height(&a);}n.rendering=false;garbage_collect();n.stats.frames++;n.stats.dirty_rects+=n.rendered_count;uint64_t end=now_us();if(end>=start)n.stats.render_us+=end-start;/* Callback time is excluded from render_us; platform measures transport. */if(n.flush)for(size_t i=0;i<n.rendered_count;i++){nui_area_t *a=&n.rendered[i];n.flush(a,n.fb+(size_t)a->y1*n.width+a->x1,(size_t)n.width,n.flush_user);}return n.rendered_count;}
-void nui_native_deinit(void){gradient_cache.valid=false;shadow_cache_clear();if(n.root)nui_obj_delete(n.root);garbage_collect();while(n.timers){nui_timer_t *t=n.timers;n.timers=t->next;mem_free(t);}if(n.own_fb)mem_free(n.fb);n.fb=NULL;n.own_fb=false;n.dirty_count=n.rendered_count=0;n.capture=n.focus=NULL;}
+void nui_native_deinit(void){round_cache_clear();gradient_cache.valid=false;shadow_cache_clear();if(n.root)nui_obj_delete(n.root);garbage_collect();while(n.timers){nui_timer_t *t=n.timers;n.timers=t->next;mem_free(t);}if(n.own_fb)mem_free(n.fb);n.fb=NULL;n.own_fb=false;n.dirty_count=n.rendered_count=0;n.capture=n.focus=NULL;}
 bool nui_native_init(int width,int height,uint16_t *fb){if(width<=0||height<=0||(size_t)width>SIZE_MAX/2/(size_t)height)return false;nui_native_deinit();n.width=width;n.height=height;n.ticks=0;n.input=(nui_indev_t){0};if(!fb){fb=mem_alloc((size_t)width*height*2);if(!fb)return false;n.own_fb=true;}n.fb=fb;n.root=object_new(NULL,&nui_obj_class);if(!n.root){if(n.own_fb)mem_free(fb);n.fb=NULL;return false;}n.root->w=width;n.root->h=height;n.root->flags=0;nui_obj_set_style_bg_opa(n.root,255,0);nui_obj_set_style_bg_color(n.root,0,0);nui_obj_invalidate(n.root);return true;}
 nui_obj_t *nui_screen_active(void){if(!n.root)nui_native_init(1280,720,NULL);return n.root;}
 void nui_init(void){if(!n.root)nui_native_init(1280,720,NULL);}

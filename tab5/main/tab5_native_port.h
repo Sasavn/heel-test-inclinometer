@@ -34,8 +34,17 @@ typedef struct {
     /* Sampled touch / dequeued encoder -> CPU render start. Excludes producer
      * delay, touch I2C, PPA and LCD time; not end-to-end encoder latency. */
     uint32_t interactive_renders,input_render_wait_max_us;
+    /* Explicit diagnostic: complete full-frame checks, differing RGB565 pixels,
+     * cache-sync errors and scan wall time. Scan time is excluded from rotate/
+     * flush_us, but included in end-to-end refresh_us. No allocation or ISR scan. */
+    uint32_t verify_checks,verify_errors;
+    uint64_t verify_mismatches,verify_us;
 } tab5_native_port_stats_t;
 
+/* Queue 1..2 checks on future successful PPA frames; false for invalid count or
+ * unstarted port. New requests replace the pending count. Stats reset does not
+ * cancel requests. Default 0: no scan/cache sync; only an atomic count check. */
+bool tab5_native_port_request_verify(unsigned frames);
 esp_err_t tab5_native_port_start(tab5_ui_action_cb_t callback,void *user);
 bool tab5_native_port_lock(uint32_t timeout_ms);
 void tab5_native_port_unlock(void);

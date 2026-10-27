@@ -92,6 +92,7 @@ bool tab5_native_port_input_dispatch(uint32_t now_ms) {
 #include "esp_lcd_panel_ops.h"
 #include "esp_lcd_mipi_dsi.h"
 #include "esp_heap_caps.h"
+#include "esp_cache.h"
 #include "esp_timer.h"
 #include <stdlib.h>
 #include "freertos/FreeRTOS.h"
@@ -114,6 +115,32 @@ static uint16_t *frame,*rotated;
 static portMUX_TYPE stats_lock=portMUX_INITIALIZER_UNLOCKED;
 static tab5_native_port_stats_t stats;
 static bool started;
+static unsigned verify_requested;
+/* Candidate: RGB565 dirty union, conservatively expanded to rev1 16x16
+ * macroblocks. Buffers/strides remain full-frame and 64-byte aligned. */
+#define ROTATION_DIRTY_CAPACITY 48
+static bool rotation_baseline_valid;
+static bool native_rotation_bounds(const nui_area_t *areas,size_t count,nui_area_t *out){
+    if(!out)return false;
+    *out=(nui_area_t){0,0,WIDTH-1,HEIGHT-1};
+    if(!areas||!count||count>ROTATION_DIRTY_CAPACITY)return false;
+    int x1=WIDTH,y1=HEIGHT,x2=-1,y2=-1;
+    for(size_t i=0;i<count;i++){
+        nui_area_t a=areas[i];
+        if(a.x1>a.x2||a.y1>a.y2||a.x2<0||a.y2<0||a.x1>=WIDTH||a.y1>=HEIGHT)return false;
+        if(a.x1<0)a.x1=0;
+        if(a.y1<0)a.y1=0;
+        if(a.x2>=WIDTH)a.x2=WIDTH-1;
+        if(a.y2>=HEIGHT)a.y2=HEIGHT-1;
+        if(a.x1<x1)x1=a.x1;
+        if(a.y1<y1)y1=a.y1;
+        if(a.x2>x2)x2=a.x2;
+        if(a.y2>y2)y2=a.y2;
+    }
+    *out=(nui_area_t){x1&~15,y1&~15,((x2+16)&~15)-1,((y2+16)&~15)-1};
+    return true;
+}
+
 /* Inverse of the existing PPA 90-degree landscape->portrait mapping:
  * display pixel (x,y) becomes portrait (y,1279-x). */
 static bool native_touch_position(unsigned tx,unsigned ty,int *x,int *y) {
@@ -133,6 +160,34 @@ void tab5_native_port_stats(tab5_native_port_stats_t *out,bool reset) {
     if(reset)stats=(tab5_native_port_stats_t){0};
     if(out)*out=stats;
     portEXIT_CRITICAL(&stats_lock);
+}
+static uint64_t clock_us(void);
+/* Diagnostic only: 1..2 future successful rotations, never a startup scan.
+ * UI task owns both buffers here: PPA complete, no LCD transfer pending. */
+bool tab5_native_port_request_verify(unsigned frames){
+    if(frames<1||frames>2||!__atomic_load_n(&started,__ATOMIC_ACQUIRE))return false;
+    __atomic_store_n(&verify_requested,frames,__ATOMIC_RELEASE);return true;
+}
+static uint64_t native_rotation_mismatches(const uint16_t *src,const uint16_t *dst){
+    uint64_t mismatches=0;
+    for(unsigned y=0;y<HEIGHT;y++)for(unsigned x=0;x<WIDTH;x++)
+        mismatches+=dst[(WIDTH-1-x)*HEIGHT+y]!=src[y*WIDTH+x];
+    return mismatches;
+}
+static uint64_t verify_rotation_once(void){
+    unsigned count=__atomic_load_n(&verify_requested,__ATOMIC_ACQUIRE);
+    do {if(!count)return 0;}while(!__atomic_compare_exchange_n(&verify_requested,&count,count-1,false,__ATOMIC_ACQ_REL,__ATOMIC_ACQUIRE));
+    uint64_t begin=clock_us();
+    /* Read actual DMA-written memory, including retained pixels outside ROI. */
+    esp_err_t error=esp_cache_msync(rotated,FRAME_BYTES,ESP_CACHE_MSYNC_FLAG_DIR_M2C);
+    uint64_t mismatches=error==ESP_OK?native_rotation_mismatches(frame,rotated):0;
+    uint64_t elapsed=clock_us()-begin;
+    portENTER_CRITICAL(&stats_lock);
+    if(error==ESP_OK){stats.verify_checks++;stats.verify_mismatches+=mismatches;}
+    else stats.verify_errors++;
+    stats.verify_us+=elapsed;
+    portEXIT_CRITICAL(&stats_lock);
+    return elapsed;
 }
 static bool transfer_finished(esp_lcd_panel_handle_t handle,esp_lcd_dpi_panel_event_data_t *event,void *ctx) {
     (void)handle;(void)event;(void)ctx;BaseType_t wake=pdFALSE;
@@ -187,11 +242,17 @@ static void native_task(void *arg) {
         nui_native_touch(x,y,pressed);
 #endif
         uint64_t start=clock_us();size_t dirty=0;
+        nui_area_t rotation_area={0,0,WIDTH-1,HEIGHT-1};
         bool interactive=input_requested;
         uint64_t interval=interactive?INTERACTION_RENDER_US:PERIODIC_RENDER_US;
         uint64_t input_wait=interactive?start-input_since:0;
         if(!pending&&start-last_render>=interval) {
             last_render=start;dirty=nui_native_render();
+            if(dirty&&rotation_baseline_valid){
+                nui_area_t areas[ROTATION_DIRTY_CAPACITY];
+                size_t count=nui_native_get_dirty(areas,ROTATION_DIRTY_CAPACITY);
+                native_rotation_bounds(areas,count,&rotation_area);
+            }
             input_requested=false;
         }
         uint64_t rendered=clock_us();
@@ -200,11 +261,12 @@ static void native_task(void *arg) {
          * ui_mutex, never framebuffer pixels. PPA/LCD waits need no UI lock. */
         if(dirty) {
             ppa_srm_oper_config_t op={
-                .in={.buffer=frame,.pic_w=WIDTH,.pic_h=HEIGHT,.block_w=WIDTH,.block_h=HEIGHT,.srm_cm=PPA_SRM_COLOR_MODE_RGB565},
-                .out={.buffer=rotated,.buffer_size=FRAME_BYTES,.pic_w=HEIGHT,.pic_h=WIDTH,.srm_cm=PPA_SRM_COLOR_MODE_RGB565},
+                .in={.buffer=frame,.pic_w=WIDTH,.pic_h=HEIGHT,.block_w=(uint32_t)(rotation_area.x2-rotation_area.x1+1),.block_h=(uint32_t)(rotation_area.y2-rotation_area.y1+1),.block_offset_x=(uint32_t)rotation_area.x1,.block_offset_y=(uint32_t)rotation_area.y1,.srm_cm=PPA_SRM_COLOR_MODE_RGB565},
+                .out={.buffer=rotated,.buffer_size=FRAME_BYTES,.pic_w=HEIGHT,.pic_h=WIDTH,.block_offset_x=(uint32_t)rotation_area.y1,.block_offset_y=(uint32_t)(WIDTH-1-rotation_area.x2),.srm_cm=PPA_SRM_COLOR_MODE_RGB565},
                 .rotation_angle=PPA_SRM_ROTATION_ANGLE_90,.scale_x=1,.scale_y=1,.mode=PPA_TRANS_MODE_BLOCKING};
             esp_err_t e=ppa_do_scale_rotate_mirror(ppa,&op);
             uint64_t rotated_at=clock_us();
+            uint64_t verification_us=e==ESP_OK?verify_rotation_once():0;
             xSemaphoreTake(transfer_done,0); /* Drain BEFORE submit. */
             if(e==ESP_OK)e=esp_lcd_panel_draw_bitmap(panel,0,0,HEIGHT,WIDTH,rotated);
             uint64_t submitted=clock_us();
@@ -215,11 +277,12 @@ static void native_task(void *arg) {
                 if(input_wait>stats.input_render_wait_max_us)
                     stats.input_render_wait_max_us=input_wait>UINT32_MAX?UINT32_MAX:(uint32_t)input_wait;
             }
-            stats.rotate_us+=rotated_at-rendered;stats.flush_us+=submitted-rotated_at;
+            stats.rotate_us+=rotated_at-rendered;stats.flush_us+=submitted-rotated_at-verification_us;
             if(e==ESP_OK)stats.flushes++;else stats.errors++;
             portEXIT_CRITICAL(&stats_lock);
-            if(e==ESP_OK){pending=true;timeout_reported=false;pending_start=start;pending_submitted=submitted;}
+            if(e==ESP_OK){rotation_baseline_valid=true;pending=true;timeout_reported=false;pending_start=start;pending_submitted=submitted;}
             else {
+                rotation_baseline_valid=false;
                 nui_area_t full={0,0,WIDTH-1,HEIGHT-1};
                 xSemaphoreTake(ui_mutex,portMAX_DELAY);nui_native_invalidate(&full);xSemaphoreGive(ui_mutex);
             }
@@ -228,6 +291,8 @@ static void native_task(void *arg) {
     }
 }
 static void startup_cleanup(bool renderer_ready,bool display_attempted) {
+    rotation_baseline_valid=false;
+    __atomic_store_n(&verify_requested,0,__ATOMIC_RELEASE);
 #ifdef ESP_PLATFORM
     tab5_native_port_input_close();
 #endif

@@ -119,6 +119,10 @@ static void ui_perf_reply(bool reset,tab5_service_reply_fn reply,void *ctx) {
     snprintf(out,sizeof(out),"{\"schedule\":\"native\",\"interactive_renders\":%lu,\"input_render_wait_max_us\":%lu}",
              (unsigned long)native.interactive_renders,(unsigned long)native.input_render_wait_max_us);
     reply(ctx,out);
+    snprintf(out,sizeof(out),"{\"rotation_verify\":{\"checks\":%lu,\"errors\":%lu,\"mismatches\":%llu,\"scan_us\":%llu}}",
+             (unsigned long)native.verify_checks,(unsigned long)native.verify_errors,
+             (unsigned long long)native.verify_mismatches,(unsigned long long)native.verify_us);
+    reply(ctx,out);
     tab5_draw_profile_snapshot_t draw;tab5_draw_profile_snapshot(&draw,false);
     for(unsigned i=0;i<TAB5_DRAW_PROFILE_COUNT;i++){
         tab5_draw_profile_format(out,sizeof(out),&draw.entries[i]);reply(ctx,out);
@@ -310,6 +314,7 @@ static void command(void *unused,const char *line,tab5_service_reply_fn reply,vo
     tab5_measure_snapshot_t s;tab5_measure_snapshot(&s);
     if(strcmp(line,"ver")==0){char version[160];snprintf(version,sizeof(version),"BWM427 inclinometer firmware v%s, board=tab5 chip=esp32p4 proto=2",FW_VERSION);reply(ctx,version);reply(ctx,"OK");}
     else if(strcmp(line,"status")==0 || strcmp(line,"diag")==0)status(reply,ctx);
+    else if(strcmp(line,"ui verify rotate")==0)reply(ctx,tab5_native_port_request_verify(2)?"OK rotation verification queued":"ERR renderer not ready");
     else if(strcmp(line,"ui perf")==0 || strcmp(line,"ui perf reset")==0)ui_perf_reply(strcmp(line,"ui perf reset")==0,reply,ctx);
     else if(strcmp(line,"sd auto on")==0 || strcmp(line,"sd auto off")==0){
         bool enabled=strcmp(line,"sd auto on")==0;
@@ -324,7 +329,8 @@ static void command(void *unused,const char *line,tab5_service_reply_fn reply,vo
             cJSON *j=cJSON_CreateObject();cJSON_AddNumberToObject(j,"task_clock",total);
             cJSON *a=cJSON_AddArrayToObject(j,"tasks");
             for(UBaseType_t i=0;i<count;i++){TaskStatus_t *t=&tasks[i];cJSON *d=cJSON_CreateObject();cJSON_AddItemToArray(a,d);
-                cJSON_AddStringToObject(d,"task",t->pcTaskName);cJSON_AddNumberToObject(d,"run",t->ulRunTimeCounter);cJSON_AddNumberToObject(d,"priority",t->uxCurrentPriority);}
+                cJSON_AddStringToObject(d,"task",t->pcTaskName);cJSON_AddNumberToObject(d,"run",t->ulRunTimeCounter);cJSON_AddNumberToObject(d,"priority",t->uxCurrentPriority);
+                cJSON_AddNumberToObject(d,"stack_min",t->usStackHighWaterMark);}
             char *text=cJSON_PrintUnformatted(j);if(text){reply(ctx,text);cJSON_free(text);}else reply(ctx,"ERR task snapshot JSON");
             cJSON_Delete(j);free(tasks);reply(ctx,"OK ui tasks");}
     }

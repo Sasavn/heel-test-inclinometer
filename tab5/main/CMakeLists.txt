@@ -8,7 +8,7 @@ idf_component_register(SRCS
     REQUIRES nvs_flash esp_timer app_update json esp_driver_uart esp_driver_gpio
              esp_driver_usb_serial_jtag esp_driver_i2c esp_wifi esp_netif
              esp_event lwip fatfs sdmmc mbedtls tab5_board_support esp_driver_ppa esp_lcd
-    PRIV_REQUIRES espressif__esp_lcd_st7123 espressif__esp_lcd_ili9881c
+    PRIV_REQUIRES esp_mm espressif__esp_lcd_st7123 espressif__esp_lcd_ili9881c
                   espressif__esp_lcd_touch_st7123 espressif__esp_lcd_touch_gt911)
 target_compile_definitions(${COMPONENT_LIB} PRIVATE
     NUI_PROFILE_FINE_COUNTERS=$<BOOL:${CONFIG_TAB5_NATIVE_FINE_PROFILE}>
