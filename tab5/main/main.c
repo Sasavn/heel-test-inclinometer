@@ -280,6 +280,15 @@ static void status(tab5_service_reply_fn reply,void *ctx) {
     cJSON_AddBoolToObject(j,"stable",s.stable);cJSON_AddStringToObject(j,"sd",sd.failed?"ERR":sd.recording?"REC":sd.mounted?"READY":"NOCARD");
     cJSON_AddBoolToObject(j,"sd_known",sd.known);cJSON_AddStringToObject(j,"sd_fs",filesystem_name(sd.fs_type));
     cJSON_AddNumberToObject(j,"sd_err",sd.error);cJSON_AddNumberToObject(j,"rows",sd.recording?sd.written:usb.written);
+    cJSON *capacities=cJSON_AddObjectToObject(j,"storage_capacity");
+    for(unsigned i=0;i<2;i++){
+        const tab5_medium_status_t *m=i?&usb:&sd;
+        cJSON *c=cJSON_AddObjectToObject(capacities,i?"usb":"sd");
+        cJSON_AddBoolToObject(c,"known",m->mounted&&m->capacity_known);
+        cJSON_AddNumberToObject(c,"volume_id",m->volume_id);
+        cJSON_AddNumberToObject(c,"total_bytes",m->total_bytes);
+        cJSON_AddNumberToObject(c,"free_bytes",m->free_bytes);
+    }
     cJSON_AddNumberToObject(j,"rec_s",recording?(esp_timer_get_time()-record_start_us)/1000000:0);
     cJSON_AddNumberToObject(j,"file",measurement_number);cJSON_AddNumberToObject(j,"rec_mask",(sd.recording||usb.recording)?3:0);cJSON_AddBoolToObject(j,"rec_sw",recording);
     add_num(j,"bat_v",battery);cJSON_AddBoolToObject(j,"bat_present",isfinite(battery)&&battery>5);cJSON_AddNullToObject(j,"bat_pct");
@@ -534,6 +543,11 @@ void app_main(void) {
         ui.sd=(tab5_ui_medium_t){.known=sd.known,.mounted=sd.mounted,.recording=sd.recording,.failed=sd.failed,.written=sd.written};
         ui.usb=(tab5_ui_medium_t){.known=flash.known,.mounted=flash.mounted,.recording=flash.recording,.failed=flash.failed,.written=flash.written};
         ui.capacity[0].details_known=sd.known&&sd.mounted;ui.capacity[1].details_known=flash.known&&flash.mounted;
+        for(unsigned i=0;i<2;i++){
+            const tab5_medium_status_t *m=i?&flash:&sd;
+            ui.capacity[i].known=m->mounted&&m->capacity_known&&m->total_bytes&&m->free_bytes<=m->total_bytes;
+            if(ui.capacity[i].known){ui.capacity[i].total_bytes=m->total_bytes;ui.capacity[i].free_bytes=m->free_bytes;}
+        }
         for(unsigned i=0;i<2;i++)if(ui.capacity[i].details_known){
             snprintf(ui.capacity[i].filesystem,sizeof(ui.capacity[i].filesystem),"%s",filesystem_name(i?flash.fs_type:sd.fs_type));
             snprintf(ui.capacity[i].folder,sizeof(ui.capacity[i].folder),"/");}

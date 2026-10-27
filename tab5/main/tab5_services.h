@@ -26,6 +26,12 @@ typedef struct {
  int error;
  bool known;
  tab5_fs_type_t fs_type;
+ /* Cached usable filesystem bytes (data clusters, not raw device size).
+  * Worker refreshes after mount and every 20s while idle; never status/init.
+  * Unknown/unmounted/query failure: capacity_known=false, both bytes zero. */
+ bool capacity_known;
+ uint64_t total_bytes, free_bytes;
+ uint8_t volume_id; /* Registered FatFs pdrv; 0xff when not mounted/unknown. */
 } tab5_medium_status_t;
 /* Reply is one UTF-8 line WITHOUT LF; transport appends LF. Context is borrowed
  * for the synchronous call only. Application emits OK to terminate replies. */

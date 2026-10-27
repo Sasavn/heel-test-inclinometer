@@ -94,8 +94,16 @@ typedef struct {
  FILE *file[2];
  char root[32];
  uint64_t flushed;
+ uint64_t capacity_checked_ms;
+ bool capacity_checked;
 } medium_t;
 static medium_t media[2];
+#define CAPACITY_REFRESH_MS UINT64_C(20000)
+/* Caller holds state_lock (and medium lock when physical I/O is active). */
+static void clear_capacity(medium_t *m){
+ m->status.capacity_known=false;m->status.total_bytes=0;m->status.free_bytes=0;
+ m->capacity_checked=false;m->capacity_checked_ms=0;
+}
 static tab5_fs_type_t mounted_fs[2];
 static uint8_t mounted_drive[2]={0xff,0xff};
 static tab5_medium_status_t last_media[2];
@@ -134,7 +142,7 @@ static void snapshot_capture(void);
 static portMUX_TYPE snapshot_mux=portMUX_INITIALIZER_UNLOCKED;
 static void snapshot_enter(void){portENTER_CRITICAL(&snapshot_mux);}
 static void snapshot_exit(void){portEXIT_CRITICAL(&snapshot_mux);}
-static SemaphoreHandle_t state_lock, medium_lock[2], transfer_lock, network_lock;
+static SemaphoreHandle_t state_lock, medium_lock[2], transfer_lock, network_lock, volume_registration_lock;
 static QueueHandle_t publish_queue, usb_events;
 static msc_host_device_handle_t usb_device;
 static msc_host_vfs_handle_t usb_vfs;
@@ -153,6 +161,10 @@ static bool try_lock(void) { return xSemaphoreTake(state_lock,0)==pdTRUE; }
 static uint64_t now_ms(void) { return esp_timer_get_time()/1000; }
 static void nl(void) { xSemaphoreTake(network_lock,portMAX_DELAY); }
 static void nu(void) { xSemaphoreGive(network_lock); }
+/* Lock order: medium -> volume registration. Never hold state_lock here.
+ * SDK get_drive() only observes a free slot; it does not reserve it. */
+static void volume_lock(void) { xSemaphoreTake(volume_registration_lock,portMAX_DELAY); }
+static void volume_unlock(void) { xSemaphoreGive(volume_registration_lock); }
 static bool tl(void) { return xSemaphoreTake(transfer_lock,pdMS_TO_TICKS(STORAGE_LOCK_MS))==pdTRUE; }
 static void tu(void) { xSemaphoreGive(transfer_lock); }
 static bool ml(unsigned i) { if(xSemaphoreTake(medium_lock[i],pdMS_TO_TICKS(STORAGE_LOCK_MS))!=pdTRUE)return false;if(i==TAB5_SD)sd_deadline_us=esp_timer_get_time()+SD_IO_MS*1000LL;return true; }
@@ -165,6 +177,9 @@ static void unlock(void) { if(test_lock_depth!=1)abort();snapshot_capture();test
 static bool try_lock(void) { if(test_lock_busy)return false;lock();return true; }
 static void nl(void) {}
 static void nu(void) {}
+static SRWLOCK test_volume_registration_lock=SRWLOCK_INIT;
+static void volume_lock(void) { AcquireSRWLockExclusive(&test_volume_registration_lock); }
+static void volume_unlock(void) { ReleaseSRWLockExclusive(&test_volume_registration_lock); }
 static bool tl(void) {return true;}
 static void tu(void) {}
 static bool ml(unsigned i) { (void)i;return true; }
@@ -260,7 +275,7 @@ static void fail_medium(medium_t *m,int error) {
  lock();
  m->status.failed=true;m->status.error=error?error:EIO;
  m->status.dropped+=m->count;m->count=0;m->status.queued=0;
- m->status.recording=false;m->status.mounted=false;unlock();close_medium(m);
+ m->status.recording=false;m->status.mounted=false;m->status.volume_id=0xff;clear_capacity(m);unlock();close_medium(m);
 }
 /* One worker per physical medium. No slow I/O occurs under the global lock. */
 static void media_step(unsigned i) {
@@ -342,7 +357,7 @@ esp_err_t tab5_services_submit(const tab5_service_sample_t *s) {
 }
 void tab5_services_status(tab5_medium_t i,tab5_medium_status_t *out) {
  if(!out || (unsigned)i>TAB5_USB)return;
- if(!initialized){memset(out,0,sizeof(*out));return;}
+ if(!initialized){memset(out,0,sizeof(*out));out->volume_id=0xff;return;}
  if(!try_lock()){snapshot_enter();*out=last_media[i];snapshot_exit();return;}*out=media[i].status;out->known=true;unlock();
 }
 static bool valid_image_header(void) {
@@ -621,9 +636,10 @@ static void media_task(void *arg) {
     if(e.event==MSC_DEVICE_CONNECTED)usb_address=e.device.address;
     if(e.event==MSC_DEVICE_DISCONNECTED && e.device.handle==usb_device) {
      if(!transfer_cancel(0,i)||!ml(i)){xQueueSend(usb_events,&e,0);break;}fail_medium(&media[i],ENODEV);lock();media[i].status.mounted=false;unlock();
+     volume_lock();
      if(usb_vfs)msc_host_vfs_unregister(usb_vfs);
      usb_vfs=NULL;
-     msc_host_uninstall_device(usb_device);usb_device=NULL;usb_address=0;mu(i);
+     msc_host_uninstall_device(usb_device);usb_device=NULL;usb_address=0;volume_unlock();mu(i);
     }
    }
   }
@@ -754,6 +770,11 @@ static esp_err_t mount_medium(tab5_medium_t i){mounted_drive[i]=(uint8_t)i;mount
 esp_err_t tab5_services_publish(const char *s) {return s && strlen(s)<OUTPUT?ESP_OK:ESP_ERR_INVALID_ARG;}
 static esp_err_t configure_wifi(const tab5_network_config_t *c) {(void)c;test_wifi_starts++;return test_wifi_start_error;}
 #endif
+/* Workers only: serialize the entire SDK mount/unmount sequence, including
+ * delayed SD card init before diskio registration and the final fs probe. */
+static esp_err_t mount_registered(tab5_medium_t i){
+ volume_lock();esp_err_t e=mount_medium(i);volume_unlock();return e;
+}
 static esp_err_t retry_medium(tab5_medium_t i,bool automatic) {
  if(!initialized)return ESP_ERR_INVALID_STATE;
  if((unsigned)i>TAB5_USB)return ESP_ERR_INVALID_ARG;
@@ -763,9 +784,9 @@ static esp_err_t retry_medium(tab5_medium_t i,bool automatic) {
  if(i==TAB5_USB && !usb_driver_ready){esp_err_t e=usb_driver_error;unlock();return e;}
  medium_busy[i]=true;mount_requested[i]=false;unlock();
  if(!ml(i)){lock();medium_busy[i]=false;if(i==TAB5_SD)tab5_retry_backoff_failed(&sd_retry,now_ms());unlock();return ESP_ERR_TIMEOUT;}
- lock();media[i].status.mounted=false;media[i].status.fs_type=TAB5_FS_UNKNOWN;unlock();
- mounted_fs[i]=TAB5_FS_UNKNOWN;mounted_drive[i]=0xff;esp_err_t e=mount_medium(i);
- lock();media[i].status.mounted=e==ESP_OK;media[i].status.failed=e!=ESP_OK;media[i].status.error=e;media[i].status.fs_type=e==ESP_OK?mounted_fs[i]:TAB5_FS_UNKNOWN;medium_busy[i]=false;
+ lock();media[i].status.mounted=false;media[i].status.fs_type=TAB5_FS_UNKNOWN;media[i].status.volume_id=0xff;clear_capacity(&media[i]);unlock();
+ mounted_fs[i]=TAB5_FS_UNKNOWN;mounted_drive[i]=0xff;esp_err_t e=mount_registered(i);
+ lock();media[i].status.mounted=e==ESP_OK;media[i].status.failed=e!=ESP_OK;media[i].status.error=e;media[i].status.fs_type=e==ESP_OK?mounted_fs[i]:TAB5_FS_UNKNOWN;media[i].status.volume_id=e==ESP_OK?mounted_drive[i]:0xff;medium_busy[i]=false;
  if(i==TAB5_SD){if(e==ESP_OK)tab5_retry_backoff_reset(&sd_retry,now_ms());else tab5_retry_backoff_failed(&sd_retry,now_ms());}
  unlock();mu(i);return e;
 }
@@ -785,12 +806,13 @@ static esp_err_t startup_core(void) {
 #endif
  if(!clients_storage_init())return ESP_ERR_NO_MEM;
 #ifndef TAB5_SERVICES_HOST
- network_lock=xSemaphoreCreateMutex();transfer_lock=xSemaphoreCreateMutex();state_lock=xSemaphoreCreateMutex();medium_lock[0]=xSemaphoreCreateMutex();medium_lock[1]=xSemaphoreCreateMutex();publish_queue=xQueueCreate(16,sizeof(output_t));usb_events=xQueueCreate(8,sizeof(msc_host_event_t));
- if(!network_lock||!transfer_lock||!state_lock||!medium_lock[0]||!medium_lock[1]||!publish_queue||!usb_events){
+ network_lock=xSemaphoreCreateMutex();transfer_lock=xSemaphoreCreateMutex();state_lock=xSemaphoreCreateMutex();medium_lock[0]=xSemaphoreCreateMutex();medium_lock[1]=xSemaphoreCreateMutex();volume_registration_lock=xSemaphoreCreateMutex();publish_queue=xQueueCreate(16,sizeof(output_t));usb_events=xQueueCreate(8,sizeof(msc_host_event_t));
+ if(!network_lock||!transfer_lock||!state_lock||!medium_lock[0]||!medium_lock[1]||!volume_registration_lock||!publish_queue||!usb_events){
   /* All handles are still private to startup: cleanup cannot race a worker. */
   if(usb_events){vQueueDelete(usb_events);usb_events=NULL;}
   if(publish_queue){vQueueDelete(publish_queue);publish_queue=NULL;}
   for(unsigned i=0;i<2;i++)if(medium_lock[i]){vSemaphoreDelete(medium_lock[i]);medium_lock[i]=NULL;}
+  if(volume_registration_lock){vSemaphoreDelete(volume_registration_lock);volume_registration_lock=NULL;}
   if(state_lock){vSemaphoreDelete(state_lock);state_lock=NULL;}
   if(transfer_lock){vSemaphoreDelete(transfer_lock);transfer_lock=NULL;}
   if(network_lock){vSemaphoreDelete(network_lock);network_lock=NULL;}
@@ -813,6 +835,47 @@ static esp_err_t startup_usb(void) {
  test_usb_starts++;return test_usb_start_error;
 #endif
 }
+/* Same FatFs call and checked geometry on target and host fixture. No writes,
+ * format, repair, or mount-state changes on a failed capacity query. */
+static bool capacity_read_drive(uint8_t drive,uint64_t *total,uint64_t *free_bytes){
+ if(drive>=10)return false;
+ char path[4]={(char)('0'+drive),':','/',0};DWORD free_clusters=0;FATFS *fs=NULL;
+ if(f_getfree(path,&free_clusters,&fs)!=FR_OK||!fs)return false;
+ if(fs->pdrv!=drive||(fs->fs_type!=FS_FAT32&&fs->fs_type!=FS_EXFAT)||fs->n_fatent<=2)return false;
+ uint64_t sector_size;
+#if FF_MAX_SS == FF_MIN_SS
+ sector_size=FF_MAX_SS;
+#else
+ sector_size=fs->ssize;
+#endif
+ uint64_t sectors=fs->csize,clusters=(uint64_t)fs->n_fatent-2;
+ if(sector_size<512||sector_size>4096||sector_size<FF_MIN_SS||sector_size>FF_MAX_SS||
+    (sector_size&(sector_size-1))||!sectors||(sectors&(sectors-1))||
+    (uint64_t)free_clusters>clusters)return false;
+ if(sectors>UINT64_MAX/sector_size)return false;
+ uint64_t cluster_bytes=sectors*sector_size;
+ if(clusters>UINT64_MAX/cluster_bytes)return false;
+ *total=clusters*cluster_bytes;*free_bytes=(uint64_t)free_clusters*cluster_bytes;
+ return true;
+}
+static void capacity_worker_step(unsigned i){
+ medium_t *m=&media[i];
+ /* Fast cache check before taking the medium: never scan during recording,
+  * draining, mount, or file transfers. Public snapshots only copy this cache. */
+ lock();uint64_t now=now_ms();
+ bool due=m->status.mounted&&!m->status.failed&&!medium_busy[i]&&!recording&&!stopping&&!files_busy&&
+     (!m->capacity_checked||now-m->capacity_checked_ms>=CAPACITY_REFRESH_MS);
+ unlock();if(!due||!ml(i))return;
+ lock();bool allowed=m->status.mounted&&!m->status.failed&&!medium_busy[i]&&!recording&&!stopping&&!files_busy;
+ uint8_t drive=mounted_drive[i];unlock();
+ if(allowed){
+  uint64_t total=0,free_bytes=0;bool known=capacity_read_drive(drive,&total,&free_bytes);
+  lock();m->status.capacity_known=known;
+  m->status.total_bytes=known?total:0;m->status.free_bytes=known?free_bytes:0;
+  m->capacity_checked=true;m->capacity_checked_ms=now_ms();unlock();
+ }
+ mu(i);
+}
 static void storage_worker_step(unsigned i){
  if(i>TAB5_USB||!initialized)return;
  lock();bool ready=storage_ready;unlock();if(!ready)return;
@@ -828,7 +891,7 @@ static void storage_worker_step(unsigned i){
      (requested||(auto_retry[i]&&!media[i].status.mounted&&due));
  unlock();
  if(retry){medium_retried[i]=now_ms();retry_medium((tab5_medium_t)i,!requested);}
- media_step(i);transfer_expire();
+ media_step(i);capacity_worker_step(i);transfer_expire();
 }
 static esp_err_t startup_workers(void) {
 #ifndef TAB5_SERVICES_HOST
@@ -910,6 +973,7 @@ esp_err_t tab5_services_init(const tab5_services_config_t *cfg) {
  config=*cfg;
  esp_err_t e=startup_core();if(e!=ESP_OK)return e;
  auto_retry[0]=auto_retry[1]=true;tab5_retry_backoff_reset(&sd_retry,now_ms());
+ for(unsigned i=0;i<2;i++)media[i].status.volume_id=0xff;
  initialized=true;
  /* Optional physical drivers/mounts belong to their workers, never init. */
  mount_requested[0]=mount_requested[1]=false;medium_busy[0]=medium_busy[1]=false;

@@ -14,6 +14,28 @@ static char test_current_version[32]="1.5.0-esp32";
 #define fwrite test_write
 static size_t test_write(const void *,size_t,size_t,FILE *);
 static int test_sync(int);
+/* FatFs capacity boundary; default fails rather than inventing media size. */
+#ifndef FF_MIN_SS
+#define FF_MIN_SS 512
+#endif
+#ifndef FF_MAX_SS
+#define FF_MAX_SS 4096
+#endif
+#define FR_OK 0
+#define FR_DISK_ERR 1
+#define FS_FAT32 3
+#define FS_EXFAT 4
+typedef struct {
+ uint8_t fs_type,pdrv;uint16_t csize;
+#if FF_MAX_SS != FF_MIN_SS
+ uint16_t ssize;
+#endif
+ DWORD n_fatent;
+} FATFS;
+static int (*test_getfree_hook)(const char *,DWORD *,FATFS **);
+static int f_getfree(const char *path,DWORD *free_clusters,FATFS **fs){
+ return test_getfree_hook?test_getfree_hook(path,free_clusters,fs):FR_DISK_ERR;
+}
 typedef unsigned esp_ota_handle_t;
 typedef struct {uint32_t size;} esp_partition_t;
 typedef int esp_ota_img_states_t;

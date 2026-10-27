@@ -80,6 +80,26 @@ int main(int argc,char **argv) {
             tab5_ui_update(&state);assert(!u.notice); /* dismissed same message */
         }
         state.status[0]=0;tab5_ui_update(&state);assert(!u.notice);
+        state.sd.known=state.usb.known=true;state.sd.mounted=state.usb.mounted=true;
+        for(unsigned i=0;i<2;i++){
+            state.capacity[i].details_known=true;
+            strcpy(state.capacity[i].filesystem,"FAT32");
+        }
+        show_page(RECORD);state.now_us+=100000;tab5_ui_update(&state);
+        for(unsigned i=0;i<2;i++){
+            assert(!strstr(nui_label_get_text(u.media_detail[i]),"из 0.0"));
+            assert(strstr(nui_label_get_text(u.media_detail[i]),"объём: —"));
+        }
+        state.capacity[0].known=state.capacity[1].known=true;
+        state.capacity[0].total_bytes=UINT64_C(32)*1024*1024*1024;
+        state.capacity[0].free_bytes=UINT64_C(20)*1024*1024*1024;
+        state.capacity[1].total_bytes=UINT64_C(64)*1024*1024*1024;
+        state.capacity[1].free_bytes=0;
+        state.now_us+=100000;tab5_ui_update(&state);nui_native_render();
+        assert(!strcmp(nui_label_get_text(u.capacity_text[0]),"свободно 20.0 ГБ"));
+        assert(!strcmp(nui_label_get_text(u.capacity_text[1]),"свободно 0.0 ГБ"));
+        assert(strstr(nui_label_get_text(u.media_detail[0]),"из 32.0 ГБ"));
+        assert(strstr(nui_label_get_text(u.media_detail[1]),"из 64.0 ГБ"));
         tab5_ui_destroy();
     }
     fclose(geometry);nui_native_deinit();
@@ -87,6 +107,7 @@ int main(int argc,char **argv) {
     assert(core.state.sensor[0].valid&&core.state.sensor[0].fail_streak==0);
     assert(core.state.sensor[0].errors==300);
     puts("Notice: 36px, six real renders, both themes, full text fits, close bounds/dismissal PASS");
+    puts("Capacity: unknown is not zero; cached bytes and genuinely full media display in both themes PASS");
     puts("Unchanged sensor core: 300 timeouts -> fail_streak=255, errors=300; good sample resets streak only PASS");
     return 0;
 }

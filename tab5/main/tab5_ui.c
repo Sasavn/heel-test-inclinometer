@@ -947,7 +947,7 @@ static void update_record(void){
         hide(u.capacity_bar[i],!c->known||!c->total_bytes);
         if(c->known&&c->total_bytes)nui_bar_set_value(u.capacity_bar[i],(int32_t)(1000.*(c->total_bytes-fmin((double)c->free_bytes,(double)c->total_bytes))/c->total_bytes),NUI_ANIM_OFF);
         style_color(u.capacity_bar[i],NUI_STYLE_BG_COLOR,nui_color_hex(u.alt),0);style_color(u.capacity_bar[i],NUI_STYLE_BG_COLOR,nui_color_hex(u.action),NUI_PART_INDICATOR);
-        if(c->details_known)snprintf(b,sizeof(b),"%s · из %.1f ГБ\n%s",c->filesystem,c->total_bytes/1073741824.,c->estimate_known?"оценка записи доступна":"оценка времени: —");else snprintf(b,sizeof(b),"Нужна FAT32 / exFAT\nзапись на все носители");text(u.media_detail[i],b);
+        if(c->details_known&&c->known)snprintf(b,sizeof(b),"%s · из %.1f ГБ\n%s",c->filesystem,c->total_bytes/1073741824.,c->estimate_known?"оценка записи доступна":"оценка времени: —");else if(c->details_known)snprintf(b,sizeof(b),"%s · объём: —\nоценка времени: —",c->filesystem);else snprintf(b,sizeof(b),"Нужна FAT32 / exFAT\nзапись на все носители");text(u.media_detail[i],b);
     }
 }
 static void update_measure(void){
