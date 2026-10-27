@@ -1,5 +1,7 @@
 # Регистратор крена: локальный порт M5Stack Tab5
 
+Последняя локальная аппаратная проверка: [1.7.6 на P4 rev103/ST7121](docs/HARDWARE_1.7.6_2026-10-27.md).
+
 Это ветка [tab5-esp32](https://github.com/Sasavn/heel-test-inclinometer/tree/tab5-esp32)
 общего проекта. [Основная ветка main: STM32F411](https://github.com/Sasavn/heel-test-inclinometer/tree/main).
 Отдельный форк не требуется. Прошивки STM32 и ESP32-P4 взаимозаменять нельзя;
