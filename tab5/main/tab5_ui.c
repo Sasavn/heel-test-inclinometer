@@ -410,7 +410,17 @@ static void action_event(nui_event_t *ev){
     case A_CANCEL:config_values(&u.state.measurement.config,u.draft);u.draft[7]=u.state.brightness_pct?u.state.brightness_pct:100;u.settings_failed=false;u.pending=false;refresh_settings();break;
     case A_NET_APPLY:apply_network();break;
     case A_REVEAL:u.unmasked=!u.unmasked;refresh_network();break;
-    case A_LIGHT:case A_DARK:{bool light=id==A_LIGHT;tab5_ui_action_t a={.kind=TAB5_UI_SETTINGS,.config=u.pending?u.sent:u.state.measurement.config,.light_theme=light};if(u.cb)u.cb(&a,u.user);tab5_ui_state_t s=u.state;s.light_theme=light;tab5_ui_update(&s);break;}
+    case A_LIGHT:case A_DARK:{
+        /* Queue the backend-owned change, just like a PC theme command.
+         * Do not synchronously call tab5_ui_update from the touch/encoder
+         * event stack: its snapshot plus the touch/keyboard scratch frames
+         * exceed the native_ui stack. The next main snapshot applies the
+         * palette under the normal UI lock, including backend failures. */
+        bool light=id==A_LIGHT;
+        tab5_ui_action_t a={.kind=TAB5_UI_SETTINGS,.config=u.pending?u.sent:u.state.measurement.config,.light_theme=light};
+        if(u.cb)u.cb(&a,u.user);
+        break;
+    }
     case A_NUM_OK:if(u.numeric_valid){u.draft[u.edit_index]=strtod(u.num,NULL);close_modal();refresh_settings();}break;
     case A_TEXT_OK:{const char *s=nui_textarea_get_text(u.text_field);size_t n=strlen(s),max=u.edit_index%2?63:32;if(n>max){style_color(u.text_field,NUI_STYLE_BORDER_COLOR,nui_color_hex(u.err),0);break;}char *v[]={u.net_draft.ap_ssid,u.net_draft.ap_password,u.net_draft.sta_ssid,u.net_draft.sta_password};snprintf(v[u.edit_index],u.edit_index%2?65:33,"%s",s);close_modal();refresh_network();break;}
     case A_LANG:russian=!russian;caption(u.lang,russian?"РУС → EN":"EN → РУС");if(russian){for(unsigned k=0;k<41;k++)ru_ctrl[k]=1;nui_keyboard_set_map(u.keyboard,NUI_KEYBOARD_MODE_USER_1,ru_map,ru_ctrl);nui_keyboard_set_mode(u.keyboard,NUI_KEYBOARD_MODE_USER_1);}else nui_keyboard_set_mode(u.keyboard,NUI_KEYBOARD_MODE_TEXT_LOWER);break;
