@@ -11,10 +11,10 @@ config TAB5_NATIVE_FINE_PROFILE
 config TAB5_NATIVE_PRIMITIVE_TIMING
     bool "Time individual UI primitives"
     default n
-    select TAB5_NATIVE_FINE_PROFILE
     help
         Diagnostic builds only. Reads the microsecond clock around every
-        primitive. This changes rendering cost; use a separate diagnostic
+        primitive, independently of fine pixel counters. This changes
+        rendering cost; use a separate diagnostic
         run, never silently mix it into a coarse performance comparison.
 
 endmenu

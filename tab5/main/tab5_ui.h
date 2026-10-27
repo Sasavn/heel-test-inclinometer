@@ -113,6 +113,16 @@ typedef struct {
 void tab5_ui_init(tab5_ui_action_cb_t callback, void *user);
 void tab5_ui_update(const tab5_ui_state_t *state);
 void tab5_ui_destroy(void);
+/* UI mutex required. Pure viewport benchmark: no actions/persistence callbacks. */
+typedef struct {unsigned page,index,level;int settings_offset;bool ring,valid;} tab5_ui_scroll_benchmark_state_t;
+bool tab5_ui_scroll_benchmark_begin(tab5_ui_scroll_benchmark_state_t *saved,int *maximum);
+void tab5_ui_scroll_benchmark_position(int offset);
+void tab5_ui_scroll_benchmark_end(tab5_ui_scroll_benchmark_state_t *saved);
+bool tab5_ui_scroll_cache_enabled(void);
+void tab5_ui_set_scroll_cache_enabled(bool enabled);
+void tab5_ui_clear_scroll_cache(void);
+
+
 /* UI-task only, under the same lock as update/touch. delta is signed detents;
  * time_ms is monotonic (uint32 wrap supported). IDLE polls the 15s timeout.
  * TOUCH hides the ring; the native action callbacks transfer element focus. */

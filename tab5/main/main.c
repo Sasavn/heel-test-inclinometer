@@ -8,6 +8,7 @@
 #include "tab5_resources.h"
 #include "tab5_draw_profile.h"
 #include "tab5_native_port.h"
+#include "native/native_ui.h"
 #include "bsp/esp-bsp.h"
 #include "driver/usb_serial_jtag.h"
 #include "esp_chip_info.h"
@@ -129,6 +130,55 @@ static void ui_perf_reply(bool reset,tab5_service_reply_fn reply,void *ctx) {
              (unsigned long)native.sample_lcd_count,(unsigned long long)native.sample_lcd_us,(unsigned long)native.sample_lcd_max_us,
              (unsigned long)native.ppa_timeouts,(unsigned long)native.lcd_timeouts,(unsigned long)native.submit_errors,(unsigned long)native.pipeline_state);
     reply(ctx,out);
+    snprintf(out,sizeof(out),"{\"transport\":\"roi_or_canonical\",\"lcd_copy_bytes\":%llu,\"full_lcd_copies\":%lu,\"partial_lcd_copies\":%lu}",
+             (unsigned long long)native.lcd_copy_bytes,(unsigned long)native.full_lcd_copies,(unsigned long)native.partial_lcd_copies);
+    reply(ctx,out);
+    snprintf(out,sizeof(out),"{\"gpu_compose\":true,\"frames\":%lu,\"copy_jobs\":%lu,\"ppa_jobs\":%lu,\"fallbacks\":%lu,\"timeouts\":%lu,\"copy_bytes\":%llu,\"copy_us\":%llu,\"ppa_us\":%llu,\"cpu_jobs\":%lu,\"cpu_pixels\":%llu,\"cpu_us\":%llu}",
+             (unsigned long)native.compose_frames,(unsigned long)native.compose_copy_jobs,(unsigned long)native.compose_ppa_jobs,
+             (unsigned long)native.compose_fallbacks,(unsigned long)native.compose_timeouts,
+             (unsigned long long)native.compose_copy_bytes,(unsigned long long)native.compose_copy_us,(unsigned long long)native.compose_ppa_us,
+             (unsigned long)native.compose_cpu_jobs,(unsigned long long)native.compose_cpu_pixels,(unsigned long long)native.compose_cpu_us);
+    reply(ctx,out);
+    snprintf(out,sizeof(out),"{\"cpu_tiles_enabled\":%s}",tab5_native_port_cpu_tiles_enabled()?"true":"false");reply(ctx,out);
+    snprintf(out,sizeof(out),"{\"pipeline_overlap\":true,\"worker_enabled\":%s,\"renders\":%lu,\"us\":%llu,\"queued_peak\":%lu,\"completed_frames\":%lu,\"backpressure\":%lu,\"unaligned_views\":%lu}",
+             native.worker_enabled?"true":"false",(unsigned long)native.overlap_renders,(unsigned long long)native.overlap_us,
+             (unsigned long)native.queued_peak,(unsigned long)native.worker_completed_frames,
+             (unsigned long)native.producer_backpressure,(unsigned long)native.compose_unaligned_views);reply(ctx,out);
+    snprintf(out,sizeof(out),"{\"cache_source_sync\":true,\"jobs\":%lu,\"hits\":%lu,\"bytes\":%llu}",
+             (unsigned long)native.compose_source_sync_jobs,(unsigned long)native.compose_source_sync_hits,
+             (unsigned long long)native.compose_source_sync_bytes);reply(ctx,out);
+    snprintf(out,sizeof(out),"{\"runtime_phases\":true,\"touch_read_us\":%llu,\"cpu_tick_us\":%llu,\"input_dispatch_us\":%llu,\"ui_lock_wait_us\":%llu,\"wake_wait_us\":%llu,\"callback_process_delay_us\":%llu,\"cache_callback_process_delay_us\":%llu,\"ppa_callback_process_delay_us\":%llu,\"lcd_callback_process_delay_us\":%llu}",
+             (unsigned long long)native.touch_read_us,(unsigned long long)native.cpu_tick_us,
+             (unsigned long long)native.input_dispatch_us,(unsigned long long)native.ui_lock_wait_us,
+             (unsigned long long)native.wake_wait_us,(unsigned long long)native.callback_process_delay_us,
+             (unsigned long long)native.cache_callback_process_delay_us,(unsigned long long)native.ppa_callback_process_delay_us,
+             (unsigned long long)native.lcd_callback_process_delay_us);reply(ctx,out);
+    nui_layer_cache_stats_t cache={0};nui_native_stats_t renderer={0};unsigned surface_alignment=0;bool cache_known=tab5_native_port_lock(20);
+    if(cache_known){if(reset)nui_layer_cache_reset_stats();nui_layer_cache_get_stats(&cache);nui_native_profile_snapshot(&renderer);surface_alignment=nui_native_surface_alignment();tab5_native_port_unlock();}
+    snprintf(out,sizeof(out),"{\"surface_views\":true,\"known\":%s,\"alignment\":%u,\"unaligned_views\":%llu}",
+             cache_known?"true":"false",surface_alignment,(unsigned long long)cache.deferred_unaligned_views);reply(ctx,out);
+    snprintf(out,sizeof(out),"{\"renderer_totals\":true,\"known\":%s,\"frames\":%llu,\"render_us\":%llu,\"cpu_cache_pixels\":%llu}",
+             cache_known?"true":"false",(unsigned long long)renderer.frames,(unsigned long long)renderer.render_us,(unsigned long long)cache.cpu_blit_pixels);
+    reply(ctx,out);
+    snprintf(out,sizeof(out),"{\"renderer_phases\":true,\"known\":%s,\"align_us\":%llu,\"logical_render_us\":%llu,\"gc_us\":%llu,\"callback_audit_us\":%llu,\"cache_cpu_blit_us\":%llu}",
+             cache_known?"true":"false",(unsigned long long)renderer.align_us,(unsigned long long)renderer.logical_render_us,
+             (unsigned long long)renderer.gc_us,(unsigned long long)renderer.callback_audit_us,
+             (unsigned long long)renderer.cache_cpu_blit_us);reply(ctx,out);
+    snprintf(out,sizeof(out),"{\"layer_cache\":true,\"known\":%s,\"hits\":%llu,\"misses\":%llu,\"builds\":%llu,\"updates\":%llu,\"build_us\":%llu,\"blit_pixels\":%llu,\"fallbacks\":%llu,\"bytes\":%u,\"peak_bytes\":%u,\"limit_bytes\":%u}",
+             cache_known?"true":"false",(unsigned long long)cache.hits,(unsigned long long)cache.misses,
+             (unsigned long long)cache.builds,(unsigned long long)cache.updates,(unsigned long long)cache.build_us,
+             (unsigned long long)cache.blit_pixels,(unsigned long long)cache.fallbacks,
+             (unsigned)cache.bytes,(unsigned)cache.peak_bytes,(unsigned)cache.limit_bytes);
+    reply(ctx,out);
+    snprintf(out,sizeof(out),"{\"cache_occlusion\":true,\"known\":%s,\"splits\":%llu,\"pixels\":%llu,\"fallbacks\":%llu}",
+             cache_known?"true":"false",(unsigned long long)cache.occlusion_splits,
+             (unsigned long long)cache.occlusion_pixels,(unsigned long long)cache.occlusion_fallbacks);
+    reply(ctx,out);
+    snprintf(out,sizeof(out),"{\"deferred_cache\":true,\"known\":%s,\"views\":%llu,\"pixels\":%llu,\"rejects\":%llu,\"portrait_updates\":%llu,\"portrait_us\":%llu,\"materialize_pixels\":%llu,\"pins\":%llu}",
+             cache_known?"true":"false",(unsigned long long)cache.deferred_views,(unsigned long long)cache.deferred_pixels,
+             (unsigned long long)cache.defer_rejects,(unsigned long long)cache.portrait_updates,
+             (unsigned long long)cache.portrait_us,(unsigned long long)cache.materialize_pixels,(unsigned long long)cache.pins);
+    reply(ctx,out);
     tab5_draw_profile_snapshot_t draw;tab5_draw_profile_snapshot(&draw,false);
     for(unsigned i=0;i<TAB5_DRAW_PROFILE_COUNT;i++){
         tab5_draw_profile_format(out,sizeof(out),&draw.entries[i]);reply(ctx,out);
@@ -136,6 +186,23 @@ static void ui_perf_reply(bool reset,tab5_service_reply_fn reply,void *ctx) {
     reply(ctx,"OK ui perf");
 }
 
+static void ui_benchmark_reply(tab5_service_reply_fn reply,void *ctx){
+    tab5_native_scroll_benchmark_status_t b;tab5_native_port_scroll_benchmark_status(&b);
+    cJSON *j=cJSON_CreateObject();if(!j){reply(ctx,"ERR benchmark JSON");return;}
+    cJSON_AddStringToObject(j,"benchmark","settings_scroll");
+    cJSON_AddBoolToObject(j,"pending",b.pending);cJSON_AddBoolToObject(j,"active",b.active);
+    cJSON_AddBoolToObject(j,"finished",b.finished);cJSON_AddBoolToObject(j,"restored",b.restored);
+    cJSON_AddBoolToObject(j,"cache_enabled",b.cache_enabled);
+#define BENCH_NUM(name) cJSON_AddNumberToObject(j,#name,b.name)
+    BENCH_NUM(request_id);BENCH_NUM(requested_frames);BENCH_NUM(completed_frames);BENCH_NUM(accepted_frames);
+    BENCH_NUM(interval_us);BENCH_NUM(reason);BENCH_NUM(touch_reads);BENCH_NUM(fps_milli);
+    BENCH_NUM(scroll_min);BENCH_NUM(scroll_max);BENCH_NUM(started_us);BENCH_NUM(elapsed_us);
+    BENCH_NUM(setup_us);BENCH_NUM(cold_frame_us);BENCH_NUM(render_us);BENCH_NUM(rotate_us);
+    BENCH_NUM(lcd_submit_us);BENCH_NUM(lcd_wait_us);BENCH_NUM(refresh_us);BENCH_NUM(lcd_copy_bytes);
+#undef BENCH_NUM
+    char *out=cJSON_PrintUnformatted(j);if(out){reply(ctx,out);cJSON_free(out);}else reply(ctx,"ERR benchmark JSON");
+    cJSON_Delete(j);
+}
 static void boot_failed(void) {
     printf("BOOTFAIL caller=%p internal_free=%u internal_largest=%u psram_free=%u\n",
         __builtin_return_address(0),
@@ -231,6 +298,7 @@ static void load_config(tab5_measure_config_t *cfg) {
 }
 static esp_err_t set_recording(bool on) {
     if(on==recording)return ESP_OK;
+    if(on)tab5_native_port_cancel_scroll_benchmark();
     if(!on){xSemaphoreTake(route_mutex,portMAX_DELAY);route_recording=false;xSemaphoreGive(route_mutex);
         tab5_services_record_stop();record_duration_s=(uint32_t)((esp_timer_get_time()-record_start_us)/1000000);
         recording=false;snprintf(notice,sizeof(notice),"Запись остановлена");return ESP_OK;}
@@ -320,6 +388,17 @@ static void command(void *unused,const char *line,tab5_service_reply_fn reply,vo
     tab5_measure_snapshot_t s;tab5_measure_snapshot(&s);
     if(strcmp(line,"ver")==0){char version[160];snprintf(version,sizeof(version),"BWM427 inclinometer firmware v%s, board=tab5 chip=esp32p4 proto=2",FW_VERSION);reply(ctx,version);reply(ctx,"OK");}
     else if(strcmp(line,"status")==0 || strcmp(line,"diag")==0)status(reply,ctx);
+    else if(strcmp(line,"ui bench status")==0)ui_benchmark_reply(reply,ctx);
+    else if(strcmp(line,"ui bench cancel")==0){tab5_native_port_cancel_scroll_benchmark();reply(ctx,"OK benchmark cancel queued");}
+    else if(strcmp(line,"ui bench scroll off")==0 || strcmp(line,"ui bench scroll on")==0 || strcmp(line,"ui bench scroll legacy")==0){
+        bool cache=strcmp(line,"ui bench scroll on")==0;uint32_t interval=strcmp(line,"ui bench scroll legacy")==0?40000:16667;
+        if(recording)reply(ctx,"ERR benchmark forbidden while recording");
+        else reply(ctx,tab5_native_port_request_scroll_benchmark(120,interval,cache)?"OK benchmark queued":"ERR benchmark unavailable/busy");
+    }
+    else if(strcmp(line,"ui compose cpu on")==0 || strcmp(line,"ui compose cpu off")==0){
+        if(recording)reply(ctx,"ERR diagnostic forbidden while recording");
+        else {bool enabled=strcmp(line,"ui compose cpu on")==0;tab5_native_port_set_cpu_tiles_enabled(enabled);reply(ctx,enabled?"OK CPU tiles on":"OK CPU tiles off");}
+    }
     else if(strcmp(line,"ui verify rotate")==0)reply(ctx,tab5_native_port_request_verify(2)?"OK rotation verification queued":"ERR renderer not ready");
     else if(strcmp(line,"ui perf")==0 || strcmp(line,"ui perf reset")==0)ui_perf_reply(strcmp(line,"ui perf reset")==0,reply,ctx);
     else if(strcmp(line,"sd auto on")==0 || strcmp(line,"sd auto off")==0){

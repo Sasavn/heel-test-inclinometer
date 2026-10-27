@@ -508,6 +508,39 @@ static void enc_scroll_thumb(nui_obj_t *view,nui_obj_t *content,int offset,unsig
     nui_obj_set_size(thumb,6,height);
     style_color(thumb,NUI_STYLE_BG_COLOR,nui_color_hex(u.muted),0);
 }
+bool tab5_ui_scroll_cache_enabled(void){
+    return u.settings_content&&nui_obj_get_layer_cache_enabled(u.settings_content);
+}
+void tab5_ui_set_scroll_cache_enabled(bool enabled){
+    if(u.settings_content)nui_obj_set_layer_cache_parent_matte(u.settings_content,enabled);
+    if(u.notice)nui_obj_set_layer_cache(u.notice,enabled);
+}
+void tab5_ui_clear_scroll_cache(void){
+    if(u.settings_content)nui_obj_clear_layer_cache(u.settings_content);
+    if(u.notice)nui_obj_clear_layer_cache(u.notice);
+}
+bool tab5_ui_scroll_benchmark_begin(tab5_ui_scroll_benchmark_state_t *saved,int *maximum){
+    if(!saved||!maximum||!u.root||u.modal_kind||e.touch_down||u.state.recording||u.dirty||u.pending)return false;
+    *saved=(tab5_ui_scroll_benchmark_state_t){.page=u.page,.index=e.index,.level=e.level,.settings_offset=e.settings_offset,.ring=e.ring,.valid=true};
+    e.ring=false;show_page(SETTINGS);encoder_paint();
+    *maximum=nui_obj_get_height(u.settings_content)-nui_obj_get_height(u.settings_view);
+    if(*maximum<0)*maximum=0;
+    tab5_ui_scroll_benchmark_position(0);return true;
+}
+void tab5_ui_scroll_benchmark_position(int offset){
+    if(!u.root)return;
+    int maximum=nui_obj_get_height(u.settings_content)-nui_obj_get_height(u.settings_view);
+    if(maximum<0)maximum=0;
+    if(offset<0)offset=0;
+    if(offset>maximum)offset=maximum;
+    e.settings_offset=offset;nui_obj_set_y(u.settings_content,-offset);
+    enc_scroll_thumb(u.settings_view,u.settings_content,offset,0);
+}
+void tab5_ui_scroll_benchmark_end(tab5_ui_scroll_benchmark_state_t *saved){
+    if(!saved||!saved->valid||!u.root)return;
+    tab5_ui_scroll_benchmark_position(saved->settings_offset);show_page(saved->page);
+    e.index=saved->index;e.level=saved->level;e.ring=saved->ring;saved->valid=false;
+}
 static void enc_scroll(nui_obj_t *obj,nui_obj_t *view,nui_obj_t *content,int *offset){
     if(!obj||!view||!content||!enc_descendant(obj,content))return;
     nui_area_t a,v;nui_obj_get_coords(obj,&a);nui_obj_get_coords(view,&v);
@@ -929,7 +962,9 @@ void tab5_ui_init(tab5_ui_action_cb_t cb,void *user){
     u.rail_resources[1]=label(u.status_bar,"ОЗУ —",486,4,108,26,F16,NAVMUTED);u.rail_resources[2]=label(u.status_bar,"PS —",486,29,108,24,F16,NAVMUTED);
     u.rail_power=label(u.status_bar,"—",840,12,150,40,F28,NAVTEXT);u.status_media=label(u.status_bar,"SD USB",994,15,130,36,F20,NAVMUTED);
     for(unsigned i=0;i<6;i++)u.pages[i]=box(u.root,168,68,1096,636,TEXT);
-    build_measure();build_roll();build_graph();build_record();build_settings();build_network();show_page(MEASURE);
+    build_measure();build_roll();build_graph();build_record();build_settings();build_network();
+    /* Production default: parent-matte cache, with renderer OOM fallback. */
+    tab5_ui_set_scroll_cache_enabled(true);show_page(MEASURE);
     tab5_ui_state_t state={.light_theme=true};tab5_measure_config_default(&state.measurement.config);tab5_ui_update(&state);
 }
 
@@ -1016,7 +1051,7 @@ static void update_notice(const char *s){
     snprintf(u.last_notice,sizeof(u.last_notice),"%s",s);
     if(!*s){if(u.notice)nui_obj_delete(u.notice);u.notice=u.notice_text=NULL;return;}
     bool error=backend_failure();
-    if(!u.notice){u.notice=box(u.root,240,584,1024,120,INFO);nui_obj_add_flag(u.notice,NUI_OBJ_FLAG_CLICKABLE);u.notice_text=label(u.notice,"",20,14,912,92,F36,TEXT);button(u.notice,"✗",948,32,56,56,GHOST,A_NOTICE_CLOSE);}
+    if(!u.notice){u.notice=box(u.root,240,584,1024,120,INFO);nui_obj_set_layer_cache(u.notice,tab5_ui_scroll_cache_enabled());nui_obj_add_flag(u.notice,NUI_OBJ_FLAG_CLICKABLE);u.notice_text=label(u.notice,"",20,14,912,92,F36,TEXT);button(u.notice,"✗",948,32,56,56,GHOST,A_NOTICE_CLOSE);}
     role(u.notice,error?ERR:INFO);style_color(u.notice_text,NUI_STYLE_TEXT_COLOR,nui_color_hex(error?u.err:u.info),0);text(u.notice_text,s);nui_obj_move_foreground(u.notice);
 }
 void tab5_ui_update(const tab5_ui_state_t *s){

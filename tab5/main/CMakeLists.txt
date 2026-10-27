@@ -18,3 +18,10 @@ foreach(fn esp_lcd_new_dsi_bus esp_lcd_new_panel_st7123 esp_lcd_new_panel_ili988
            esp_lcd_panel_reset esp_lcd_panel_init esp_lcd_panel_disp_on_off)
     target_link_options(${COMPONENT_LIB} INTERFACE "LINKER:--wrap=${fn}")
 endforeach()
+
+# Audited private framebuffer-copy ABI: ESP-IDF 5.5.2 only. Use vendor header.
+if(NOT "${IDF_VERSION_MAJOR}.${IDF_VERSION_MINOR}.${IDF_VERSION_PATCH}" VERSION_EQUAL "5.5.2")
+    message(FATAL_ERROR "Tab5 GPU composer private esp_async_fbcpy ABI requires IDF 5.5.2")
+endif()
+idf_component_get_property(tab5_esp_lcd_dir esp_lcd COMPONENT_DIR)
+target_include_directories(${COMPONENT_LIB} PRIVATE "${tab5_esp_lcd_dir}/priv_include")

@@ -94,7 +94,10 @@ typedef struct nui_style_entry nui_style_entry_t;
 typedef struct {nui_style_entry_t *entries;} nui_style_t;
 typedef struct nui_obj nui_obj_t;
 typedef struct nui_timer nui_timer_t;
-typedef struct nui_layer {nui_area_t clip;uint8_t opa;} nui_layer_t;
+/* A target is borrowed by the renderer. NULL retains the public display
+ * target. Custom draw callbacks are never replayed into retained surfaces. */
+struct nui_render_target;
+typedef struct nui_layer {nui_area_t clip;uint8_t opa;const struct nui_render_target *target;} nui_layer_t;
 typedef struct nui_indev {nui_point_t point;bool pressed;} nui_indev_t;
 typedef struct {unsigned kind;} nui_obj_class_t;
 extern const nui_obj_class_t nui_obj_class,nui_label_class,nui_button_class,nui_switch_class,nui_textarea_class,nui_keyboard_class,nui_chart_class,nui_image_class,nui_bar_class;
@@ -187,9 +190,25 @@ typedef struct {uint64_t calls,us,pixels;} nui_primitive_stats_t;
  * Peak gauges have process lifetime, like allocation_peak; profile_reset clears
  * activity counters only. Miss/build work runs inside render_us, including cold
  * first paint. No hidden prewarm and no cached final framebuffer pixels. */
-typedef struct {uint64_t frames,dirty_rects,dirty_pixels,render_us; nui_primitive_stats_t primitive[NUI_PRIM_COUNT];size_t allocation_bytes,allocation_peak,allocation_count;uint64_t allocation_failures;uint64_t shadow_cache_hits,shadow_cache_misses,shadow_cache_build_pixels,style_cache_hits,style_cache_misses,style_cache_evictions;size_t shadow_cache_bytes,shadow_cache_peak_bytes,shadow_cache_capacity_bytes,shadow_cache_static_bytes;uint64_t shadow_cache_evictions;size_t object_cache_bytes,object_cache_peak_bytes,object_cache_bytes_per_object;uint64_t layout_cache_hits,layout_cache_misses,layout_cache_evictions,skipped_state_invalidations,clear_pixels_skipped;size_t gradient_cache_bytes,gradient_cache_peak_bytes,gradient_cache_capacity_bytes;uint64_t gradient_cache_hits,gradient_cache_misses,gradient_cache_build_pixels,gradient_cache_evictions;} nui_native_stats_t;
+/* Coarse cumulative wall phases, independent of FINE/primitive timing.
+ * logical_render_us includes audit/build/blit/portrait; these overlap, do not
+ * add them to logical_render_us. align_us precedes legacy render_us; gc_us
+ * covers only end-of-render cleanup. profile_reset clears all five fields. */
+typedef struct {uint64_t frames,dirty_rects,dirty_pixels,render_us; nui_primitive_stats_t primitive[NUI_PRIM_COUNT];size_t allocation_bytes,allocation_peak,allocation_count;uint64_t allocation_failures;uint64_t shadow_cache_hits,shadow_cache_misses,shadow_cache_build_pixels,style_cache_hits,style_cache_misses,style_cache_evictions;size_t shadow_cache_bytes,shadow_cache_peak_bytes,shadow_cache_capacity_bytes,shadow_cache_static_bytes;uint64_t shadow_cache_evictions;size_t object_cache_bytes,object_cache_peak_bytes,object_cache_bytes_per_object;uint64_t layout_cache_hits,layout_cache_misses,layout_cache_evictions,skipped_state_invalidations,clear_pixels_skipped;size_t gradient_cache_bytes,gradient_cache_peak_bytes,gradient_cache_capacity_bytes;uint64_t gradient_cache_hits,gradient_cache_misses,gradient_cache_build_pixels,gradient_cache_evictions;uint64_t align_us,logical_render_us,gc_us,callback_audit_us,cache_cpu_blit_us;} nui_native_stats_t;
 typedef void (*nui_native_flush_cb_t)(const nui_area_t*,const uint16_t*,size_t stride,void*);
 bool nui_native_init(int width,int height,uint16_t *framebuffer);
+/* Borrow a same-size, tightly packed RGB565 framebuffer under the UI lock.
+ * False for NULL/uninitialized/rendering/event dispatch. Same pointer is a
+ * no-op; a changed pointer advances framebuffer epoch, invalidating old-view
+ * materialize only (release remains valid). No allocation/cache clear/dirty
+ * invalidation. Caller supplies width*height storage and guarantees every
+ * actual dirty rectangle is reconstructed over an opaque root before use;
+ * untouched pixels and deferred holes in a newly bound slot are undefined.
+ * Slots stay alive through transfer/verification. No worker renderer access. */
+bool nui_native_bind_framebuffer(uint16_t *framebuffer);
+/* UI-lock read-only peek before alignment/debt injection. Returns full count;
+ * copies min(cap,count), NULL is permitted. Does not consume dirty state. */
+size_t nui_native_get_pending_dirty(nui_area_t *out,size_t cap);
 void nui_native_deinit(void);
 size_t nui_native_render(void);
 void nui_native_touch(int x,int y,bool pressed);
@@ -241,6 +260,68 @@ bool nui_obj_has_state(const nui_obj_t*,uint32_t);
 bool nui_obj_is_visible(const nui_obj_t*);
 void nui_obj_set_ext_click_area(nui_obj_t*,int32_t);
 void nui_obj_invalidate(nui_obj_t*);
+
+/* Opt-in retained subtree surface, aggregate landscape+portrait payload limit 8 MiB.
+ * opaque: MAIN BG_OPA/OPA=255, shadow/outline=0. Rounded own backgrounds
+ * copy only their opaque cross interior; corners/border use the painter.
+ * parent_matte: explicitly allows transparent content over a verified uniform
+ * direct parent's BG. Only the parent's opaque interior is copied; rounded
+ * edge strips use ordinary rendering. No styles are changed by either API.
+ * Only static containers/labels/buttons/switches without draw callbacks are
+ * eligible. Ineligible, translucent, oversized or OOM cases render normally.
+ * Return means request accepted (metadata available), not a guaranteed hit.
+ * All calls follow the existing serialized UI-access contract. */
+bool nui_obj_set_layer_cache(nui_obj_t*,bool enabled);
+bool nui_obj_set_layer_cache_parent_matte(nui_obj_t*,bool enabled);
+bool nui_obj_get_layer_cache_enabled(const nui_obj_t*);
+void nui_obj_clear_layer_cache(nui_obj_t*);
+typedef struct {
+    uint64_t hits,misses,builds,updates,build_us,blit_pixels,fallbacks;
+    size_t bytes,peak_bytes,limit_bytes;
+    /* Original dirty regions optimized, copied interior pixels, and regions
+     * conservatively kept intact to preserve reachable draw callbacks. */
+    uint64_t occlusion_splits,occlusion_pixels,occlusion_fallbacks;
+    uint64_t deferred_views,deferred_pixels,defer_rejects,portrait_updates,portrait_us,materialize_pixels,pins,cpu_blit_pixels;
+    uint64_t deferred_unaligned_views; /* Accepted dst/source offsets or size not multiples of 16. */
+} nui_layer_cache_stats_t;
+void nui_layer_cache_get_stats(nui_layer_cache_stats_t*);
+void nui_layer_cache_reset_stats(void);
+
+/* Bounded Settings GPU composition. UI-lock serialized, NEVER ISR release.
+ * Both payloads are immutable while leased, even after cache clear/delete.
+ * Core pins BEFORE callback; false auto-releases and copies via CPU; true
+ * transfers ONE lease to a copied view, held through LCD + verification.
+ * Callback NULL selects complete CPU1710 fallback. Max8 accepts/render.
+ * Portrait base and stride bytes are64B aligned. portrait_stride is padded
+ * picture width in pixels, allocated rows=round_up(logical_width,16).
+ * GPU source=(source_y, logical_width-source_x-destination_width),
+ * destination=(destination.y1, screen_width-1-destination.x2), rotation0.
+ * Fast path leaves landscape framebuffer holes. Port must compose EXACT
+ * get_dirty rectangles minus accepted destinations, never an expanded union. */
+#define NUI_NATIVE_MAX_DEFERRED_VIEWS 8u
+typedef struct {
+    const uint16_t *landscape,*portrait;
+    uint32_t landscape_stride,portrait_stride,logical_width,logical_height;
+    uint32_t source_x,source_y;
+    nui_area_t destination;
+    uint64_t storage_id,portrait_generation; /* Stable ID; CPU portrait rewrite version. */
+    void *lease;
+} nui_surface_view_t;
+typedef bool (*nui_surface_defer_cb_t)(const nui_surface_view_t*,void*);
+void nui_native_set_surface_defer_cb(nui_surface_defer_cb_t,void*);
+/* Only1 or16; expansion/clamp/merge happens BEFORE CPU render. */
+bool nui_native_set_dirty_alignment(unsigned tile);
+/* Deferred rectangles only: 1 keeps exact safe opaque pixels, 16 rounds
+ * inward. Independent of dirty alignment and payload/stride alignment.
+ * Default 16; native init/deinit reset to 16. UI-lock serialized. */
+bool nui_native_set_surface_alignment(unsigned tile);
+unsigned nui_native_surface_alignment(void);
+void nui_surface_view_release(nui_surface_view_t*);
+/* Diagnostic only: independently copies leased LANDSCAPE into current CPU
+ * framebuffer. False after native deinit/reinit or if view is not live.
+ * Does not release lease. GPU path remains enabled during verification. */
+bool nui_surface_view_materialize(const nui_surface_view_t*);
+
 void nui_obj_add_event_cb(nui_obj_t*,nui_event_cb_t,nui_event_code_t,void*);
 void nui_obj_send_event(nui_obj_t*,nui_event_code_t,void*);
 nui_event_code_t nui_event_get_code(const nui_event_t*);
