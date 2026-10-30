@@ -35,7 +35,7 @@ struct ImVec4;
 namespace ui
 {
 
-inline constexpr const char* kAppVersion = "1.8.4";
+inline constexpr const char* kAppVersion = "1.8.5";
 
 enum class Page
 {
@@ -422,6 +422,7 @@ private:
     bool espFirmware_ = false, factoryMode_ = false, manualRom_ = true;
     char factoryManifest_[1024] = {}, recoveryPort_[16] = {};
     void PageEspRecovery();
+    int wifiRoute_ = 0;
     char tcpHost_[64] = "192.168.4.1", tcpToken_[129] = {};
     int tcpPort_ = 5000;
     bool tcpMode_ = false, tcpDialog_ = false;

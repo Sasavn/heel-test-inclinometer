@@ -1,6 +1,6 @@
 # Tab5 PC fork (tab5-esp32)
 
-Output is `krenomer-esp32.exe`; the PC application version remains 1.8.2. Device
+Output is `krenomer-esp32.exe`; the PC application version is 1.8.5. Device
 firmware is independently versioned, starting at 1.5.0-esp32.
 
 ## Подписи русской программы
@@ -11,13 +11,13 @@ firmware is independently versioned, starting at 1.5.0-esp32.
 «Проверить и записать» открывает итоговое подтверждение. Все четыре файла
 комплекта должны лежать рядом с JSON. Для обновления уже работающего прибора
 выберите «Обновление (OTA)», файл приложения `.bin`, затем «Проверить и обновить».
-Сетевое подключение — пункт «Tab5 по сети (TCP)…» в выборе порта: IP-адрес,
+Сетевое подключение с 1.8.5 — отдельная кнопка «Wi-Fi» в шапке: IP-адрес,
 порт 5000 и ключ доступа (пароль AP). Технические причины ошибок доступны
 при наведении. Подписи переведены; команды протокола остаются неизменными.
 
 ## Connections
 
-The connection dropdown offers authenticated TCP. Enter a numeric IPv4 address,
+The Wi-Fi button opens authenticated TCP settings (1.8.4 used the port dropdown). Enter a numeric IPv4 address,
 port (default 5000), and the unique device token displayed on Tab5 (AP password).
 Winsock sockets are nonblocking, including connect and partial send/receive.
 Authentication completes before the normal `ver` handshake; the transport hides
@@ -137,3 +137,11 @@ Virtual Tab5, software-rendered without opening a window or a device:
 ![ESP32 OTA application page](docs/img/tab5_firmware.png)
 
 ![Native ROM factory recovery page](docs/img/tab5_factory.png)
+
+## Общий роутер (STA)
+
+На приборе откройте «Сеть», включите «Wi-Fi сеть», задайте SSID и пароль роутера и примените. После получения DHCP-адреса возьмите IP из строки «адрес» блока Wi-Fi сети на Tab5 (не адрес точки доступа прибора). ПК должен быть в той же доступной LAN. В программе задайте этот IPv4, TCP-порт 5000 и ключ доступа прибора — пароль AP Tab5, а не пароль роутера. Listener привязан к INADDR_ANY, поэтому обслуживает и AP, и STA. Можно оставить AP включённой как резерв.
+
+Автоматического UDP/mDNS-поиска нет. Гостевая сеть/client isolation/VLAN или firewall могут запрещать связь даже при одинаковом SSID; такие ограничения нужно проверять на своём роутере, а не подменять успешным обнаружением. Режим STA и получение IP проверены по коду; реальный роутер пользователя в этой проверке не использовался.
+
+В опубликованной 1.8.4 временный путь: список портов → «Tab5 по сети (TCP)…». В 1.8.5 используется отдельная кнопка «Wi-Fi» и выбор AP/общего роутера.

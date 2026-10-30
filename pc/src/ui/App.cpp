@@ -20,6 +20,7 @@
 namespace
 {
 // kAppVersion («1.8.3») — начало версии из CMakeLists.txt (project VERSION 1.8.3): сведения о файле и окно — одно.
+// 1.8.5: явная кнопка Wi-Fi, подсказки AP/роутер и ручной IP без поиска.
 // 1.8.4: офлайн-установка времени с ПК прежней кнопкой; пояс только по capability, явный ACK и ошибки RTC.
 // 1.8.3: отчёты с плечами от борта без выхода за границы таблицы; отдельные папки комплектов без перезаписи;
 // понятный реверс выбранной оси и проверка опыта M025.
@@ -339,7 +340,7 @@ void App::RenderTopBar(float h)
     const bool narrow = W < S(1180);
     // Демо: одна кнопка «Выйти из демо»; с прибором: порт, «Отключить / Подключить» и «Демо» — все нейтральные
     const float demoW = narrow ? S(110) : S(124), connW = narrow ? S(116) : S(128), portW = narrow ? S(180) : S(230);
-    const float rightX = snap_.demo ? W - S(18) - S(150) : W - S(18) - demoW - connW - portW - 2 * S(8);
+    const float rightX = W - S(18) - demoW - connW - portW - 3 * S(8) - S(74);
 
     // Состояние связи: полный текст, а если не влезает до кнопок — короткий
     ImGui::SameLine(0, S(28));
@@ -400,17 +401,6 @@ void App::RenderTopBar(float h)
     const bool busy = (updater_.Busy() || ota_.Busy() || recovery_.Busy()) || dl_.running || PcRecording();
     const char* busyWhy = PcRecording() ? "Идёт запись на ПК — сначала остановите её" : "Идёт скачивание или перепрошивка";
     ImGui::SetCursorPos(ImVec2(rightX, (h - fh) * 0.5f));
-    if (snap_.demo)
-    {
-        if (Button("Выйти из демо", BtnKind::Nav, ImVec2(S(150), 0), busy, busyWhy))
-            StartDemo(false);
-        if (ImGui::IsItemHovered() && !busy)
-            ImGui::SetTooltip("Закрыть имитатор и искать настоящий прибор");
-        ImGui::EndChild();
-        ImGui::PopStyleVar();
-        ImGui::PopStyleColor();
-        return;
-    }
     ImGui::SetNextItemWidth(portW);
     // Поле порта на синем: полупрозрачная светлая заливка, светлый текст
     ImGui::PushStyleColor(ImGuiCol_FrameBg, pal.navFrame);
@@ -437,7 +427,6 @@ void App::RenderTopBar(float h)
         ImGui::PopStyleColor(7);
         if (open)
         {
-            if (ImGui::Selectable("Tab5 по сети (TCP)…", tcpMode_)) tcpDialog_=true;
             if (ImGui::Selectable("Автоматически STM32 (0483:5740); Tab5 USB — вручную", settings_.port.empty() && !tcpMode_))
             {
                 if(tcpMode_) {tcpMode_=false;MakeLink(false);}
@@ -461,26 +450,37 @@ void App::RenderTopBar(float h)
                 Muted("COM-портов нет");
             ImGui::EndCombo();
         }
+    }
+        ImGui::SameLine(0, S(8));
+        if (Button("Wi-Fi", BtnKind::Nav, ImVec2(S(74), 0), busy, busyWhy)) tcpDialog_=true;
         if(tcpDialog_) {ImGui::OpenPopup("Подключение Tab5 по сети");tcpDialog_=false;}
+        ImGui::SetNextWindowSize(ImVec2(S(560), 0), ImGuiCond_Always);
         if(ImGui::BeginPopupModal("Подключение Tab5 по сети",nullptr,ImGuiWindowFlags_AlwaysAutoResize)) {
+            if (ImGui::RadioButton("Точка доступа Tab5 (AP)", wifiRoute_ == 0)) {
+                wifiRoute_ = 0; std::snprintf(tcpHost_, sizeof(tcpHost_), "%s", "192.168.4.1"); tcpPort_ = 5000;
+            }
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Общий роутер", wifiRoute_ == 1)) {
+                wifiRoute_ = 1; tcpHost_[0] = 0; tcpPort_ = 5000;
+            }
+            ImGui::TextWrapped(wifiRoute_ == 0 ? "Подключите ПК к точке доступа Tab5. Адрес: 192.168.4.1, порт: 5000."
+                                : "Подключите ПК и Tab5 к общему роутеру. Возьмите фактический IP Wi-Fi сети (STA) с экрана «Сеть» прибора и укажите в поле ниже.\nАдрес точки доступа 192.168.4.1 для этого режима не подходит.");
             ImGui::SetNextItemWidth(S(230));
             ImGui::InputText("IP-адрес (IPv4)",tcpHost_,sizeof(tcpHost_));
             ImGui::SetNextItemWidth(S(110));
             ImGui::InputInt("Порт",&tcpPort_);
             ImGui::SetNextItemWidth(S(230));
             ImGui::InputText("Ключ доступа",tcpToken_,sizeof(tcpToken_),ImGuiInputTextFlags_Password);
-            Hint("Введите ключ, показанный на экране Tab5: он совпадает с паролем точки доступа.\nПорт по умолчанию — 5000. Адрес задаётся вручную; поиска приборов в сети нет.\nКлюч не сохраняется и не попадает в журнал команд.");
-            if(ImGui::Button("Подключить") && !busy && tcpPort_>0 && tcpPort_<=65535) {tcpMode_=true;MakeLink(false);ImGui::CloseCurrentPopup();}
+            ImGui::TextWrapped("Адрес вводится вручную; поиска приборов в сети нет.\nКлюч — пароль точки доступа (AP) прибора, не пароль роутера.\nКлюч не сохраняется и не попадает в журнал команд.");
+            ImGui::BeginDisabled(busy || !tcpHost_[0] || tcpPort_<=0 || tcpPort_>65535);
+            if(ImGui::Button("Подключить")) {tcpMode_=true;MakeLink(false);ImGui::CloseCurrentPopup();}
+            ImGui::EndDisabled();
             ImGui::SameLine();if(ImGui::Button("Отмена"))ImGui::CloseCurrentPopup();
             ImGui::EndPopup();
         }
-        if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("Обычно — «автоматически»: программа сама находит прибор (ST Virtual COM Port 0483:5740).\n"
-                              "Выберите порт вручную, если в системе несколько таких устройств.");
-    }
     ImGui::SameLine(0, S(8));
-    if (Button(off ? "Подключить" : "Отключить", BtnKind::Nav, ImVec2(connW, 0), busy, busyWhy))
-        link_->SetEnabled(off);
+    if (Button(snap_.demo ? "Выйти из демо" : off ? "Подключить" : "Отключить", BtnKind::Nav, ImVec2(connW, 0), busy, busyWhy))
+        { if (snap_.demo) StartDemo(false); else link_->SetEnabled(off); }
     ImGui::SameLine(0, S(8));
     if (Button("Демо", BtnKind::Nav, ImVec2(demoW, 0), busy, busyWhy))
         StartDemo(true);

@@ -515,6 +515,39 @@ int main(int argc, char** argv)
         st.size = ImVec2(1024, 700);
         st.Shot("00_not_connected_1024x700");
         st.size = ImVec2(1280, 800);
+        st.Frame();
+        auto click = [&](ImVec2 pos) {
+            auto& io = ImGui::GetIO();
+            io.AddMousePosEvent(pos.x, pos.y); st.Frame();
+            io.AddMouseButtonEvent(0, true); st.Frame();
+            io.AddMouseButtonEvent(0, false); st.Frame();
+        };
+        click(ImVec2(955, 29));
+        auto* wifi = ImGui::FindWindowByName("Подключение Tab5 по сети");
+        CHECK(wifi && wifi->Active);
+        st.Shot("wifi_ap");
+        if (wifi && wifi->Active) {
+            const auto& style = ImGui::GetStyle();
+            const float radioWidth = ImGui::GetFrameHeight() + style.ItemInnerSpacing.x +
+                                     ImGui::CalcTextSize("Точка доступа Tab5 (AP)").x;
+            click(ImVec2(wifi->Pos.x + style.WindowPadding.x + radioWidth + style.ItemSpacing.x + 8,
+                         wifi->Pos.y + wifi->TitleBarHeight + style.WindowPadding.y + 8));
+            st.Shot("wifi_router");
+            click(ImVec2(wifi->Pos.x + 150, wifi->Pos.y + wifi->Size.y - 16));
+            app.StartDemo(true); st.Run(500);
+            CHECK(app.Link().Snapshot().demo);
+            click(ImVec2(955, 29));
+            CHECK(wifi->Active);
+            st.Shot("wifi_demo");
+            click(ImVec2(wifi->Pos.x + 150, wifi->Pos.y + wifi->Size.y - 16));
+            CHECK(app.Link().Snapshot().demo); // Cancel retains Sim.
+            click(ImVec2(955, 29));
+            click(ImVec2(wifi->Pos.x + 30, wifi->Pos.y + wifi->TitleBarHeight + style.WindowPadding.y + 8));
+            st.Shot("wifi_demo_ap");
+            click(ImVec2(wifi->Pos.x + 50, wifi->Pos.y + wifi->Size.y - 16));
+            CHECK(!app.Link().Snapshot().demo); // Connect leaves Sim (noHardware keeps test isolated).
+
+        }
     }
 
     SECTION("Русские сообщения Tab5 без изменения протокола");
