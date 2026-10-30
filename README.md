@@ -1,4 +1,4 @@
-# Регистратор крена для опыта кренования (STM32F411 + BWM427)
+# Регистратор крена для опыта кренования (Tab5 / ESP32 и STM32F411)
 
 Оба прибора разрабатываются в **одном репозитории**
 [Sasavn/heel-test-inclinometer](https://github.com/Sasavn/heel-test-inclinometer):
@@ -12,8 +12,9 @@
 `krenomer-esp32.bin` — для Tab5 с подходящей ревизией ESP32-P4.
 Tab5-пакеты публикуются отдельно как предварительные релизы; ссылка
 `releases/latest` ниже относится к стабильной STM32/PC-версии.
-[Скачать Tab5 1.7.0 и PC 1.8.4](https://github.com/Sasavn/heel-test-inclinometer/releases/tag/tab5-v1.7.0)
-— предварительная версия без аппаратной проверки.
+[Скачать ПК Tab5 1.8.5 с явным Wi-Fi](https://github.com/Sasavn/heel-test-inclinometer/releases/tag/pc-tab5-v1.8.5)
+— предварительный выпуск ПК, без изменения прошивки прибора.
+Пакеты прошивки и их ограничения описаны в [tab5/README.md](tab5/README.md).
 
 Ветка **`tab5-esp32`** добавляет локальный тестовый порт для **M5Stack Tab5**:
 [прошивка ESP32-P4, сборка и ограничения](tab5/README.md),
@@ -35,10 +36,15 @@ Tab5-пакеты публикуются отдельно как предвар�
 
 Для этой ветки используйте **krenomer-tab5**, а не стабильную STM32-программу из releases/latest:
 
-- [Tab5 для Windows x64](https://github.com/Sasavn/heel-test-inclinometer/releases/download/tab5-v1.7.0/krenomer-tab5-x64.exe).
-- [Tab5 для Windows x86](https://github.com/Sasavn/heel-test-inclinometer/releases/download/tab5-v1.7.0/krenomer-tab5-x86.exe).
+- [ПК Tab5 1.8.5 для Windows x64](https://github.com/Sasavn/heel-test-inclinometer/releases/download/pc-tab5-v1.8.5/krenomer-tab5-1.8.5-x64.exe).
+- [ПК Tab5 1.8.5 для Windows x86](https://github.com/Sasavn/heel-test-inclinometer/releases/download/pc-tab5-v1.8.5/krenomer-tab5-1.8.5-x86.exe).
+- [Обе разрядности, инструкция и снимки диалога](https://github.com/Sasavn/heel-test-inclinometer/releases/download/pc-tab5-v1.8.5/Krenomer-Tab5-PC-1.8.5.zip).
 
-Подключитесь к Wi-Fi прибора, выйдите из демо в программе, раскройте список портов сверху → «Tab5 по сети (TCP)…». Для штатной точки доступа: IP 192.168.4.1, порт 5000, ключ — пароль AP с экрана Tab5. Поиска UDP/автоматического обнаружения нет.
+Подключитесь к Wi-Fi прибора и нажмите **«Wi-Fi»** в верхней панели программы.
+Кнопка доступна без COM-портов и прямо из демо. Для штатной точки доступа:
+IP 192.168.4.1, порт 5000, ключ — пароль AP с экрана Tab5.
+Для общего роутера выберите соответствующий режим и введите фактический STA-IP
+прибора. Адрес задаётся вручную: автоматического обнаружения нет.
 
 ## Скачать для старого STM32
 

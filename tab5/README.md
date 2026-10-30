@@ -7,7 +7,8 @@
 Отдельный форк не требуется. Прошивки STM32 и ESP32-P4 взаимозаменять нельзя;
 для Tab5 выбирается пакет под ревизию кремния P4, а не по внешнему виду планшета.
 
-**Скачать:** [Tab5 1.7.0-esp32 + PC 1.8.4 — предварительный релиз](https://github.com/Sasavn/heel-test-inclinometer/releases/tag/tab5-v1.7.0).
+**Программа ПК:** [Tab5 PC 1.8.5 — Wi-Fi через AP или общий роутер](https://github.com/Sasavn/heel-test-inclinometer/releases/tag/pc-tab5-v1.8.5).
+**Предыдущий комплект прошивки:** [Tab5 1.7.0-esp32 + PC 1.8.4](https://github.com/Sasavn/heel-test-inclinometer/releases/tag/tab5-v1.7.0).
 В нём два ZIP под P4 rev1/rev3 и программы для Windows x64/x86.
 Версия **не проверена на плате**; стабильный `releases/latest` остаётся отдельным.
 
