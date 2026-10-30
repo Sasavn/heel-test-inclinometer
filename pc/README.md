@@ -1,6 +1,6 @@
-> Локальный кандидат Tab5 PC 1.8.6: общая настройка синхронизации старта и остановки записи с Tab5 1.7.19; свежесть S/R и счётчики последовательности в диагностике. [Контракт синхронизации](docs/record-sync-proposal.md). Последняя опубликованная ссылка ниже относится к 1.8.5.
+> Tab5 PC 1.8.6: общая настройка синхронизации старта и остановки записи с Tab5 1.7.19; свежесть S/R и счётчики последовательности в диагностике. [Контракт синхронизации](docs/record-sync-proposal.md). Предварительный выпуск для Tab5.
 
-> Tab5 ESP32 fork: see [TAB5.md](TAB5.md) for TCP, explicit USB CDC, OTA and native ROM recovery. Outputs: `krenomer-esp32.exe`. [Download Tab5 PC 1.8.5](https://github.com/Sasavn/heel-test-inclinometer/releases/tag/pc-tab5-v1.8.5).
+> Tab5 ESP32 fork: see [TAB5.md](TAB5.md) for TCP, explicit USB CDC, OTA and native ROM recovery. Outputs: `krenomer-esp32.exe`. [Download Tab5 PC 1.8.6](https://github.com/Sasavn/heel-test-inclinometer/releases/tag/pc-tab5-v1.8.6).
 
 Native USB runtime and ROM recovery need no Python or esptool runtime, but
 both require a working USB Serial/JTAG **COM driver**. Espressif documents manual

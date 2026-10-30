@@ -7,12 +7,13 @@
 Отдельный форк не требуется. Прошивки STM32 и ESP32-P4 взаимозаменять нельзя;
 для Tab5 выбирается пакет под ревизию кремния P4, а не по внешнему виду планшета.
 
-**Программа ПК:** [Tab5 PC 1.8.5 — Wi-Fi через AP или общий роутер](https://github.com/Sasavn/heel-test-inclinometer/releases/tag/pc-tab5-v1.8.5).
+**Программа ПК:** [Tab5 PC 1.8.6 — Wi-Fi через AP или общий роутер](https://github.com/Sasavn/heel-test-inclinometer/releases/tag/pc-tab5-v1.8.6).
+**Текущая прошивка:** [Tab5 1.7.19 — обычные и controls-профили](https://github.com/Sasavn/heel-test-inclinometer/releases/tag/tab5-v1.7.19).
 **Предыдущий комплект прошивки:** [Tab5 1.7.0-esp32 + PC 1.8.4](https://github.com/Sasavn/heel-test-inclinometer/releases/tag/tab5-v1.7.0).
 В нём два ZIP под P4 rev1/rev3 и программы для Windows x64/x86.
 Версия **не проверена на плате**; стабильный `releases/latest` остаётся отдельным.
 
-Текущий локальный кандидат **1.7.19-esp32** и PC **1.8.6**: [результаты программных проверок](docs/record-controls-1.7.19/RESULTS.md).
+Предварительный выпуск **1.7.19-esp32** и PC **1.8.6**: [результаты программных проверок](docs/record-controls-1.7.19/RESULTS.md).
 Синхронизация START/STOP, таймер подсветки и опциональный энкодер/тумблер: [схема подключения](../docs/tab5-controls-wiring-1.7.19.md).
 Четыре пакета: rev1/rev3, с GPIO controls и без них. На устройстве эта версия не проверялась.
 

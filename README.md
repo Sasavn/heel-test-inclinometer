@@ -12,8 +12,8 @@
 `krenomer-esp32.bin` — для Tab5 с подходящей ревизией ESP32-P4.
 Tab5-пакеты публикуются отдельно как предварительные релизы; ссылка
 `releases/latest` ниже относится к стабильной STM32/PC-версии.
-[Скачать ПК Tab5 1.8.5 с явным Wi-Fi](https://github.com/Sasavn/heel-test-inclinometer/releases/tag/pc-tab5-v1.8.5)
-— предварительный выпуск ПК, без изменения прошивки прибора.
+[Скачать ПК Tab5 1.8.6 с явным Wi-Fi](https://github.com/Sasavn/heel-test-inclinometer/releases/tag/pc-tab5-v1.8.6)
+— предварительный выпуск ПК; для синхронизации записи нужна [прошивка Tab5 1.7.19](https://github.com/Sasavn/heel-test-inclinometer/releases/tag/tab5-v1.7.19).
 Пакеты прошивки и их ограничения описаны в [tab5/README.md](tab5/README.md).
 
 Ветка **`tab5-esp32`** добавляет локальный тестовый порт для **M5Stack Tab5**:
@@ -36,9 +36,9 @@ Tab5-пакеты публикуются отдельно как предвар�
 
 Для этой ветки используйте **krenomer-tab5**, а не стабильную STM32-программу из releases/latest:
 
-- [ПК Tab5 1.8.5 для Windows x64](https://github.com/Sasavn/heel-test-inclinometer/releases/download/pc-tab5-v1.8.5/krenomer-tab5-1.8.5-x64.exe).
-- [ПК Tab5 1.8.5 для Windows x86](https://github.com/Sasavn/heel-test-inclinometer/releases/download/pc-tab5-v1.8.5/krenomer-tab5-1.8.5-x86.exe).
-- [Обе разрядности, инструкция и снимки диалога](https://github.com/Sasavn/heel-test-inclinometer/releases/download/pc-tab5-v1.8.5/Krenomer-Tab5-PC-1.8.5.zip).
+- [ПК Tab5 1.8.6 для Windows x64](https://github.com/Sasavn/heel-test-inclinometer/releases/download/pc-tab5-v1.8.6/krenomer-tab5-1.8.6-x64.exe).
+- [ПК Tab5 1.8.6 для Windows x86](https://github.com/Sasavn/heel-test-inclinometer/releases/download/pc-tab5-v1.8.6/krenomer-tab5-1.8.6-x86.exe).
+- [Обе разрядности и русская инструкция](https://github.com/Sasavn/heel-test-inclinometer/releases/download/pc-tab5-v1.8.6/Krenomer-Tab5-PC-1.8.6.zip).
 
 Подключитесь к Wi-Fi прибора и нажмите **«Wi-Fi»** в верхней панели программы.
 Кнопка доступна без COM-портов и прямо из демо. Для штатной точки доступа:
