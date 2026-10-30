@@ -17,29 +17,44 @@ def main():
     p.add_argument('--rev1', type=Path, required=True)
     p.add_argument('--rev3', type=Path, required=True)
     p.add_argument('--out', type=Path, required=True)
+    p.add_argument('--version', help='Require this app version; otherwise infer from first profile')
+    p.add_argument('--controls', action='store_true', help='Require enabled GPIO controls and label assets separately')
     a = p.parse_args()
     a.out.mkdir(parents=True, exist_ok=True)
     reports = []
+    version = a.version
     for profile, build, lo, hi in [('p4-rev1', a.rev1, 100, 199),
                                   ('p4-rev3', a.rev3, 300, 399)]:
         subprocess.run([sys.executable, str(Path(__file__).with_name('package.py')),
                         str(build)], check=True)
         folder = build / 'package'
         meta = json.loads((folder / 'krenomer-esp32.json').read_text(encoding='utf-8'))
+        sdk = json.loads((build / 'config/sdkconfig.json').read_text(encoding='utf-8'))
+        enabled = bool(sdk.get('TAB5_INPUT_GPIO_ENABLE', False))
+        if enabled != a.controls:
+            raise ValueError('GPIO controls profile does not match the requested package variant')
+        meta['controls_enabled'] = enabled
+        meta['controls_wiring'] = {'A': 3, 'B': 4, 'PRESS': 2, 'REC': 48} if enabled else None
         if (meta['revision_min'], meta['revision_max']) != (lo, hi):
             raise ValueError('Silicon revision mismatch: ' + profile)
-        if meta['version'] != '1.7.0-esp32':
-            raise ValueError('Expected 1.7.0-esp32 candidate')
+        if version is None:
+            version = meta['version']
+        if meta['version'] != version:
+            raise ValueError('Application versions differ from the requested release')
         files = {name: (folder / name).read_bytes() for name in meta['parts_sha256']}
         for name, expected in meta['parts_sha256'].items():
             if digest(files[name]) != expected:
                 raise ValueError('Part hash mismatch: ' + name)
         if digest(files['krenomer-esp32.bin']) != meta['sha256']:
             raise ValueError('OTA hash mismatch')
-        files['krenomer-esp32.json'] = (folder / 'krenomer-esp32.json').read_bytes()
+        files['krenomer-esp32.json'] = (json.dumps(meta, indent=2)+'\n').encode('utf-8')
+        wiring = Path(__file__).resolve().parents[2] / 'docs/tab5-controls-wiring-1.7.19.md'
+        if enabled:
+            files['CONTROLS-WIRING.md'] = wiring.read_bytes()
         files['README.txt'] = (
-            'Krenomer Tab5 1.7.0-esp32; hardware-unverified prerelease.\n'
+            f'Krenomer Tab5 {version}; hardware-unverified prerelease.\n'
             f'ESP32-P4 silicon revisions {lo}-{hi} only ({profile}).\n'
+            f'External GPIO controls enabled: {enabled}.\n'
             'Not for STM32. Do not choose revision from the tablet appearance.\n'
             'Only krenomer-esp32.bin is an OTA application; select matching JSON.\n'
             'Factory parts are separate: bootloader 0x2000, partition table 0x8000,\n'
@@ -55,7 +70,7 @@ def main():
         files['SHA256SUMS.txt'] = ''.join(
             digest(data) + '  ' + name + '\n' for name, data in sorted(files.items())
         ).encode('ascii')
-        target = a.out / ('Krenomer-Tab5-1.7.0-esp32-' + profile + '.zip')
+        target = a.out / ('Krenomer-Tab5-' + version + '-' + profile + ('-controls' if enabled else '') + '.zip')
         with zipfile.ZipFile(target, 'w', zipfile.ZIP_DEFLATED, compresslevel=9) as z:
             for name, data in sorted(files.items()):
                 info = zipfile.ZipInfo(name, date_time=(2026, 10, 26, 0, 0, 0))
@@ -72,7 +87,7 @@ def main():
                             archive_sha256=digest(target.read_bytes()), profile=profile,
                             hardware_tested=False, flashed=False, **meta))
     (a.out / 'delivery.json').write_text(
-        json.dumps(dict(version='1.7.0-esp32', prerelease=True, packages=reports),
+        json.dumps(dict(version=version, prerelease=True, packages=reports),
                    indent=2) + '\n', encoding='utf-8')
     (a.out / 'SHA256SUMS.txt').write_text(''.join(
         item['archive_sha256'] + '  ' + item['asset'] + '\n' for item in reports), encoding='ascii')

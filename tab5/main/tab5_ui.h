@@ -23,6 +23,10 @@ typedef struct {
     uint8_t brightness_pct; /* 0 preserves current backend brightness; otherwise 10..100. */
     int16_t timezone_minutes; /* UTC offset, -720..840 in 15 minute steps. */
     bool timezone_set; /* false preserves backend timezone. */
+    uint32_t backlight_timeout_s; /* SETTINGS: 0/300/1800/3600; persist only when set. */
+    bool backlight_timeout_set;
+    bool record_sync; /* Global device option, mirrored to PC; no implicit STOP. */
+    bool record_sync_set; /* false preserves backend, including old fixtures. */
 } tab5_ui_action_t;
 /* Runs in the UI task. Borrowed action: copy to main's queue before returning.
  * main owns validation, persistence, recording and network services. */
@@ -106,6 +110,9 @@ typedef struct {
     bool time_sync_busy;
     char time_sync_status[128]; /* backend result; UI never infers NTP success. */
     bool timezone_known; /* false: window defaults to UTC+03:00. */
+    uint32_t backlight_timeout_s; /* Persisted value; 0 = never (default). */
+    bool backlight_timeout_known;
+    bool record_sync_known, record_sync;
 } tab5_ui_state_t;
 /* All calls require the UI task lock. Display already started
  * and rotated to 1280x720 by main. No task or display created here; a short-lived stepper repeat timer is UI-owned.
@@ -128,6 +135,8 @@ void tab5_ui_clear_scroll_cache(void);
  * TOUCH hides the ring; the native action callbacks transfer element focus. */
 typedef enum { TAB5_UI_INPUT_ROT, TAB5_UI_INPUT_PRESS, TAB5_UI_INPUT_LONG,
     TAB5_UI_INPUT_IDLE, TAB5_UI_INPUT_TOUCH } tab5_ui_input_event_t;
+/* Port wake notification: show retained encoder focus, refresh timeout, no action. */
+void tab5_ui_encoder_wake(uint32_t time_ms);
 void tab5_ui_input(tab5_ui_input_event_t event, int32_t delta, uint32_t time_ms);
 /* Route touch samples here for tap focus transfer and list swipes. */
 void tab5_ui_touch(int32_t x, int32_t y, bool pressed, uint32_t time_ms);

@@ -1,0 +1,2 @@
+# Explicit opt-in: GPIO3/4/2/48, see docs/tab5-controls-wiring-1.7.19.md.
+CONFIG_TAB5_INPUT_GPIO_ENABLE=y

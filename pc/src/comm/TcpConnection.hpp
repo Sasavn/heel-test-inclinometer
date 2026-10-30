@@ -13,6 +13,9 @@ class TcpConnection final : public IConnection
   public:
     TcpConnection(std::string host, unsigned port, std::string token)
         : host_(std::move(host)), port_(port), token_(std::move(token)), split_([this](std::string l) {
+              // An authentication rejection is terminal, including the rest of this packet.
+              if (blocked_)
+                  return;
               if (!ready_)
               {
                   if (l == "OK")

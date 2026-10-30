@@ -5,6 +5,9 @@
 #include "tab5_panel.h"
 #include "tab5_time.h"
 #include "tab5_time_sync.h"
+#include "tab5_backlight.h"
+#include "tab5_input_gpio.h"
+#include "sdkconfig.h"
 #include "tab5_resources.h"
 #include "tab5_draw_profile.h"
 #include "tab5_native_port.h"
@@ -43,6 +46,17 @@ static float route_battery=NAN;
 static tab5_network_config_t network;
 static bool recording, samples_on, light_theme;
 static uint8_t brightness_pct=60;
+static uint32_t backlight_timeout_s;
+static bool record_sync;
+static bool physical_inputs_ready;
+#if CONFIG_TAB5_INPUT_GPIO_ENABLE
+static bool physical_detent(int delta,uint32_t ms){return tab5_native_port_post_input(TAB5_UI_INPUT_ROT,delta,ms);}
+static bool physical_press(bool down,uint32_t ms){return tab5_native_port_post_button(down,ms);}
+static bool physical_record(bool on,uint32_t ms){
+    (void)ms;tab5_ui_action_t a={.kind=on?TAB5_UI_START:TAB5_UI_STOP};
+    return actions&&xQueueSend(actions,&a,0)==pdTRUE;
+}
+#endif
 static uint32_t rejected_actions; /* atomic bitset, UI producer/main consumer */
 static int sync_offset_minutes=180;
 static bool automatic_time_attempted;
@@ -247,6 +261,8 @@ static bool persist(void) {
     if(e==ESP_OK)e=nvs_set_blob(n,"network",&network,sizeof(network));
     if(e==ESP_OK)e=nvs_set_u8(n,"theme",light_theme);
     if(e==ESP_OK)e=nvs_set_u8(n,"brightness",brightness_pct);
+    if(e==ESP_OK)e=nvs_set_u32(n,"bl_timeout",backlight_timeout_s);
+    if(e==ESP_OK)e=nvs_set_u8(n,"rec_sync",record_sync);
     if(e==ESP_OK)e=nvs_set_u32(n,"session",measurement_number);
     if(e==ESP_OK)e=nvs_commit(n);
     nvs_close(n);if(e!=ESP_OK)snprintf(notice,sizeof(notice),"Настройки не сохранены: %s",esp_err_to_name(e));
@@ -293,6 +309,8 @@ static void load_config(tab5_measure_config_t *cfg) {
        memchr(net.auth_token,0,sizeof(net.auth_token)) && strlen(net.ap_password)>=8 && strlen(net.auth_token)>=8)network=net;
     uint8_t theme=0;nvs_get_u8(n,"theme",&theme);light_theme=theme==1;
     uint8_t brightness=60;if(nvs_get_u8(n,"brightness",&brightness)==ESP_OK&&brightness>=10&&brightness<=100)brightness_pct=brightness;
+    uint32_t timeout=0;if(nvs_get_u32(n,"bl_timeout",&timeout)==ESP_OK&&(timeout==0||timeout==300||timeout==1800||timeout==3600))backlight_timeout_s=timeout;
+    uint8_t sync=0;if(nvs_get_u8(n,"rec_sync",&sync)==ESP_OK)record_sync=sync==1;
     int16_t offset=180;if(nvs_get_i16(n,"timezone",&offset)==ESP_OK&&tab5_time_offset_valid(offset))tab5_time_set_offset(offset);
     uint32_t session=0;nvs_get_u32(n,"session",&session);measurement_number=session;nvs_close(n);
 }
@@ -369,6 +387,9 @@ static void status(tab5_service_reply_fn reply,void *ctx) {
     }
     cJSON_AddNumberToObject(j,"rec_s",recording?(esp_timer_get_time()-record_start_us)/1000000:0);
     cJSON_AddNumberToObject(j,"file",measurement_number);cJSON_AddNumberToObject(j,"rec_mask",(sd.recording||usb.recording)?3:0);cJSON_AddBoolToObject(j,"rec_sw",recording);
+    cJSON_AddBoolToObject(j,"rec_sync_cap",true);cJSON_AddBoolToObject(j,"rec_sync",record_sync);
+    cJSON_AddBoolToObject(j,"physical_inputs",physical_inputs_ready);
+    cJSON_AddNumberToObject(j,"physical_input_retries",tab5_input_gpio_retries());
     add_num(j,"bat_v",battery);cJSON_AddBoolToObject(j,"bat_present",isfinite(battery)&&battery>5);cJSON_AddNullToObject(j,"bat_pct");
     cJSON_AddStringToObject(j,"svc","idle");cJSON_AddStringToObject(j,"xfer","idle");
     cJSON *u=cJSON_AddObjectToObject(j,"usb_storage");cJSON_AddBoolToObject(u,"mounted",usb.mounted);cJSON_AddBoolToObject(u,"recording",usb.recording);
@@ -433,6 +454,11 @@ static void command(void *unused,const char *line,tab5_service_reply_fn reply,vo
             snprintf(notice,sizeof(notice),"%s",time_sync_status);
             reply(ctx,ok?"OK time":"ERR clock/RTC/timezone; system clock may be updated");
         }}
+    else if(strcmp(line,"set recsync 0")==0 || strcmp(line,"set recsync 1")==0){
+        bool old=record_sync;record_sync=line[12]=='1';
+        if(persist())reply(ctx,"OK recsync");
+        else{record_sync=old;reply(ctx,"ERR recsync persistence");}
+    }
     else if(strcmp(line,"set theme light")==0 || strcmp(line,"set theme dark")==0){light_theme=strstr(line,"light")!=NULL;persist();reply(ctx,"OK theme");}
     else if(strncmp(line,"set ",4)==0){char key[20],tail;double value;
         if(sscanf(line+4,"%19s %lf %c",key,&value,&tail)!=2 || !isfinite(value))reply(ctx,"ERR set syntax");
@@ -446,7 +472,7 @@ static void command(void *unused,const char *line,tab5_service_reply_fn reply,vo
             else if(strcmp(key,"rollhyst")==0 && value>=0 && value<=2)c.roll_hysteresis_deg=value;
             else ok=false;
             if(ok){tab5_measure_configure(&c);persist();reply(ctx,"OK set");}else reply(ctx,"ERR setting/range");}}
-    else if(strcmp(line,"help")==0){reply(ctx,"ver status stream N samples on|off zero [reset] rec on|off set time YYYY-MM-DD HH:MM:SS [tz=minutes] set freq|alpha|gap|rollwin|rollhz|rollcalm|rollhyst N");reply(ctx,"OTA: ota info/begin/chunk/end/abort; network configured on touchscreen");reply(ctx,"OK");}
+    else if(strcmp(line,"help")==0){reply(ctx,"ver status stream N samples on|off zero [reset] rec on|off set recsync 0|1 set time YYYY-MM-DD HH:MM:SS [tz=minutes] set freq|alpha|gap|rollwin|rollhz|rollcalm|rollhyst N");reply(ctx,"OTA: ota info/begin/chunk/end/abort; network configured on touchscreen");reply(ctx,"OK");}
     else reply(ctx,"ERR unsupported command on esp32");
     xSemaphoreGive(app_mutex);
 }
@@ -518,7 +544,15 @@ void app_main(void) {
     ui_perf.since=esp_timer_get_time();
     esp_err_t display_result=tab5_native_port_start(ui_callback,NULL);
     if(display_result!=ESP_OK){printf("Native display startup: %s\n",esp_err_to_name(display_result));boot_failed();return;}
-    if(bsp_display_brightness_set(brightness_pct)!=ESP_OK)snprintf(notice,sizeof(notice),"Не удалось восстановить яркость экрана");
+    tab5_native_port_backlight_configure(backlight_timeout_s,brightness_pct);
+#if CONFIG_TAB5_INPUT_GPIO_ENABLE
+    /* Explicit optional wiring profile; no GPIO configuration in default build. */
+    const tab5_gpio_config input_config={.a=3,.b=4,.press=2,.record=48,.debounce_ms=30,.poll_ms=5};
+    const tab5_gpio_callbacks input_callbacks={.detent=physical_detent,.button=physical_press,.record=physical_record};
+    esp_err_t input_result=tab5_input_gpio_start(&input_config,&input_callbacks);
+    physical_inputs_ready=input_result==ESP_OK;
+    if(input_result!=ESP_OK)snprintf(notice,sizeof(notice),"Внешние органы управления: %s",esp_err_to_name(input_result));
+#endif
     tab5_services_config_t services={.command=command,.network=network};
     esp_err_t services_result=tab5_services_init(&services);
     if(services_result!=ESP_OK){boot_failed();return;}
@@ -535,15 +569,24 @@ void app_main(void) {
                 ui_result_success=set_recording(a.kind==TAB5_UI_START)==ESP_OK;
                 ui_result_kind=a.kind;ui_result_serial++;}
             else if(a.kind==TAB5_UI_ZERO || a.kind==TAB5_UI_ZERO_RESET)tab5_measure_zero(a.kind==TAB5_UI_ZERO_RESET);
-            else if(a.kind==TAB5_UI_SETTINGS){if(a.config.gap_ms<15)a.config.gap_ms=15;tab5_measure_configure(&a.config);light_theme=a.light_theme;
-                bool backlight_ok=true;
-                if(a.brightness_pct){
-                    if(a.brightness_pct<10||a.brightness_pct>100)backlight_ok=false;
-                    else if(bsp_display_brightness_set(a.brightness_pct)!=ESP_OK)backlight_ok=false;
-                    else brightness_pct=a.brightness_pct;
-                }
-                ui_result_success=persist()&&backlight_ok;ui_result_kind=a.kind;ui_result_serial++;
-                if(!backlight_ok)snprintf(notice,sizeof(notice),"Яркость не применена: проверьте дисплей");
+            else if(a.kind==TAB5_UI_SETTINGS){
+                uint8_t old_brightness=brightness_pct;uint32_t old_timeout=backlight_timeout_s;
+                bool old_sync=record_sync,old_theme=light_theme;
+                tab5_measure_snapshot_t old;tab5_measure_snapshot(&old);
+                bool valid=(!a.brightness_pct||(a.brightness_pct>=10&&a.brightness_pct<=100))&&
+                    (!a.backlight_timeout_set||tab5_backlight_timeout_valid(a.backlight_timeout_s));
+                if(valid){
+                    if(a.config.gap_ms<15)a.config.gap_ms=15;
+                    tab5_measure_configure(&a.config);light_theme=a.light_theme;
+                    if(a.brightness_pct)brightness_pct=a.brightness_pct;
+                    if(a.backlight_timeout_set)backlight_timeout_s=a.backlight_timeout_s;
+                    if(a.record_sync_set)record_sync=a.record_sync;
+                    ui_result_success=persist();
+                    if(!ui_result_success){brightness_pct=old_brightness;backlight_timeout_s=old_timeout;
+                        record_sync=old_sync;light_theme=old_theme;tab5_measure_configure(&old.config);}
+                }else{ui_result_success=false;snprintf(notice,sizeof(notice),"Недопустимые настройки подсветки");}
+                tab5_native_port_backlight_configure(backlight_timeout_s,brightness_pct);
+                ui_result_kind=a.kind;ui_result_serial++;
                 if(ui_result_success)snprintf(notice,sizeof(notice),"Настройки сохранены");}
             else if(a.kind==TAB5_UI_TIME || a.kind==TAB5_UI_TIME_SYNC){
                 ui_result_success=false;ui_result_kind=a.kind;
@@ -601,7 +644,9 @@ void app_main(void) {
         consume_rejected_actions();
         uint64_t now=esp_timer_get_time();resources_refresh(now);if(now-last_battery>=1000000){battery=tab5_board_battery();last_battery=now;
             xSemaphoreTake(route_mutex,portMAX_DELAY);route_battery=battery;xSemaphoreGive(route_mutex);}
-        tab5_ui_state_t ui={.recording=recording,.light_theme=light_theme,.brightness_pct=brightness_pct};tab5_measure_snapshot(&ui.measurement);
+        tab5_ui_state_t ui={.recording=recording,.light_theme=light_theme,.brightness_pct=brightness_pct,
+            .backlight_timeout_known=true,.backlight_timeout_s=backlight_timeout_s,
+            .record_sync_known=true,.record_sync=record_sync};tab5_measure_snapshot(&ui.measurement);
         ui.timezone_known=true;ui.timezone_minutes=(int16_t)tab5_time_offset();ui.time_sync_busy=tab5_time_sync_busy();
         snprintf(ui.time_sync_status,sizeof(ui.time_sync_status),"%s",time_sync_status);
         ui.resources_known=resources.known;ui.cpu_known=resources.cpu_known;ui.cpu_load_pct=resources.cpu;

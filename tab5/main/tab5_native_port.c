@@ -1,5 +1,5 @@
 #include "tab5_native_port.h"
-#if defined(ESP_PLATFORM) || defined(TAB5_NATIVE_INPUT_ONLY)
+#if 1
 #ifdef ESP_PLATFORM
 #include "freertos/FreeRTOS.h"
 #else
@@ -10,7 +10,7 @@ typedef struct {
     int32_t delta;
     uint32_t ms;
     int x,y;
-    bool pressed;
+    bool pressed,raw_button;
 } native_input_t;
 static struct {
     native_input_t events[TAB5_NATIVE_INPUT_CAPACITY];
@@ -29,10 +29,35 @@ static atomic_flag input_mux=ATOMIC_FLAG_INIT;
 #define INPUT_LOCK() do {while(atomic_flag_test_and_set_explicit(&input_mux,memory_order_acquire)) {}} while(0)
 #define INPUT_UNLOCK() atomic_flag_clear_explicit(&input_mux,memory_order_release)
 #endif
+static tab5_backlight_t backlight;
+static struct {uint32_t timeout;uint8_t manual;bool pending;} light_request;
+static uint8_t light_manual=60;
+#ifndef TAB5_NATIVE_INPUT_ONLY
+static int light_applied=60;
+#endif
+static uint64_t light_now;
+static uint32_t light_low;
+static bool light_clock_ready,button_down,button_swallow,button_long;
+static uint32_t button_at;
+bool tab5_native_port_backlight_configure(uint32_t timeout_s,uint8_t manual_pct){
+    if(!tab5_backlight_timeout_valid(timeout_s)||manual_pct<10||manual_pct>100)return false;
+    INPUT_LOCK();light_request.timeout=timeout_s;light_request.manual=manual_pct;light_request.pending=true;INPUT_UNLOCK();return true;
+}
+static uint64_t light_extend(uint32_t ms){
+    if(!light_clock_ready){light_low=ms;light_now=ms;light_clock_ready=true;}
+    else {uint32_t delta=ms-light_low;if(delta<UINT32_C(0x80000000)){light_now+=delta;light_low=ms;}}
+    return light_now;
+}
+static void light_begin(uint32_t ms){
+    uint64_t now=light_extend(ms);uint32_t timeout=0;bool pending;
+    INPUT_LOCK();pending=light_request.pending;if(pending){timeout=light_request.timeout;light_manual=light_request.manual;light_request.pending=false;}INPUT_UNLOCK();
+    if(pending)tab5_backlight_configure(&backlight,timeout,now);
+}
 void tab5_native_port_input_reset(void) {
     INPUT_LOCK();input_queue.head=input_queue.count=0;
     input_queue.stats=(tab5_native_input_stats_t){0};input_queue.open=true;
     INPUT_UNLOCK();input_x=input_y=0;input_pressed=false;
+    tab5_backlight_init(&backlight,0);light_clock_ready=false;button_down=button_swallow=button_long=false;light_now=0;light_low=0;
 }
 void tab5_native_port_input_close(void) {
     INPUT_LOCK();input_queue.open=false;input_queue.head=input_queue.count=0;INPUT_UNLOCK();
@@ -55,6 +80,9 @@ bool tab5_native_port_post_input(tab5_ui_input_event_t kind,int32_t delta,uint32
     }
     return input_post((native_input_t){.kind=kind,.delta=delta,.ms=ms});
 }
+bool tab5_native_port_post_button(bool down,uint32_t ms){
+    return input_post((native_input_t){.kind=TAB5_UI_INPUT_PRESS,.ms=ms,.raw_button=true,.pressed=down});
+}
 bool tab5_native_port_post_touch(int x,int y,bool pressed,uint32_t ms) {
     return input_post((native_input_t){.kind=TAB5_UI_INPUT_TOUCH,.ms=ms,.x=x,.y=y,.pressed=pressed});
 }
@@ -64,6 +92,7 @@ void tab5_native_port_input_stats(tab5_native_input_stats_t *out) {
 }
 static bool input_dispatch(uint32_t now_ms,bool repeat_touch) {
     bool changed=false,touched=false;
+    light_begin(now_ms);
     for(unsigned i=0;i<TAB5_NATIVE_INPUT_CAPACITY;i++) {
         native_input_t e;
         INPUT_LOCK();
@@ -72,12 +101,32 @@ static bool input_dispatch(uint32_t now_ms,bool repeat_touch) {
         INPUT_UNLOCK();
         if(!available)break;
         changed=true;
+        if(e.raw_button){
+            uint64_t at=light_extend(e.ms);
+            if(e.pressed&&!button_down){button_down=true;button_long=false;button_at=e.ms;button_swallow=tab5_backlight_step(&backlight,at,TAB5_BL_PRESS);if(button_swallow)tab5_ui_encoder_wake(e.ms);}
+            else if(!e.pressed&&button_down){
+                if(!button_swallow&&!button_long)tab5_ui_input((uint32_t)(e.ms-button_at)>=600?TAB5_UI_INPUT_LONG:TAB5_UI_INPUT_PRESS,0,e.ms);
+                button_down=false;button_swallow=false;
+            }
+            continue;
+        }
         if(e.kind==TAB5_UI_INPUT_TOUCH){
             input_x=e.x;input_y=e.y;input_pressed=e.pressed;touched=true;
-            tab5_ui_touch(input_x,input_y,input_pressed,e.ms);
-        }else tab5_ui_input(e.kind,e.delta,e.ms);
+            if(!tab5_backlight_step(&backlight,light_extend(e.ms),e.pressed?TAB5_BL_TOUCH_DOWN:TAB5_BL_TOUCH_UP))tab5_ui_touch(input_x,input_y,input_pressed,e.ms);
+        }else if(e.kind==TAB5_UI_INPUT_ROT){
+            int32_t delta=e.delta;
+            if(tab5_backlight_step(&backlight,light_extend(e.ms),TAB5_BL_ROTATE)){tab5_ui_encoder_wake(e.ms);delta+=delta>0?-1:1;}
+            if(delta)tab5_ui_input(e.kind,delta,e.ms);
+        }else if(e.kind==TAB5_UI_INPUT_IDLE||!tab5_backlight_step(&backlight,light_extend(e.ms),TAB5_BL_PRESS))tab5_ui_input(e.kind,e.delta,e.ms);
+        else tab5_ui_encoder_wake(e.ms);
     }
-    if(!touched&&repeat_touch)tab5_ui_touch(input_x,input_y,input_pressed,now_ms);
+    if(!touched&&repeat_touch&&!backlight.swallow)tab5_ui_touch(input_x,input_y,input_pressed,now_ms);
+    uint64_t at=light_extend(now_ms);
+    if(button_down){
+        tab5_backlight_step(&backlight,at,TAB5_BL_PRESS);
+        if(!button_swallow&&!button_long&&(uint32_t)(now_ms-button_at)>=600){tab5_ui_input(TAB5_UI_INPUT_LONG,0,now_ms);button_long=true;changed=true;}
+    }
+    tab5_backlight_step(&backlight,at,TAB5_BL_IDLE);
     tab5_ui_input(TAB5_UI_INPUT_IDLE,0,now_ms);
     return changed;
 }
@@ -974,13 +1023,16 @@ static void producer_step(void){
         INPUT_LOCK();for(unsigned i=0;i<input_queue.count;i++){native_input_t *e=&input_queue.events[(input_queue.head+i)%TAB5_NATIVE_INPUT_CAPACITY];if(e->kind!=TAB5_UI_INPUT_TOUCH&&e->kind!=TAB5_UI_INPUT_IDLE)encoder=true;}INPUT_UNLOCK();
 #endif
         bool suppress=benchmark_control(producer.pressed,encoder);
-        uint32_t ms=(uint32_t)(clock_us()/1000);uint64_t tick_start=clock_us();nui_native_tick(ms-producer.last_ms);producer.last_ms=ms;uint64_t tick_end=clock_us();
+        uint32_t ms=(uint32_t)(clock_us()/1000);light_begin(ms);uint64_t tick_start=clock_us();nui_native_tick(ms-producer.last_ms);producer.last_ms=ms;uint64_t tick_end=clock_us();
 #ifdef ESP_PLATFORM
         if(suppress){INPUT_LOCK();input_queue.stats.consumed+=input_queue.count;input_queue.head=input_queue.count=0;INPUT_UNLOCK();}
         else {if(fresh_touch&&(producer.pressed||producer.was_pressed)&&tab5_native_port_post_touch(producer.x,producer.y,producer.pressed,ms))producer.was_pressed=producer.pressed;
             if(input_dispatch(ms,false)){if(!producer.input_requested)producer.input_since=clock_us();producer.input_requested=true;}}
 #else
-        if(!suppress&&fresh_touch){nui_native_touch(producer.x,producer.y,producer.pressed);producer.was_pressed=producer.pressed;}
+        if(!suppress&&fresh_touch){
+            if(!tab5_backlight_step(&backlight,light_extend(ms),producer.pressed?TAB5_BL_TOUCH_DOWN:TAB5_BL_TOUCH_UP))nui_native_touch(producer.x,producer.y,producer.pressed);
+            producer.was_pressed=producer.pressed;
+        }
 #endif
         if(suppress){producer.was_pressed=false;producer.input_requested=false;}
         uint64_t start=clock_us();portENTER_CRITICAL(&stats_lock);stats.cpu_tick_us+=tick_end-tick_start;
@@ -993,6 +1045,10 @@ static void producer_step(void){
             else {portENTER_CRITICAL(&stats_lock);stats.producer_backpressure++;portEXIT_CRITICAL(&stats_lock);}
         }
         xSemaphoreGive(ui_mutex);
+        tab5_backlight_step(&backlight,light_extend(ms),TAB5_BL_IDLE);
+        /* UI task owns policy/output; BSP writes never hold the UI mutex. */
+        int desired=backlight.asleep?0:light_manual;
+        if(desired!=light_applied&&bsp_display_brightness_set(desired)==ESP_OK)light_applied=desired;
 }
 static void native_task(void *arg){
     (void)arg;__atomic_store_n(&native_task_handle,xTaskGetCurrentTaskHandle(),__ATOMIC_RELEASE);
@@ -1065,6 +1121,7 @@ esp_err_t tab5_native_port_start(tab5_ui_action_cb_t callback,void *user) {
     tab5_native_port_input_reset();
 #endif
     if((e=bsp_display_brightness_set(60))!=ESP_OK)goto fail;
+    light_applied=60;
     TaskHandle_t ui_created=NULL,worker_created=NULL;
     if(xTaskCreatePinnedToCore(native_task,"native_ui",8192,NULL,4,&ui_created,1)!=pdPASS){e=ESP_ERR_NO_MEM;goto fail;}
     if(xTaskCreatePinnedToCore(transfer_task,"native_gpu",8192,NULL,5,&worker_created,1)!=pdPASS){

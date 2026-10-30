@@ -111,7 +111,7 @@ static void unit(void){
 static void action(const tab5_ui_action_t *a,void *user){(void)a;(void)user;callbacks++;}
 static void touch(int x,int y,bool down){ms+=16;assert(tab5_native_port_post_touch(x,y,down,ms));tab5_native_port_input_dispatch(ms);}
 static nui_obj_t *find_content(nui_obj_t *o){
-    if(nui_obj_get_width(o)==1094&&nui_obj_get_height(o)==1490)return o;
+    if(nui_obj_get_width(o)==1094&&nui_obj_get_height(o)==1714)return o;
     for(unsigned i=0;i<nui_obj_get_child_count(o);i++){nui_obj_t *c=find_content(nui_obj_get_child(o,i));if(c)return c;}
     return NULL;
 }
@@ -129,7 +129,7 @@ static void scroll(unsigned cycles){
             int delta=i%52<26?37:-37;touch(600,450,true);
             double a=stamp();touch(600,450-delta,true);double b=stamp();
             size_t dirty=nui_native_render();double c=stamp();assert(dirty);
-            nui_area_t ca;nui_obj_get_coords(content,&ca);int offset=initial.y1-ca.y1;assert(offset>=0&&offset<=950);
+            nui_area_t ca;nui_obj_get_coords(content,&ca);int offset=initial.y1-ca.y1;assert(offset>=0&&offset<=nui_obj_get_height(content)-540);
             if(csv)fprintf(csv,"%u,%u,%d,%.6f,%.6f\n",theme,i,offset,b-a,c-b);
             if(raw){
                 assert(fwrite(&ca,sizeof(ca),1,raw)==1);assert(fwrite(fb,sizeof(fb),1,raw)==1);

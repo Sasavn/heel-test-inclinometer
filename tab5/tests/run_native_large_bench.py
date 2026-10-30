@@ -78,7 +78,7 @@ def main():
     cc = shutil.which("gcc")
     if not cc:
         parser.error("gcc is required")
-    sources = [ROOT / "tab5/tests/native_large_bench.c", ROOT / "tab5/main/tab5_native_port.c",
+    sources = [ROOT / "tab5/tests/native_large_bench.c", ROOT / "tab5/main/tab5_native_port.c", ROOT / "tab5/main/tab5_backlight.c",
                ROOT / "tab5/main/native/native_ui.c", ROOT / "tab5/main/native/font_native_fallback14.c"]
     sources += [ROOT / "tab5/main" / n for n in ("tab5_ui.c", "tab5_measure.c", "tab5_ui_graph.c", "tab5_time.c", "tab5_plot.c", "tab5_level.c")]
     fonts = sorted((ROOT / "tab5/main").glob("font_tab5_*.c"))

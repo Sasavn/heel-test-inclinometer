@@ -314,6 +314,8 @@ struct DeviceStatus
     std::optional<int> batPct;
     // Прочее
     bool recSw = false;
+    bool recSyncCap = false;
+    std::optional<bool> recSync, actualRec;
     std::string svc;  // IDLE / BUSY / OK / FAIL
     std::string xfer; // idle / list / get
 
@@ -446,6 +448,9 @@ inline bool ParseStatus(std::string_view line, DeviceStatus& out, std::string* e
         s.batPct = static_cast<int>(j["bat_pct"].n);
     s.batSat = j["bat_sat"].Bool();
     s.recSw = j["rec_sw"].Bool();
+    if (j["rec_sw"].IsBool()) s.actualRec = j["rec_sw"].Bool();
+    s.recSyncCap = j["rec_sync_cap"].IsBool() && j["rec_sync_cap"].Bool();
+    if (j["rec_sync"].IsBool()) s.recSync = j["rec_sync"].Bool();
     s.svc = j["svc"].Str();
     s.xfer = j["xfer"].Str();
     out = std::move(s);

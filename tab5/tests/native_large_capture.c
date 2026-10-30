@@ -41,9 +41,10 @@ static void input(tab5_ui_input_event_t kind,int32_t delta,uint32_t dt){
     fprintf(events,"{\"event\":%u,\"delta\":%"PRId32",\"time_ms\":%"PRIu32"}\n",(unsigned)kind,delta,now_ms);
     tab5_native_port_input_dispatch(now_ms);nui_obj_update_layout(nui_screen_active());nui_native_render();
 }
-static void press(void){input(TAB5_UI_INPUT_PRESS,0,120);}
+static void button(bool down){check(tab5_native_port_post_button(down,now_ms),"raw button accepted");tab5_native_port_input_dispatch(now_ms);}
+static void press(void){button(true);pump(120);button(false);pump(0);}
 static void rot(int n){if(n)input(TAB5_UI_INPUT_ROT,n,120);}
-static void back(void){input(TAB5_UI_INPUT_LONG,0,600);}
+static void back(void){button(true);pump(600);button(false);pump(0);}
 static void tap(int x,int y){
     now_ms+=20;nui_native_tick(20);
     check(tab5_native_port_post_touch(x,y,true,now_ms),"touch down accepted");
@@ -294,10 +295,10 @@ static void protocol(void){
         else if(!strcmp(line,"LONG")||!strcmp(line,"ESC"))back();
         else if(!strcmp(line,"UP")||!strcmp(line,"LEFT"))rot(-1);
         else if(!strcmp(line,"DOWN")||!strcmp(line,"RIGHT"))rot(1);
-        else if(!strcmp(line,"HOLD600"))input(TAB5_UI_INPUT_LONG,0,600);
+        else if(!strcmp(line,"HOLD600"))back();
         else if(sscanf(line,"KEYDOWN %255s",word)==1){
             if(!strcmp(word,"ENTER")||!strcmp(word,"Enter")){
-                if(!enter_down){enter_down=true;long_sent=false;enter_at=now_ms;}
+                if(!enter_down){enter_down=true;long_sent=false;enter_at=now_ms;button(true);}
             }else if(!strcmp(word,"UP")||!strcmp(word,"LEFT")||!strcmp(word,"ArrowUp")||!strcmp(word,"ArrowLeft"))rot(-1);
             else if(!strcmp(word,"DOWN")||!strcmp(word,"RIGHT")||!strcmp(word,"ArrowDown")||!strcmp(word,"ArrowRight"))rot(1);
             else if(!strcmp(word,"ESC")||!strcmp(word,"Escape"))back();
@@ -305,15 +306,15 @@ static void protocol(void){
         }
         else if(sscanf(line,"KEYUP %255s",word)==1){
             if((!strcmp(word,"ENTER")||!strcmp(word,"Enter"))&&enter_down){
-                if(!long_sent)input(TAB5_UI_INPUT_PRESS,0,0);
+                button(false);
                 enter_down=false;long_sent=false;
             }
         }
-        else if(sscanf(line,"HOLD %u",&ms)==1){if(ms>=600){input(TAB5_UI_INPUT_LONG,0,600);pump(ms-600);}else input(TAB5_UI_INPUT_PRESS,0,ms);}
+        else if(sscanf(line,"HOLD %u",&ms)==1){button(true);pump(ms);button(false);}
         else if(sscanf(line,"WAIT %u",&ms)==1){
             uint32_t elapsed=now_ms-enter_at;
             if(enter_down&&!long_sent&&elapsed<600&&ms>=600-elapsed){
-                uint32_t until_long=600-elapsed;pump(until_long);input(TAB5_UI_INPUT_LONG,0,0);long_sent=true;pump(ms-until_long);
+                uint32_t until_long=600-elapsed;pump(until_long);long_sent=true;pump(ms-until_long);
             }else pump(ms);
         }
         else if(sscanf(line,"TAP %d %d",&x,&y)==2)tap(x,y);

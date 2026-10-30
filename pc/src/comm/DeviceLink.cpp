@@ -77,6 +77,19 @@ bool DeviceLink::IsDemo() const
 void DeviceLink::Step(std::int64_t now)
 {
     now_ = now;
+    // The existing stale-data horizon also marks history discontinuities. No filled samples.
+    {
+        std::lock_guard lock(m_);
+        if (haveSample_ && !historyGap_ && now - sampleAt_ >= 2000)
+        {
+            History::Sample gap;
+            gap.t = static_cast<double>(now) / 1000.0;
+            for (int i = 0; i < History::kSensors; ++i)
+                gap.x[i] = gap.y[i] = std::numeric_limits<float>::quiet_NaN();
+            history_.Push(gap);
+            historyGap_ = true;
+        }
+    }
     conn_->Tick(now);
     const bool open = conn_->IsOpen();
     const std::uint64_t oc = conn_->OpenCount();
@@ -240,6 +253,11 @@ void DeviceLink::Step(std::int64_t now)
                 queue_.pop_front();
                 inFlight_ = head;
                 head->deadline = now + head->timeoutMs;
+                if (head->cmd == "samples on" || head->cmd == "samples off")
+                {
+                    rawSequenceActive_ = false;
+                    std::fill(std::begin(haveRawN_), std::end(haveRawN_), false);
+                }
                 toWrite += head->cmd + "\r\n";
                 cmdsTx_++;
                 LogLocked('>', head->cmd, head->origin, now);
@@ -266,6 +284,8 @@ void DeviceLink::OnOpened(std::int64_t now)
     probeAt_ = now + 200;
     probeTries_ = 0;
     probe_.reset();
+    rawSequenceActive_ = false;
+    std::fill(std::begin(haveRawN_), std::end(haveRawN_), false);
     header_ = {};
     haveSample_ = false;
     sampleTimes_.clear();
@@ -284,6 +304,15 @@ void DeviceLink::OnClosed(std::int64_t now, const std::string& why)
 {
     if (state_.load() == LinkState::Connected)
         LogLocked('!', "связь с прибором потеряна" + (why.empty() ? std::string() : ": " + why), Origin::Internal, now);
+    if (haveSample_ && !historyGap_)
+    {
+        History::Sample gap;
+        gap.t = static_cast<double>(now) / 1000.0;
+        for (int i = 0; i < History::kSensors; ++i)
+            gap.x[i] = gap.y[i] = std::numeric_limits<float>::quiet_NaN();
+        history_.Push(gap);
+        historyGap_ = true;
+    }
     FailAll("связь с прибором потеряна", true);
     probe_.reset();
     expectAbortReply_ = false;
@@ -424,6 +453,10 @@ void DeviceLink::AfterReply(const RequestPtr& r, std::int64_t now)
         std::uint64_t dropped = 0;
         if (r->ok && proto::ParseSamplesReply(r->final, on, dropped))
         {
+            // Every ACK starts/ends an observation interval, including terminal commands.
+            // Late R before ON ACK or after explicit OFF must not seed the next interval.
+            std::fill(std::begin(haveRawN_), std::end(haveRawN_), false);
+            rawSequenceActive_ = on && (r->origin != Origin::Internal || samplesWanted_);
             samplesSupported_ = 1;
             if (on)
                 samplesOnAt_ = now;
@@ -477,6 +510,9 @@ void DeviceLink::HandleLine(const std::string& line, std::int64_t now)
         proto::StreamSample s;
         if (proto::ParseStreamLine(line, header_.Valid() ? header_ : proto::DefaultStreamHeader(), s))
         {
+            if (haveSample_)
+                maxStreamIntervalMs_ = std::max(maxStreamIntervalMs_, now - sampleAt_);
+            historyGap_ = false;
             sample_ = s;
             haveSample_ = true;
             sampleAt_ = now;
@@ -510,6 +546,14 @@ void DeviceLink::HandleLine(const std::string& line, std::int64_t now)
             LogLocked('S', line, Origin::Internal, now);
             return;
         }
+        if (rawSequenceActive_ && haveRawN_[s.addr])
+        {
+            const std::uint32_t delta = s.n - lastRawN_[s.addr];
+            if (delta > 1 && delta < 0x80000000u)
+                sampleSeqGaps_ += delta - 1;
+        }
+        haveRawN_[s.addr] = rawSequenceActive_;
+        lastRawN_[s.addr] = s.n;
         samplesRx_++;
         samplesSession_++;
         samplesAt_ = now;
@@ -713,6 +757,8 @@ void DeviceLink::SetSamples(bool on)
     std::lock_guard lock(m_);
     if (on == samplesWanted_)
         return;
+    rawSequenceActive_ = false;
+    std::fill(std::begin(haveRawN_), std::end(haveRawN_), false);
     samplesWanted_ = on;
     samplesRetryAt_ = 0;
     samplesOffPending_ = !on;
@@ -763,6 +809,8 @@ LinkSnapshot DeviceLink::Snapshot() const
     s.timeouts = timeouts_;
     s.reconnects = reconnects_;
     s.badLines = badLines_;
+    s.sampleSeqGaps = sampleSeqGaps_;
+    s.maxStreamIntervalMs = maxStreamIntervalMs_;
     s.busy = inFlight_ != nullptr || !queue_.empty();
     s.pollPaused = pollPaused_;
     s.getActive = inFlight_ && inFlight_->sink;

@@ -1,5 +1,6 @@
 /* Host-only production renderer/state machine: no device, OS window or driver. */
 #include "../main/tab5_ui.c"
+#include "tab5_native_port.h"
 #include <assert.h>
 static uint16_t pixels[1280*720];
 static unsigned actions,frame_checks;
@@ -37,6 +38,16 @@ int main(int argc,char **argv){
     assert(nui_native_init(1280,720,pixels));encoder_reset();tab5_ui_init(action,NULL);
     tab5_ui_state_t s={.light_theme=theme,.brightness_pct=60,.datetime_known=true,.datetime={2026,10,26,12,30,0}};
     tab5_measure_config_default(&s.measurement.config);s.measurement.config.frequency_hz=20;s.measurement.config.gap_ms=20;s.measurement.config.alpha=.2f;tab5_ui_update(&s);encoder_sync();assert(!u.dirty&&u.draft[0]==20&&u.draft[1]==20&&fabs(u.draft[2]-.2)<.0001);
+    /* ZERO warning follows actual recording, independent of link/update fields. */
+    for(unsigned phase=0;phase<5;phase++){
+        s.recording=phase==1||phase==2;s.link.known=phase!=4;
+        s.record_sync_known=phase!=4;s.record_sync=phase==2;
+        tab5_ui_update(&s);confirm(A_ZERO);
+        const char *message=nui_label_get_text(nui_obj_get_child(u.dialog,0));
+        assert(message&&((strstr(message,"посреди записи")!=NULL)==s.recording));
+        assert(u.modal_kind==4);close_modal();
+    }
+    s.recording=false;s.record_sync_known=false;s.record_sync=false;tab5_ui_update(&s);
     assert(e.scroll_thumb[0]&&e.scroll_thumb[1]);
     for(unsigned i=0;i<2;i++)assert(!nui_obj_has_flag(e.scroll_thumb[i],NUI_OBJ_FLAG_CLICKABLE));
     assert(!e.ring);s.brightness_pct=70;tab5_ui_update(&s);assert(!u.dirty&&u.draft[7]==70);s.brightness_pct=60;tab5_ui_update(&s);assert(!u.dirty&&u.draft[7]==60);unsigned before=actions;assert_frame_eq("main",theme);rot(5);assert(e.ring&&u.page==MEASURE&&actions==before);assert_frame_eq("menu-focus",theme);
@@ -56,7 +67,7 @@ int main(int argc,char **argv){
     input(TAB5_UI_INPUT_ROT,-1,80);assert(e.streak==1);input(TAB5_UI_INPUT_ROT,-1,90);assert(e.streak==1);rot(1000);assert(u.draft[0]==hi[0]);rot(-1000);assert(u.draft[0]==lo[0]);back();assert(u.draft[0]==old);
     rot(7);assert(e.index==7);nui_area_t row,view;nui_obj_get_coords(u.setting_rows[7],&row);nui_obj_get_coords(u.settings_view,&view);assert(row.y1>=view.y1&&row.y2<=view.y2);
     assert_frame_eq("settings-scroll",theme);nui_area_t thumb;nui_obj_get_coords(e.scroll_thumb[0],&thumb);assert(thumb.y1>view.y1+8&&thumb.y2<view.y2-7);
-    press();rot(-1);assert(u.draft[7]==50);press();rot(3);assert(e.index==10);press();assert(last_action.kind==TAB5_UI_SETTINGS&&last_action.brightness_pct==50&&u.pending);
+    press();rot(-1);assert(u.draft[7]==50);press();rot(6);assert(e.index==13);press();assert(last_action.kind==TAB5_UI_SETTINGS&&last_action.brightness_pct==50&&u.pending);
     s.brightness_pct=50;s.measurement.config=last_action.config;s.action_result_known=true;s.action_result_kind=TAB5_UI_SETTINGS;s.action_result_success=true;s.action_result_serial++;tab5_ui_update(&s);encoder_sync();tab5_ui_update(&s);assert(!u.dirty&&!u.pending);
     menu(GRAPH);press();assert(enc_count()==8);rot(3);press();assert(e.cursor&&e.level==ENC_EDIT);assert_frame_eq("graph-cursor",theme);rot(-99);assert(e.cursor_s==0);rot(99);assert(e.cursor_s==(u.range==0?30:u.range==1?120:600));back();assert(!e.cursor&&e.level==ENC_SELECT);
     menu(NETWORK);press();bool was_ap=u.net_draft.ap_enabled;press();assert(u.net_draft.ap_enabled!=was_ap);press();assert(u.net_draft.ap_enabled==was_ap);rot(5);assert(e.index==5&&enc_object(5)==u.net_fields[3]);nui_obj_get_coords(u.net_fields[3],&row);nui_obj_get_coords(u.network_view,&view);assert(row.y1>=view.y1&&row.y2<=view.y2);assert_frame_eq("network-scroll",theme);
@@ -117,7 +128,7 @@ int main(int argc,char **argv){
     menu(MEASURE);assert(enc_count()==3&&enc_object(0)==u.start[0]&&enc_object(1)==enc_button(A_ZERO)&&enc_object(2)==enc_button(A_RESET));
     menu(ROLL);assert(enc_count()==0);menu(RECORD);assert(enc_count()==1&&enc_object(0)==u.start[1]);
     menu(GRAPH);for(unsigned i=0;i<8;i++)assert(enc_object(i)==(i<3?u.ranges[i]:i==3?u.chart_touch:u.legend[i-4]));
-    menu(SETTINGS);for(unsigned i=0;i<10;i++)assert(enc_object(i)==u.setting_rows[i]);assert(enc_object(10)==u.set_apply);
+    menu(SETTINGS);for(unsigned i=0;i<13;i++)assert(enc_object(i)==u.setting_rows[i]);assert(enc_object(13)==u.set_apply);
     /* Swipe starts on an actionable value: scrolling must never open its keypad. */
     menu(SETTINGS);e.settings_offset=0;nui_obj_set_y(u.settings_content,0);nui_area_t value;nui_obj_get_coords(u.step_value[0],&value);int tx=(value.x1+value.x2)/2,ty=(value.y1+value.y2)/2;
     before=actions;tab5_ui_touch(tx,ty,true,ms);tab5_ui_touch(tx,ty-180,true,ms+20);tab5_ui_touch(tx,ty-180,false,ms+40);assert(!u.modal_kind&&actions==before&&e.settings_offset==180);encoder_sync();assert(e.settings_offset==180);assert_frame_eq("touch-scroll",theme);
@@ -128,6 +139,37 @@ int main(int argc,char **argv){
     touch(u.step_value[0]);assert(u.modal_kind==1&&!e.ring);press();assert(u.modal_kind==1);rot(999);back();assert(!u.modal_kind);
     /* Repeated modal cycles must release the registry, not leave dead objects. */
     unsigned count=e.buttons_n;for(unsigned i=0;i<300;i++){e.injecting=true;enc_action(A_RESET);e.injecting=false;back();assert(!u.modal_kind);}assert(count==e.buttons_n);
+    /* Settings flags and backend updates/reconnect must preserve known false/zero. */
+    s.backlight_timeout_known=true;s.backlight_timeout_s=0;s.record_sync_known=true;s.record_sync=false;tab5_ui_update(&s);
+    light_changed=sync_changed=false;u.dirty=false;u.pending=false;refresh_settings();
+    menu(SETTINGS);e.level=ENC_SELECT;e.index=11;e.ring=true;encoder_paint();press();assert(light_changed&&light_draft==300);
+    e.index=12;encoder_paint();press();assert(sync_changed&&sync_draft);apply_settings();
+    assert(last_action.backlight_timeout_set&&last_action.backlight_timeout_s==300&&last_action.record_sync_set&&last_action.record_sync);
+    s.backlight_timeout_s=300;s.record_sync=true;s.action_result_serial++;s.action_result_kind=TAB5_UI_SETTINGS;s.action_result_known=true;s.action_result_success=true;tab5_ui_update(&s);assert(!u.pending);
+    capture_ntp("settings_start_stop",theme);
+    confirm(A_ZERO);
+    for(unsigned phase=0;phase<5;phase++){
+        s.recording=phase==1||phase==2;s.link.known=phase!=4;s.record_sync_known=phase!=4;
+        tab5_ui_update(&s);const char *message=nui_label_get_text(nui_obj_get_child(u.dialog,0));
+        assert((strstr(message,"посреди записи")!=NULL)==s.recording);
+        if(phase==0)capture_ntp("zero_idle",theme);
+        if(phase==1)capture_ntp("zero_recording",theme);
+    }
+    close_modal();
+    /* Actual port + UI: only one encoder event consumed after backlight sleep. */
+    close_modal();u.pending=false;u.dirty=false;light_changed=sync_changed=false;
+    show_page(MEASURE);e.level=ENC_MENU;e.ring=false;
+    tab5_native_port_input_reset();assert(tab5_native_port_backlight_configure(300,60));
+    tab5_native_port_input_dispatch(ms);ms+=300000;tab5_native_port_input_dispatch(ms);assert(!e.ring);
+    before=actions;assert(tab5_native_port_post_input(TAB5_UI_INPUT_ROT,1,ms+1));tab5_native_port_input_dispatch(++ms);
+    assert(e.ring&&u.page==MEASURE&&actions==before);
+    assert(tab5_native_port_post_input(TAB5_UI_INPUT_ROT,1,ms+1));tab5_native_port_input_dispatch(++ms);assert(u.page==ROLL);
+    ms+=300000;tab5_native_port_input_dispatch(ms);assert(!e.ring);
+    assert(tab5_native_port_post_button(true,ms+1));tab5_native_port_input_dispatch(++ms);assert(e.ring);
+    ms+=700;tab5_native_port_input_dispatch(ms);assert(tab5_native_port_post_button(false,ms));tab5_native_port_input_dispatch(ms);assert(actions==before&&u.page==ROLL);
+    /* Batch wake consumes one detent, second detent navigates immediately. */
+    ms+=300000;tab5_native_port_input_dispatch(ms);
+    assert(tab5_native_port_post_input(TAB5_UI_INPUT_ROT,2,ms+1));tab5_native_port_input_dispatch(++ms);assert(u.page==GRAPH&&e.ring);
     nui_native_render();tab5_ui_destroy();nui_native_deinit();
  }
  assert(frame_checks==24);puts("DIRTY_FRAME PASS: 12 states per theme, partial RGB565 == forced full render");

@@ -589,6 +589,18 @@ int main(int argc, char** argv)
     st.Run(95000);
     app.SetChartWindow(60);
     st.Shot("01_measure", true);
+    auto zeroShot = [&](const char* name) {
+        auto& io = ImGui::GetIO();
+        io.AddMousePosEvent(280.f, 527.f); st.Frame();
+        io.AddMouseButtonEvent(0, true); st.Frame();
+        io.AddMouseButtonEvent(0, false); st.Frame();
+        CHECK(ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel));
+        st.Shot(name);
+        ImGui::ClosePopupToLevel(0, true); st.Frame();
+        io.AddMousePosEvent(-100.f, -100.f);
+    };
+    CHECK(!app.ZeroRecordingWarning());
+    zeroShot("record_sync_zero_idle");
     st.Run(17000);
     st.Shot("02_measure_calm", true);
 
@@ -605,6 +617,8 @@ int main(int argc, char** argv)
         st.Run(6000);
         app.SetChartWindow(120);
         st.Shot("03_measure_recording", true);
+        CHECK(app.ZeroRecordingWarning());
+        zeroShot("record_sync_zero_recording");
         c.recSwitch = false;
         c.motion = 1;
         c.batteryLow = false;

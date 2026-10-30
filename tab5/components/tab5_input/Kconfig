@@ -1,0 +1,8 @@
+menu "Tab5 physical inputs"
+config TAB5_INPUT_GPIO_ENABLE
+    bool "Enable explicitly configured physical inputs"
+    default n
+    help
+        Does not start automatically. Verify mainboard revision, connector
+        orientation and attached modules before calling start.
+endmenu

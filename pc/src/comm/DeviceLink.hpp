@@ -114,6 +114,8 @@ struct LinkSnapshot
     std::int64_t connectedAtMs = 0;
     std::uint64_t connectSeq = 0; // растёт при каждом подключении
     std::uint64_t linesRx = 0, cmdsTx = 0, timeouts = 0, reconnects = 0, badLines = 0;
+    std::uint64_t sampleSeqGaps = 0; // R.n forward gaps only, not S decimation or proven sensor loss
+    std::int64_t maxStreamIntervalMs = 0; // PC delivery interval, not radio latency
     bool busy = false;           // есть команды в очереди / в полёте
     bool pollPaused = false;
     bool getActive = false;
@@ -227,6 +229,12 @@ private:
     int consecutiveTimeouts_ = 0;
     std::int64_t connectedAt_ = 0;
     std::uint64_t connectSeq_ = 0;
+    std::uint32_t lastRawN_[248]{};
+    bool haveRawN_[248]{};
+    bool rawSequenceActive_ = false; // only within an acknowledged samples interval
+    std::uint64_t sampleSeqGaps_ = 0;
+    std::int64_t maxStreamIntervalMs_ = 0;
+    bool historyGap_ = true;
     std::uint64_t linesRx_ = 0, cmdsTx_ = 0, timeouts_ = 0, reconnects_ = 0, badLines_ = 0;
     std::string lastProblem_;
     bool rejectWanted_ = false;

@@ -71,12 +71,13 @@ void tab5_ui_touch(int32_t x,int32_t y,bool pressed,uint32_t ms){
  puts("native ESP queue path: producer isolated, UI lock consumer, encoder interactive render PASS (host stubs)");
 '''
     tests = probes.TEST.replace(" startup_cleanup(true,true);started=false;\n assert(!live", extra + " startup_cleanup(true,true);started=false;\n assert(!live")
-    combined = probes.STUB + "\n#define ESP_PLATFORM 1\n#define TAB5_NATIVE_INPUT_CAPACITY" + contract + adapter + source + tests
+    stub = re.sub(r"^void tab5_ui_(?:touch|input)[^\n]*\n", "", probes.STUB, flags=re.M)
+    combined = stub + "\n#define ESP_PLATFORM 1\n" + adapter + source + tests
     out = ROOT / ".tools/native-large/port-check"
     out.mkdir(parents=True, exist_ok=True)
     cfile, exe = out / "port.c", out / "port.exe"
     cfile.write_text(combined, encoding="utf-8")
-    subprocess.run([compiler, "-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-I" + str(ROOT / "tab5/main"), str(cfile), "-o", str(exe)], check=True)
+    subprocess.run([compiler, "-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-Wno-unused-function", "-Wno-unused-variable", "-Wno-misleading-indentation", "-I" + str(ROOT / "tab5/main"), str(cfile), str(ROOT / "tab5/main/tab5_backlight.c"), "-o", str(exe)], check=True)
     result = subprocess.run([str(exe)], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False)
     (out / "port.log").write_bytes(result.stdout)
     print(result.stdout.decode("utf-8", errors="replace"), end="")
@@ -108,10 +109,11 @@ def main():
     header = (main_dir / "tab5_ui.h").read_text(encoding="utf-8")
     if "tab5_ui_input_event_t" not in header:
         parser.error("UI agent has not installed the agreed tab5_ui_input API yet")
-    sources = [ROOT / "tab5/tests/native_large_capture.c", main_dir / "tab5_native_port.c",
+    sources = [ROOT / "tab5/tests/native_large_capture.c", main_dir / "tab5_native_port.c", main_dir / "tab5_backlight.c",
                main_dir / "native/native_ui.c", main_dir / "native/font_native_fallback14.c"]
     sources += [main_dir / n for n in ("tab5_ui.c", "tab5_measure.c", "tab5_ui_graph.c", "tab5_time.c", "tab5_plot.c", "tab5_level.c")]
-    sources += sorted(main_dir.glob("font_tab5_*.c"))
+    font_sources = sorted(main_dir.glob("font_tab5_*.c"))
+    sources += font_sources
     headers = sorted(main_dir.rglob("*.h"))
     contents = {str(p.relative_to(ROOT)): p.read_bytes() for p in sources + headers}
     closure = {name: hashlib.sha256(data).hexdigest() for name, data in contents.items()}
@@ -143,7 +145,7 @@ def main():
         (out / "latest.json").write_text(json.dumps({"report": str(report)}, indent=2), encoding="utf-8")
 
     def unchanged():
-        return all(digest(ROOT / name) == value for name, value in closure.items()) and sorted(main_dir.glob("font_tab5_*.c")) == sources[10:]
+        return all(digest(ROOT / name) == value for name, value in closure.items()) and sorted(main_dir.glob("font_tab5_*.c")) == font_sources
 
     save()
     try:

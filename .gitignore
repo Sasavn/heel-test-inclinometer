@@ -57,3 +57,6 @@ tab5/test-usb/
 *.launch
 # Временный файл CubeMX (пути к репозиторию пакетов пользователя)
 mx.scratch
+
+# Local release binaries are assets, not source
+pc/artifacts/

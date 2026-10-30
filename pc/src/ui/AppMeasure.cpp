@@ -87,7 +87,7 @@ void App::PageMeasure()
         {
             ImGui::TextUnformatted(z == 0 ? "Принять текущие углы отвечающих датчиков за ноль?"
                                           : "Сбросить ноль у всех датчиков (углы — без вычета нуля)?");
-            if (Recording() || PcRecording())
+            if (ZeroRecordingWarning())
                 TextColored(pal.warn, "Идёт запись: в файлах изменятся колонки OffsetX/Y и CalcX/Y.");
             ImGui::Spacing();
             if (Button(z == 0 ? "Ноль" : "Сбросить", BtnKind::Primary, ImVec2(S(140), 0)))

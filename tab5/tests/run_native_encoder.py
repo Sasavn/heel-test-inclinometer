@@ -19,7 +19,7 @@ cc = shutil.which('gcc')
 if not cc:
     raise SystemExit('gcc is required')
 sources = [root / 'tab5/tests/test_native_encoder.c']
-sources += [main / s for s in ('tab5_ui_graph.c','tab5_measure.c',
+sources += [main / s for s in ('tab5_native_port.c','tab5_backlight.c','tab5_ui_graph.c','tab5_measure.c',
                               'tab5_time.c','tab5_plot.c','tab5_level.c',
                               'native/native_ui.c','native/font_native_fallback14.c')]
 sources += sorted(main.glob('font_tab5_*.c'))
@@ -33,7 +33,7 @@ with tempfile.TemporaryDirectory(dir=build_root, prefix='run-', ignore_cleanup_e
     for fine in (0, 1):
         exe = Path(td) / f'encoder-fine{fine}.exe'
         subprocess.run([cc,'-std=c11','-O2','-Werror=misleading-indentation',f'-DNUI_PROFILE_FINE_COUNTERS={fine}',
-                        '-DTAB5_RELEASE_CAPTURE_BUILD=1','-DNUI_PROFILE_PRIMITIVE_TIMING=0',
+                        '-DTAB5_NATIVE_INPUT_ONLY=1','-DTAB5_RELEASE_CAPTURE_BUILD=1','-DNUI_PROFILE_PRIMITIVE_TIMING=0',
                         '-I'+str(main),*[str(p) for p in sources],
                         '-lm','-o',str(exe)],check=True)
         raw_dir = Path(td) / f'frames-fine{fine}'
@@ -49,13 +49,13 @@ with tempfile.TemporaryDirectory(dir=build_root, prefix='run-', ignore_cleanup_e
                 Image.frombytes('RGB',(1280,720),data,'raw','BGR;16').save(capture_root / (frame.stem+'.png'))
         print(f'native encoder fine={fine} timing=0 PASS',flush=True)
 
-assert len(raw_frames) == 6
+assert len(raw_frames) == 12
 hashes = {str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest()
           for path in [Path(__file__), *sources, main / 'tab5_ui.c', main / 'tab5_ui.h']}
 manifest = {"kind": "production native RGB565 renderer with injected backend snapshots; no network or device",
             "profiles": [0,1], "themes": ["dark","light"],
-            "states": ["pending","success","error"],
+            "states": ["pending","success","error","settings_start_stop","zero_idle","zero_recording"],
             "rgb565_profiles_equal": True, "source_sha256": hashes,
             "frames": {name: hashlib.sha256(data).hexdigest() for name,data in raw_frames.items()}}
 (capture_root / 'run.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2),encoding='utf-8')
-print(f'NTP_CAPTURES 6 PNG; fine0 == fine1 RGB565 PASS: {capture_root}',flush=True)
+print(f'UI_CAPTURES 12 PNG; fine0 == fine1 RGB565 PASS: {capture_root}',flush=True)

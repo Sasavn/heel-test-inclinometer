@@ -35,7 +35,7 @@ struct ImVec4;
 namespace ui
 {
 
-inline constexpr const char* kAppVersion = "1.8.5";
+inline constexpr const char* kAppVersion = "1.8.6";
 
 enum class Page
 {
@@ -128,8 +128,10 @@ public:
     void SetNavPinned(bool on) { settings_.navCollapsed = on ? 0 : -1; }
     void SetNavCollapsed(int c) { settings_.navCollapsed = c; } // -1 — сама, 0 — раскрыта, 1 — значками
     // Запись на ПК (AppRecord.cpp)
-    bool StartPcRecording();
-    void StopPcRecording();
+    bool StartPcRecording(bool mirrored = false);
+    void RequestRecordSync(bool value);
+    bool ZeroRecordingWarning() const { return PcRecording() || (HaveStatus() && snap_.nowMs - snap_.statusAtMs <= 3000 && snap_.status.actualRec.value_or(snap_.status.Recording())); }
+    void StopPcRecording(bool mirrored = false);
     bool PcRecording() const { return pcrec_.rec && pcrec_.rec->Running(); }
     void SetRecordDir(const std::string& dir, bool xlsx);
     void SetRecordLabel(const std::string& label);
@@ -265,6 +267,12 @@ public:
     const std::string& LastHotkey() const { return lastHotkey_; }
 
 private:
+    RequestPtr syncSettingReq_, syncRecordReq_;
+    std::optional<bool> syncPrevious_, syncExpected_;
+    std::uint64_t syncConnection_ = 0, syncStatus_ = 0;
+    std::string syncProblem_;
+    void TickRecordSync();
+    bool SyncEnabled() const { return HaveStatus() && snap_.status.recSyncCap && snap_.status.recSync.value_or(false); }
     // Каркас
     void RenderTopBar(float h);
     void RenderSidebar(float w, float h);

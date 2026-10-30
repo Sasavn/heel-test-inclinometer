@@ -101,7 +101,7 @@ static void unit(unsigned theme){
 static void action(const tab5_ui_action_t *a,void *user){(void)a;(void)user;callbacks++;}
 static void touch(int x,int y,bool down){ms+=16;assert(tab5_native_port_post_touch(x,y,down,ms));tab5_native_port_input_dispatch(ms);}
 static nui_obj_t *find_content(nui_obj_t *o){
-    if(nui_obj_get_width(o)==1094&&nui_obj_get_height(o)==1490)return o;
+    if(nui_obj_get_width(o)==1094&&nui_obj_get_height(o)==1714)return o;
     for(unsigned i=0;i<nui_obj_get_child_count(o);i++){nui_obj_t *c=find_content(nui_obj_get_child(o,i));if(c)return c;}return NULL;
 }
 static void scroll(unsigned cycles){
@@ -115,7 +115,7 @@ static void scroll(unsigned cycles){
         for(unsigned i=0;i<cycles*52;i++){
             int delta=i%52<26?37:-37;touch(600,450,true);
             double start=stamp();touch(600,450-delta,true);double before=stamp();size_t dirty=nui_native_render();double end=stamp();assert(dirty);
-            nui_area_t a;nui_obj_get_coords(content,&a);int offset=initial.y1-a.y1;assert(offset>=0&&offset<=950);
+            nui_area_t a;nui_obj_get_coords(content,&a);int offset=initial.y1-a.y1;assert(offset>=0&&offset<=nui_obj_get_height(content)-540);
             if(csv)fprintf(csv,"%u,%u,%d,%.6f,%.6f\n",theme,i,offset,before-start,end-before);
             if(raw){
                 assert(fwrite(frame,sizeof(frame),1,raw)==1);memcpy(proof,frame,sizeof(frame));
@@ -124,7 +124,7 @@ static void scroll(unsigned cycles){
             touch(600,450-delta,false);nui_native_render();
         }
         nui_layer_cache_stats_t st;nui_layer_cache_get_stats(&st);
-        if(enabled)assert(st.hits>=52&&st.builds==1&&st.updates==0&&st.bytes==payload64(3260120)&&st.blit_pixels>0);
+        if(enabled)assert(st.hits>=52&&st.builds==1&&st.updates==0&&st.bytes==payload64((size_t)nui_obj_get_width(content)*nui_obj_get_height(content)*2)&&st.blit_pixels>0);
         else assert(!st.hits&&!st.bytes);
         printf("theme=%u hits=%llu misses=%llu builds=%llu updates=%llu bytes=%zu blit_pixels=%llu fallbacks=%llu build_us=%llu\n",theme,
             (unsigned long long)st.hits,(unsigned long long)st.misses,(unsigned long long)st.builds,(unsigned long long)st.updates,st.bytes,

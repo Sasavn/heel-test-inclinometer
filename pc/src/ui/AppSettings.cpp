@@ -496,6 +496,7 @@ void App::SettingsClockCard()
         Hint("«Ноль» — текущие углы отвечающих датчиков принять за ноль; «Сбросить» — углы без вычета нуля. Ноль не "
              "сохраняется при выключении прибора — задаётся на каждом замере.");
         ImGui::SameLine(0, S(14));
+        if (ZeroRecordingWarning()) TextColored(pal.warn, "Идёт запись: установка нуля изменит данные в файлах.");
         if (Button("Ноль", BtnKind::Normal, ImVec2(S(96), 0), !have || set_.zeroReq != nullptr))
             set_.zeroReq = link_->Send("zero");
         ImGui::SameLine(0, S(8));
@@ -594,7 +595,16 @@ void App::SettingsPcCard()
 {
     if (BeginCard("##s_pc"))
     {
-        CardTitle("Программа на ПК");
+        { FontScope f(fontH2); ImGui::TextUnformatted("Программа на ПК"); }
+        ImGui::SameLine();
+    bool sync = HaveStatus() && snap_.status.recSync.value_or(false);
+    ImGui::BeginDisabled(!HaveStatus() || !snap_.status.recSyncCap || !snap_.status.recSync.has_value() || syncSettingReq_ != nullptr);
+    { FontScope f(fontSmall);
+        if (ui::Checkbox("Синхронизация записи на устройствах", &sync)) RequestRecordSync(sync);
+    }
+    ImGui::EndDisabled();
+    if (!syncProblem_.empty()) TextColored(pal.warn, "%s", syncProblem_.c_str());
+
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("Файл настроек программы: %s", Shown(text::PathToUtf8(PcSettings::Dir() / L"krenomer.ini")).c_str());
         ImGui::AlignTextToFramePadding();

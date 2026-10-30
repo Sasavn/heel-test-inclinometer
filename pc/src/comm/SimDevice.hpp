@@ -35,6 +35,10 @@ public:
     // Пульт демо-режима (интерфейс).
     struct Controls
     {
+        bool recSync = false;
+        bool recSyncCapability = true;
+        bool persistenceFailure = false;
+        bool clockError = false;
         bool recSwitch = false;               // тумблер записи
         bool sensorOn[kSensors] = {true, true}; // датчик на шине
         bool card = true;                     // карта вставлена
@@ -827,7 +831,8 @@ private:
         const int pct = static_cast<int>(std::clamp((cell - 3.3) / (4.2 - 3.3) * 100.0, 0.0, 100.0) + 0.5);
         u("bat_pct", static_cast<std::uint64_t>(pct));
         b("bat_sat", false);
-        b("rec_sw", ctl_.recSwitch);
+        b("rec_sw", sdState_ == "RECORDING");
+        if (ctl_.recSyncCapability) { b("rec_sync_cap", true); b("rec_sync", ctl_.recSync); }
         j += ",\"svc\":\"" + svc_ + "\"";
         j += std::string(",\"xfer\":\"") + (xfer_.mode == 2 ? "get" : xfer_.mode == 1 ? "list" : "idle") + "\"";
         j += "}";
@@ -936,6 +941,15 @@ private:
             Out("OK stream every " + std::to_string(ms) + " ms");
             streamLast_ = now - ms;
             return;
+        }
+        if (cmd == "rec") {
+            if (arg == "off") { ctl_.recSwitch = false; if (sdState_ == "RECORDING") StopRecording(now); return Out("OK rec off"); }
+            if (arg != "on") return Out("ERR usage: rec on|off");
+            if (!ctl_.card) return Out("ERR NOCARD");
+            if (ctl_.clockError) return Out("ERR clock error");
+            ctl_.recSwitch = true;
+            if (sdState_ != "RECORDING") StartRecording(now);
+            return Out("OK rec on");
         }
         if (cmd == "set")
             return Set(arg, now);
@@ -1134,6 +1148,11 @@ private:
             val.erase(val.begin());
         long long n;
         double d;
+        if (name == "recsync") {
+            if (val != "0" && val != "1") return Out("ERR usage: set recsync 0|1");
+            if (ctl_.persistenceFailure) return Out("ERR persistence failure");
+            ctl_.recSync = val == "1"; return Out("OK recsync");
+        }
         if (name == "time")
         {
             std::tm tm{};

@@ -1,3 +1,5 @@
+> Локальный кандидат Tab5 PC 1.8.6: общая настройка синхронизации старта и остановки записи с Tab5 1.7.19; свежесть S/R и счётчики последовательности в диагностике. [Контракт синхронизации](docs/record-sync-proposal.md). Последняя опубликованная ссылка ниже относится к 1.8.5.
+
 > Tab5 ESP32 fork: see [TAB5.md](TAB5.md) for TCP, explicit USB CDC, OTA and native ROM recovery. Outputs: `krenomer-esp32.exe`. [Download Tab5 PC 1.8.5](https://github.com/Sasavn/heel-test-inclinometer/releases/tag/pc-tab5-v1.8.5).
 
 Native USB runtime and ROM recovery need no Python or esptool runtime, but
@@ -18,8 +20,8 @@ The user must choose the physical Tab5 and its COM port explicitly.
 прибором по USB (виртуальный COM-порт), находит его сама и сама переподключается.
 
 Один файл `krenomer.exe`, без установки и без DLL; **Windows 7 SP1 и новее**
-(64-битная сборка и 32-битная — для 32-битной Windows 7). Версия **1.8.5**: в сведениях о файле
-(Свойства → Подробно: «Регистратор крена», 1.8.5.0) и в манифесте (без повышения прав, Windows 7–11,
+(64-битная сборка и 32-битная — для 32-битной Windows 7). Версия **1.8.6**: в сведениях о файле
+(Свойства → Подробно: «Регистратор крена», 1.8.6.0) и в манифесте (без повышения прав, Windows 7–11,
 DPI по монитору) — `src/app.rc.in`, `src/app.manifest.in`; номер версии один — `project(VERSION)` в
 `CMakeLists.txt`, с `kAppVersion` он сверяется при сборке.
 

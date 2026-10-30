@@ -1,5 +1,6 @@
 #pragma once
 #include "tab5_ui.h"
+#include "tab5_backlight.h"
 #ifndef TAB5_NATIVE_INPUT_ONLY
 #include "esp_err.h"
 #endif
@@ -16,6 +17,9 @@ typedef struct {
     uint32_t posted, consumed, rejected, pending;
 } tab5_native_input_stats_t;
 bool tab5_native_port_post_input(tab5_ui_input_event_t event,int32_t delta,uint32_t time_ms);
+/* Debounced raw edges only; port synthesizes PRESS on UP or LONG at 600ms.
+ * Wake DOWN consumes entire button gesture. Do not also post semantic events. */
+bool tab5_native_port_post_button(bool down,uint32_t time_ms);
 bool tab5_native_port_post_touch(int x,int y,bool pressed,uint32_t time_ms);
 /* Single UI consumer, under the UI lock; never call from a producer/ISR.
  * Drains at most CAPACITY events, services retained touch and UI idle timeout.
@@ -24,6 +28,8 @@ bool tab5_native_port_input_dispatch(uint32_t now_ms);
 void tab5_native_port_input_stats(tab5_native_input_stats_t *out);
 /* Lifecycle only, with no consumer running. Reset opens; close rejects input.
  * Host emulator uses the same queue/consumer without compiling any IDF code. */
+/* Thread-safe mailbox; false rejects invalid timeout/brightness. UI task applies. */
+bool tab5_native_port_backlight_configure(uint32_t timeout_s,uint8_t manual_pct);
 void tab5_native_port_input_reset(void);
 void tab5_native_port_input_close(void);
 

@@ -7,7 +7,7 @@ if(WIN32 AND VCPKG_TARGET_TRIPLET MATCHES "-static(-|$)")
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 endif()
 
-project(Krenomer VERSION 1.8.5 LANGUAGES CXX RC)
+project(Krenomer VERSION 1.8.6 LANGUAGES CXX RC)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -122,7 +122,7 @@ endif()
 # (демо dfu-util), обработка опыта кренования (process_test), стенд снимков экрана без окна и видеокарты (ui_shots).
 if(KRENOMER_BUILD_TESTS)
     enable_testing()
-    foreach(_t clock_sync_test protocol_test link_test firmware_test process_test esp32_test esprom_test recovery_test export_target_test report_grid_test reverse_regression_test plateau_detector_test)
+    foreach(_t tcp_transport_test clock_sync_test protocol_test link_test firmware_test process_test esp32_test esprom_test recovery_test export_target_test report_grid_test reverse_regression_test plateau_detector_test)
         add_executable(${_t} tests/${_t}.cpp)
         target_include_directories(${_t} PRIVATE src tests)
         target_link_libraries(${_t} PRIVATE krenomer_core)
@@ -143,6 +143,10 @@ if(KRENOMER_BUILD_TESTS)
     if(WIN32)
         target_link_libraries(export_target_test PRIVATE advapi32)
     endif()
+
+    add_executable(record_sync_test tests/record_sync_test.cpp)
+    target_link_libraries(record_sync_test PRIVATE krenomer_ui)
+    add_test(NAME record_sync_test COMMAND record_sync_test)
 
     add_executable(ui_shots tests/ui_shots.cpp "${CMAKE_CURRENT_BINARY_DIR}/fonts.rc")
     target_include_directories(ui_shots PRIVATE src tests)

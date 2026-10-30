@@ -34,12 +34,12 @@ NUI_FONT_DECLARE(font_tab5_28);NUI_FONT_DECLARE(font_tab5_36);NUI_FONT_DECLARE(f
 #define F108 (&font_tab5_108)
 enum {BG,CARD,ALT,FRAME,TEXT,DIM,MUTED,NAV,NAVSEL,NAVTEXT,NAVMUTED,PRIMARY,ORANGE,RED,OUTLINE,GHOST,OK,WARN,ERR,INFO,NEUTRAL,LINE,STYLE_COUNT};
 enum {MEASURE,ROLL,GRAPH,RECORD,SETTINGS,NETWORK};
-enum {A_START=1,A_ZERO,A_RESET,A_APPLY,A_CANCEL,A_REVEAL,A_NET_APPLY,A_LIGHT,A_DARK,A_TIME,A_NUM_OK,A_MODAL_CANCEL,A_CONFIRM,A_DISCARD,A_STAY,A_LANG,A_TEXT_OK,A_TIME_OK,A_NOTICE_CLOSE,A_TIME_SYNC,A_TZ_SELECT,A_TZ_MINUS,A_TZ_PLUS};
+enum {A_START=1,A_ZERO,A_RESET,A_APPLY,A_CANCEL,A_REVEAL,A_NET_APPLY,A_LIGHT,A_DARK,A_TIME,A_NUM_OK,A_MODAL_CANCEL,A_CONFIRM,A_DISCARD,A_STAY,A_LANG,A_TEXT_OK,A_TIME_OK,A_NOTICE_CLOSE,A_TIME_SYNC,A_TZ_SELECT,A_TZ_MINUS,A_TZ_PLUS,A_BACKLIGHT,A_RECORD_SYNC};
 static struct {
     nui_obj_t *notice,*notice_text;char last_notice[160];
     nui_obj_t *root,*rail,*pages[6],*nav[6],*selected[6],*badge,*rail_time,*rail_power,*rail_resources[3];
     nui_obj_t *status_bar,*status_rec,*status_media,*measure_roll[2],*roll_window,*roll_calm,*roll_status[2];
-    nui_obj_t *settings_view,*settings_content,*setting_rows[11],*brightness_value;
+    nui_obj_t *settings_view,*settings_content,*setting_rows[13],*brightness_value;
     nui_obj_t *network_view,*network_content,*net_rows[8],*rec_file_label,*rec_detail_label;
     nui_style_t style[STYLE_COUNT];bool styles_ready,light;
     uint32_t bg,card,alt,frame,border,text,dim,muted,navc,navsel,action,actiontext,ok,warn,err,info,okbg,warnbg,errbg,infobg,sensor[2];
@@ -233,7 +233,15 @@ static tab5_measure_config_t draft_config(void){return (tab5_measure_config_t){.
 static bool cfg_equal(const tab5_measure_config_t *a,const tab5_measure_config_t *b){double va[7],vb[7];config_values(a,va);config_values(b,vb);for(int i=0;i<7;i++)if(fabs(va[i]-vb[i])>.0001)return false;return true;}
 static bool net_equal(const tab5_ui_network_t *a,const tab5_ui_network_t *b){return a->ap_enabled==b->ap_enabled&&a->sta_enabled==b->sta_enabled&&!strcmp(a->ap_ssid,b->ap_ssid)&&!strcmp(a->ap_password,b->ap_password)&&!strcmp(a->sta_ssid,b->sta_ssid)&&!strcmp(a->sta_password,b->sta_password);}
 static void dispatch(int kind){tab5_ui_action_t a={.kind=kind,.config=u.state.measurement.config,.light_theme=u.state.light_theme,.network=u.state.network};if(u.cb)u.cb(&a,u.user);}
+static uint32_t light_draft, light_sent;
+static bool light_changed, light_sent_set, sync_draft, sync_changed, sync_sent, sync_sent_set;
+static nui_obj_t *sync_choice;
+static nui_obj_t *light_choice;
 static void refresh_settings(void){
+    if(!light_changed&&!u.pending)light_draft=u.state.backlight_timeout_s;
+    if(!sync_changed&&!u.pending)sync_draft=u.state.record_sync;
+    caption(sync_choice,!u.state.record_sync_known&&!sync_changed?"Нет данных":sync_draft?"Вкл":"Выкл");
+    caption(light_choice,!u.state.backlight_timeout_known&&!light_changed?"Нет данных":light_draft==300?"5 мин":light_draft==1800?"30 мин":light_draft==3600?"60 мин":"Никогда");
     if(u.draft[7]<10)u.draft[7]=u.state.brightness_pct?u.state.brightness_pct:100;
     if(!e.brightness_seen&&u.state.brightness_pct){u.draft[7]=u.state.brightness_pct;e.brightness_seen=true;}
     if(e.brightness_pending){
@@ -242,7 +250,7 @@ static void refresh_settings(void){
     }
     double actual[8];config_values(&u.state.measurement.config,actual);actual[7]=u.state.brightness_pct?u.state.brightness_pct:100;unsigned n=0;
     for(unsigned i=0;i<8;i++){bool changed=fabs(u.draft[i]-actual[i])>.0001;n+=changed;char s[40];snprintf(s,sizeof(s),i==2||i==4||i==6?"%.2f%s%s":"%.0f%s%s",u.draft[i],units[i][0]&&strcmp(units[i],"°")?" ":"",units[i]);caption(u.step_value[i],s);role(u.step_value[i],changed?INFO:FRAME);}
-    u.dirty=n>0||u.settings_failed;char s[64];snprintf(s,sizeof(s),u.pending?"ожидает подтверждения":u.settings_failed?"не сохранено · повторите":"изменено: %u",n);text(u.changed,s);hide(u.changed,!u.dirty&&!u.pending);enabled(u.set_apply,u.dirty&&!u.pending);enabled(u.set_cancel,u.dirty&&!u.pending);
+    n+=light_changed&&(!u.state.backlight_timeout_known||light_draft!=u.state.backlight_timeout_s);n+=sync_changed&&(!u.state.record_sync_known||sync_draft!=u.state.record_sync);u.dirty=n>0||u.settings_failed;char s[64];snprintf(s,sizeof(s),u.pending?"ожидает подтверждения":u.settings_failed?"не сохранено · повторите":"изменено: %u",n);text(u.changed,s);hide(u.changed,!u.dirty&&!u.pending);enabled(u.set_apply,u.dirty&&!u.pending);enabled(u.set_cancel,u.dirty&&!u.pending);
 }
 static void close_modal(void){encoder_modal_forget();if(u.veil)nui_obj_delete(u.veil);u.veil=u.dialog=u.keyboard=u.text_field=NULL;u.modal_kind=0;}
 static void open_modal(int x,int y,int w,int h,int kind){close_modal();e.paint_dirty=true;e.saved_level=e.level;e.saved_index=e.index;e.level=ENC_MODAL;e.modal_index=kind==3?2:0;e.date_index=0;u.modal_kind=kind;u.veil=box(u.root,0,0,1280,720,BG);style_color(u.veil,NUI_STYLE_BG_COLOR,nui_color_hex(0x080E1E),0);nui_obj_set_style_bg_opa(u.veil,140,0);nui_obj_add_flag(u.veil,NUI_OBJ_FLAG_CLICKABLE);u.dialog=box(u.veil,x,y,w,h,CARD);nui_obj_set_style_radius(u.dialog,20,0);}
@@ -258,7 +266,7 @@ static void show_page(unsigned page){
     if(page==MEASURE||page==ROLL)update_measure();else if(page==RECORD)update_record();
     if(bounded)nui_obj_invalidate(u.pages[page]);else nui_obj_invalidate(u.root);
 }
-static bool apply_settings(void){tab5_ui_action_t a={.kind=TAB5_UI_SETTINGS,.config=draft_config(),.light_theme=u.state.light_theme,.brightness_pct=(uint8_t)u.draft[7]};u.sent=a.config;e.sent_brightness=a.brightness_pct;e.brightness_pending=true;u.pending=true;u.settings_ack=false;if(u.cb)u.cb(&a,u.user);refresh_settings();return true;}
+static bool apply_settings(void){tab5_ui_action_t a={.kind=TAB5_UI_SETTINGS,.backlight_timeout_set=light_changed,.backlight_timeout_s=light_draft,.record_sync_set=sync_changed,.record_sync=sync_draft,.config=draft_config(),.light_theme=u.state.light_theme,.brightness_pct=(uint8_t)u.draft[7]};light_sent_set=a.backlight_timeout_set;light_sent=a.backlight_timeout_s;sync_sent_set=a.record_sync_set;sync_sent=a.record_sync;u.sent=a.config;e.sent_brightness=a.brightness_pct;e.brightness_pending=true;u.pending=true;u.settings_ack=false;if(u.cb)u.cb(&a,u.user);refresh_settings();return true;}
 static bool apply_network(void){
     size_t ap=strlen(u.net_draft.ap_password),sta=strlen(u.net_draft.sta_password);
     if((u.net_draft.ap_enabled&&(!u.net_draft.ap_ssid[0]||ap<8||ap>63)) || (u.net_draft.sta_enabled&&(!u.net_draft.sta_ssid[0]||(sta&&sta<8)||sta>63))){text(u.net_hint,"✗ Проверьте SSID и пароль: AP 8–63, STA пустой или 8–63 байта");role(u.net_hint,ERR);return false;}
@@ -271,7 +279,8 @@ static void ask_navigation(unsigned page){
         button(u.dialog,"Применить",24,104,200,64,PRIMARY,A_APPLY);button(u.dialog,"Отбросить",240,104,200,64,OUTLINE,A_DISCARD);button(u.dialog,"Остаться",456,104,200,64,GHOST,A_STAY);
     }else show_page(page);
 }
-static void confirm(int action){u.confirm_action=action;open_modal(300,220,680,280,4);label(u.dialog,action==A_ZERO?"Ноль изменится посреди записи.\nПродолжить?":"Сбросить ноль обоих датчиков?",24,24,632,80,F24,TEXT);button(u.dialog,"Отмена",24,168,304,64,GHOST,A_MODAL_CANCEL);button(u.dialog,"Подтвердить",344,168,312,64,PRIMARY,A_CONFIRM);}
+static const char *confirm_message(int action){return action==A_ZERO?(u.state.recording?"Ноль изменится посреди записи.\nПродолжить?":"Установить ноль обоих датчиков?\nПродолжить?"):"Сбросить ноль обоих датчиков?";}
+static void confirm(int action){u.confirm_action=action;open_modal(300,220,680,280,4);label(u.dialog,confirm_message(action),24,24,632,80,F24,TEXT);button(u.dialog,"Отмена",24,168,304,64,GHOST,A_MODAL_CANCEL);button(u.dialog,"Подтвердить",344,168,312,64,PRIMARY,A_CONFIRM);}
 static bool valid_number(double v,unsigned i){return isfinite(v)&&v>=lo[i]-.000001&&v<=hi[i]+.000001&&((i==0||i==1||i==3||i==5||i==7)?fabs(v-round(v))<.000001:true);}
 static void number_refresh(void){
     char *end;double v=strtod(u.num,&end);u.numeric_valid=*u.num && !*end && valid_number(v,u.edit_index);text(u.number,u.num);
@@ -405,9 +414,11 @@ static void action_event(nui_event_t *ev){
     case A_RESET:confirm(A_RESET);break;
     case A_CONFIRM:{int a=u.confirm_action;close_modal();dispatch(a==A_ZERO?TAB5_UI_ZERO:TAB5_UI_ZERO_RESET);break;}
     case A_MODAL_CANCEL:case A_STAY:close_modal();break;
-    case A_DISCARD:if(u.page==SETTINGS){config_values(&u.state.measurement.config,u.draft);u.draft[7]=u.state.brightness_pct?u.state.brightness_pct:100;u.pending=false;u.settings_failed=false;refresh_settings();}else {u.net_draft=u.state.network;u.net_pending=false;u.network_failed=false;refresh_network();}close_modal();show_page(u.pending_page);break;
+    case A_DISCARD:light_changed=sync_changed=false;light_draft=u.state.backlight_timeout_s;if(u.page==SETTINGS){config_values(&u.state.measurement.config,u.draft);u.draft[7]=u.state.brightness_pct?u.state.brightness_pct:100;u.pending=false;u.settings_failed=false;refresh_settings();}else {u.net_draft=u.state.network;u.net_pending=false;u.network_failed=false;refresh_network();}close_modal();show_page(u.pending_page);break;
     case A_APPLY:if(u.modal_kind==3){bool applied=u.page==SETTINGS?apply_settings():apply_network();if(applied){unsigned p=u.pending_page;close_modal();show_page(p);}}else apply_settings();break;
-    case A_CANCEL:config_values(&u.state.measurement.config,u.draft);u.draft[7]=u.state.brightness_pct?u.state.brightness_pct:100;u.settings_failed=false;u.pending=false;refresh_settings();break;
+    case A_RECORD_SYNC:sync_draft=!sync_draft;sync_changed=true;u.dirty=true;refresh_settings();break;
+    case A_BACKLIGHT:light_changed=true;light_draft=light_draft==0?300:light_draft==300?1800:light_draft==1800?3600:0;u.dirty=true;refresh_settings();break;
+    case A_CANCEL:light_changed=sync_changed=false;light_draft=u.state.backlight_timeout_s;config_values(&u.state.measurement.config,u.draft);u.draft[7]=u.state.brightness_pct?u.state.brightness_pct:100;u.settings_failed=false;u.pending=false;refresh_settings();break;
     case A_NET_APPLY:apply_network();break;
     case A_REVEAL:u.unmasked=!u.unmasked;refresh_network();break;
     case A_LIGHT:case A_DARK:{
@@ -461,7 +472,7 @@ static unsigned enc_count(void){
     if(u.page==MEASURE)return 3;
     if(u.page==GRAPH)return 8;
     if(u.page==RECORD)return 1;
-    if(u.page==SETTINGS)return 11;
+    if(u.page==SETTINGS)return 14;
     if(u.page==NETWORK)return 8; /* includes STA password and Apply */
     return 0;
 }
@@ -469,7 +480,7 @@ static nui_obj_t *enc_object(unsigned index){
     if(u.page==MEASURE)return index==0?u.start[0]:enc_button(index==1?A_ZERO:A_RESET);
     if(u.page==RECORD)return u.start[1];
     if(u.page==GRAPH)return index<3?u.ranges[index]:index==3?u.chart_touch:u.legend[index-4];
-    if(u.page==SETTINGS)return index<10?u.setting_rows[index]:u.set_apply;
+    if(u.page==SETTINGS)return index<13?u.setting_rows[index]:u.set_apply;
     if(u.page==NETWORK){nui_obj_t *items[]={u.net_switch[0],u.net_fields[0],u.net_fields[1],u.net_switch[1],u.net_fields[2],u.net_fields[3],u.reveal,u.net_apply};return index<8?items[index]:NULL;}
     return NULL;
 }
@@ -656,7 +667,7 @@ static void enc_edit_nudge(int direction,unsigned multiplier){
 static void enc_activate(void){
     if(u.page==SETTINGS){
         if(e.index<9){e.edit=e.index;e.original=e.index<8?u.draft[e.index]:0;e.original_light=u.state.light_theme;e.level=ENC_EDIT;e.streak=0;e.rotating=false;enc_hint("< > вращайте — значение · нажмите — готово · удерживайте — отмена");}
-        else enc_action(e.index==9?A_TIME:A_APPLY);
+        else if(e.index!=10)enc_action(e.index==9?A_TIME:e.index==11?A_BACKLIGHT:e.index==12?A_RECORD_SYNC:A_APPLY);
     }else if(u.page==GRAPH){if(e.index<3)enc_action(610+e.index);else if(e.index==3){e.cursor=true;e.level=ENC_EDIT;e.cursor_s=u.range==0?30:u.range==1?120:600;e.rotating=false;enc_cursor(0);enc_hint("вращайте — время · нажмите — выйти");}else enc_action(600+e.index-4);}
     else if(u.page==MEASURE)enc_action(e.index==0?A_START:e.index==1?A_ZERO:A_RESET);
     else if(u.page==RECORD)enc_action(A_START);
@@ -675,6 +686,10 @@ static void enc_time_rotate(int32_t delta){
     unsigned i=e.modal_index;const char *old=nui_textarea_get_text(u.date_fields[i]);int value=*old?atoi(old):(int)minimum[i];
     int64_t next=(int64_t)value+delta;if(next<minimum[i])next=minimum[i];if(next>maximum[i])next=maximum[i];
     char b[12];snprintf(b,sizeof(b),"%u",(unsigned)next);nui_textarea_set_text(u.date_fields[i],b);date_edited(NULL);
+}
+void tab5_ui_encoder_wake(uint32_t time_ms){
+    if(!u.root)return;
+    e.ring=true;e.last_ms=time_ms;e.rotating=false;e.streak=0;encoder_paint();
 }
 void tab5_ui_input(tab5_ui_input_event_t input,int32_t delta,uint32_t time_ms){
     if(!u.root)return;
@@ -921,7 +936,7 @@ static void build_settings(void){
     u.set_apply=button(p,"Применить",836,0,260,80,PRIMARY,A_APPLY);
     u.set_cancel=button(p,"Отменить",636,8,188,64,GHOST,A_CANCEL);style_font(nui_obj_get_child(u.set_cancel,0),F28,0);
     u.settings_view=box(p,0,96,1096,540,CARD);nui_obj_set_style_radius(u.settings_view,20,0);
-    nui_obj_t *c=u.settings_content=box(u.settings_view,1,0,1094,1490,TEXT);
+    nui_obj_t *c=u.settings_content=box(u.settings_view,1,0,1094,1714,TEXT);
     nui_obj_t *g=box(c,0,0,1094,64,ALT);label(g,"ОПРОС ДАТЧИКОВ",28,14,1030,44,F28,MUTED);
     for(unsigned i=0;i<3;i++)stepper(c,i,64+i*112);
     g=box(c,0,400,1094,64,ALT);label(g,"КАЧКА И ПОКОЙ",28,14,1030,44,F28,MUTED);
@@ -931,6 +946,8 @@ static void build_settings(void){
     nui_obj_t *r=u.setting_rows[8]=box(c,0,1088,1094,112,TEXT);label(r,"Тема",28,28,580,56,F36,TEXT);
     u.theme_btn[0]=button(r,"Светлая",642,12,208,86,FRAME,A_LIGHT);u.theme_btn[1]=button(r,"Тёмная",864,12,202,86,FRAME,A_DARK);line(r,0,111,1094);
     r=u.setting_rows[9]=box(c,0,1200,1094,112,TEXT);label(r,"Дата и время",28,12,500,48,F36,TEXT);u.clock_text=label(r,"—",28,64,600,34,F24,MUTED);button(r,"Изменить",750,12,316,86,OUTLINE,A_TIME);line(r,0,111,1094);
+    nui_obj_t *bl=u.setting_rows[11]=box(c,0,1488,1094,112,TEXT);label(bl,"Выключать экран",28,28,580,56,F36,TEXT);light_choice=button(bl,"Никогда",750,12,316,86,OUTLINE,A_BACKLIGHT);
+    nui_obj_t *rs=u.setting_rows[12]=box(c,0,1600,1094,112,TEXT);label(rs,"ПК: синхр. старта и остановки",28,28,700,56,F28,TEXT);sync_choice=button(rs,"Нет данных",750,12,316,86,OUTLINE,A_RECORD_SYNC);
     r=u.setting_rows[10]=box(c,0,1312,1094,176,TEXT);label(r,"Экран и прошивка",28,8,1030,48,F36,TEXT);u.panel_text=label(r,"—",28,64,1030,34,F24,MUTED);u.fw_text=label(r,"—",28,108,1030,34,F24,MUTED);
 }
 static void build_network(void){
@@ -957,7 +974,7 @@ static void build_network(void){
 }
 void tab5_ui_init(tab5_ui_action_cb_t cb,void *user){
     if(u.root){tab5_ui_destroy();}
-    memset(&u,0,sizeof(u));encoder_reset();if(!role_prop)role_prop=nui_style_register_prop(0);u.cb=cb;u.user=user;palette(true);
+    memset(&u,0,sizeof(u));light_changed=sync_changed=light_sent_set=sync_sent_set=false;light_draft=0;sync_draft=false;encoder_reset();if(!role_prop)role_prop=nui_style_register_prop(0);u.cb=cb;u.user=user;palette(true);
     u.root=box(nui_screen_active(),0,0,1280,720,BG);u.rail=box(u.root,0,0,152,720,NAV);
     const char *names[]={"Углы","Качка","График","Запись","Настройки","Сеть"};int icons[]={0,1,13,2,3,4};
     for(unsigned i=0;i<6;i++){
@@ -1075,6 +1092,7 @@ void tab5_ui_update(const tab5_ui_state_t *s){
         m->y=m->decoded_y-m->zero_y;
     }
     u.state=state;
+    if(u.modal_kind==4&&u.confirm_action==A_ZERO)text(nui_obj_get_child(u.dialog,0),confirm_message(A_ZERO));
     encoder_sync(); /* Load clean/first brightness before dirty counting. */
     tab5_ui_graph_sample(&u.graph,&state);
     if(u.light!=state.light_theme){palette(state.light_theme);style_color(u.hero,NUI_STYLE_BG_GRAD_COLOR,nui_color_hex(u.navsel),0);}
@@ -1088,7 +1106,7 @@ void tab5_ui_update(const tab5_ui_state_t *s){
         style_color(u.stats[k],NUI_STYLE_BG_COLOR,nui_color_hex(u.card),0);style_num(u.stats[k],NUI_STYLE_BG_OPA,255,0);style_num(u.stats[k],NUI_STYLE_RADIUS,0,0);
     }
     update_result();update_notice(state.status);if(u.notice_text)style_color(u.notice_text,NUI_STYLE_TEXT_COLOR,nui_color_hex(backend_failure()?u.err:u.info),0);
-    if(u.pending&&!u.settings_failed&&(!state.action_result_known||u.settings_ack)&&cfg_equal(&state.measurement.config,&u.sent)){tab5_measure_config_t current=draft_config();u.pending=false;u.dirty=!cfg_equal(&current,&u.sent);}
+    if(u.pending&&!u.settings_failed&&(!state.action_result_known||u.settings_ack)&&(!light_sent_set||(state.backlight_timeout_known&&state.backlight_timeout_s==light_sent))&&(!sync_sent_set||(state.record_sync_known&&state.record_sync==sync_sent))&&cfg_equal(&state.measurement.config,&u.sent)){tab5_measure_config_t current=draft_config();u.pending=false;light_changed=sync_changed=false;u.dirty=!cfg_equal(&current,&u.sent);}
     if(!u.dirty&&!u.pending)config_values(&state.measurement.config,u.draft);
     if(u.net_pending&&!u.network_failed&&(!state.action_result_known||u.network_ack)&&net_equal(&state.network,&u.net_sent)){u.net_pending=false;u.net_dirty=!net_equal(&u.net_draft,&u.net_sent);text(u.net_hint,"Сеть: настройки применены");role(u.net_hint,MUTED);}
     if(!u.net_dirty&&!u.net_pending&&u.modal_kind!=2)u.net_draft=state.network;

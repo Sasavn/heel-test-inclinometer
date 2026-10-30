@@ -10,13 +10,21 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[2]
 PORT = ROOT / "tab5/main/tab5_native_port.c"
 STUB = r'''
+#include <stdatomic.h>
 #include "native/native_ui.h"
 #include "tab5_ui.h"
+void tab5_ui_encoder_wake(uint32_t ms){(void)ms;}
+#include "tab5_backlight.h"
 #include <assert.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <setjmp.h>
 #include <string.h>
+void tab5_ui_touch(int32_t x,int32_t y,bool p,uint32_t ms){(void)x;(void)y;(void)p;(void)ms;}
+void tab5_ui_input(tab5_ui_input_event_t e,int32_t d,uint32_t ms){(void)e;(void)d;(void)ms;}
+
+#define TAB5_NATIVE_INPUT_CAPACITY 64u
+typedef struct {uint32_t posted,consumed,rejected,pending;} tab5_native_input_stats_t;
 typedef struct {
     bool pending,active,finished,restored,cache_enabled;
     uint32_t request_id,requested_frames,completed_frames,accepted_frames,interval_us,reason,touch_reads,fps_milli;
@@ -230,7 +238,8 @@ static int ppa_unregister_client(void *p){assert(!ppa_inflight);released(p);retu
 static int esp_lcd_panel_disp_on_off(void *p,bool on){(void)p;assert(on);return fails()?ESP_FAIL:0;}
 static bool tab5_panel_ready(void){return !fails();}
 static void tab5_panel_observer_reset(void){}
-static int bsp_display_brightness_set(int n){assert(n==60);return fails()?ESP_FAIL:0;}
+static int brightness_observed=60;
+static int bsp_display_brightness_set(int n){brightness_observed=n;assert(!ui_held&&n>=0&&n<=100);return fails()?ESP_FAIL:0;}
 static int xTaskCreatePinnedToCore(void (*fn)(void*),const char *name,unsigned stack,void *a,unsigned priority,TaskHandle_t *h,int core){
  (void)fn;(void)a;assert(stack==8192&&core==1&&h);assert(priority==4||priority==5);
  if(fails())return 0;*h=!strcmp(name,"native_gpu")?(void*)4:(void*)3;return pdPASS;
@@ -557,8 +566,15 @@ static void odd_roi_proof(void){
  assert(stats.compose_copy_jobs==1&&stats.compose_copy_bytes==18&&stats.compose_ppa_jobs==4);
  puts("Odd ROI PASS:3x3 destination65,65/source1,1 -> canonical65,1212; exact9 GPU pixels, all neighbors unchanged before PPA, CPU complement excludes poisoned9 pixels, complete retained frame exact; dirty alignment16 unchanged");
 }
+static void backlight_output_proof(void){
+ fresh_runtime();assert(tab5_native_port_backlight_configure(300,37));ui_step();assert(brightness_observed==37);
+ test_now+=UINT64_C(301000000);ui_step();assert(brightness_observed==0&&backlight.asleep);
+ assert(tab5_native_port_backlight_configure(0,37));ui_step();assert(brightness_observed==37&&!backlight.asleep);
+ puts("Backlight actual producer BSP output PASS: manual37 -> off0 -> restore37; writes outside UI mutex");
+ cleanup_runtime();
+}
 int main(void){
- startup_proof();overlap_and_benchmark();references_and_lifetimes();backpressure_and_late_error();cancel_proof();known_failures_and_fallback();immutable_flush_proof();odd_roi_proof();cleanup_runtime();
+ backlight_output_proof();startup_proof();overlap_and_benchmark();references_and_lifetimes();backpressure_and_late_error();cancel_proof();known_failures_and_fallback();immutable_flush_proof();odd_roi_proof();cleanup_runtime();
  puts("Actual1717 production producer/worker steps PASS: worker executes no renderer/UI mutex, exactly one canonical/GPU/LCD owner, two immutable FIFO CPU plans and bounded lifetime");return 0;
 }
 
@@ -570,9 +586,11 @@ QUEUE_PROOF = r"""
 #include <stdint.h>
 #include <stdbool.h>
 #include "tab5_native_port.h"
+void tab5_ui_encoder_wake(uint32_t ms){(void)ms;}
 static unsigned samples,downs,ups,encoders,idles;
+static int32_t last_delta;
 void tab5_ui_touch(int32_t x,int32_t y,bool pressed,uint32_t ms){(void)ms;assert(x>=0&&y>=0);samples++;if(pressed)downs++;else ups++;}
-void tab5_ui_input(tab5_ui_input_event_t kind,int32_t delta,uint32_t ms){(void)delta;(void)ms;if(kind==TAB5_UI_INPUT_IDLE)idles++;else encoders++;}
+void tab5_ui_input(tab5_ui_input_event_t kind,int32_t delta,uint32_t ms){last_delta=delta;(void)ms;if(kind==TAB5_UI_INPUT_IDLE)idles++;else encoders++;}
 """
 QUEUE_TEST = r"""
 int main(void){
@@ -595,12 +613,12 @@ def main():
         p = Path(directory)
         (p/'test.c').write_text(STUB+source+TEST, encoding='utf-8')
         subprocess.run(['gcc','-std=c11','-O2','-Wall','-Wextra','-Werror','-Wno-unused-function','-Wno-unused-variable','-Wno-misleading-indentation',
-                        '-I'+str(ROOT/'tab5/main'),str(p/'test.c'),'-o',str(p/'test.exe')],check=True)
+                        '-I'+str(ROOT/'tab5/main'),str(p/'test.c'),str(ROOT/'tab5/main/tab5_backlight.c'),'-o',str(p/'test.exe')],check=True)
         subprocess.run([str(p/'test.exe')],check=True)
         (p/'queue.c').write_text(QUEUE_PROOF+source+QUEUE_TEST, encoding='utf-8')
         subprocess.run(['gcc','-std=c11','-O2','-Wall','-Wextra','-Werror','-Wno-unused-function','-Wno-unused-variable','-Wno-misleading-indentation',
                         '-DTAB5_NATIVE_INPUT_ONLY=1','-I'+str(ROOT/'tab5/main'),
-                        str(p/'queue.c'),'-o',str(p/'queue.exe')],check=True)
+                        str(p/'queue.c'),str(ROOT/'tab5/main/tab5_backlight.c'),'-o',str(p/'queue.exe')],check=True)
         subprocess.run([str(p/'queue.exe')],check=True)
         print('Actual FIFO fresh-only PASS: no duplicate pressed/release on3/7ms wake; encoder+idle dispatch retained, public legacy dispatch unchanged')
 

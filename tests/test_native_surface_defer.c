@@ -82,7 +82,7 @@ static size_t audit_count(const nui_obj_t *o){
     assert(o->potential_draw_handlers==count);return count;
 }
 static void audit_cached_queries(nui_obj_t *o){
-    if((o->w==1094&&o->h==1490)||(o->w==1024&&o->h==120)){
+    if((o->w==1094&&o->h==1714)||(o->w==1024&&o->h==120)){
         nui_layer_t q={.clip={0,0,n.width-1,n.height-1},.opa=255};
         unsigned long long before=callback_audit_visits;bool actual=callbacks_reachable(o,q);
         oracle_nodes=0;assert(actual==audit_oracle(o,q));

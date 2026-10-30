@@ -22,7 +22,7 @@ def main():
         parser.error("C11 compiler required")
     root = Path(__file__).resolve().parents[1]
     main = root / "tab5/main"
-    common = [main / name for name in ("tab5_native_port.c", "tab5_ui.c", "tab5_measure.c", "tab5_ui_graph.c",
+    common = [main / name for name in ("tab5_native_port.c", "tab5_backlight.c", "tab5_ui.c", "tab5_measure.c", "tab5_ui_graph.c",
               "tab5_time.c", "tab5_plot.c", "tab5_level.c", "native/font_native_fallback14.c")]
     common += sorted(main.glob("font_tab5_*.c"))
     harness = "tests/test_native_surface_defer.c"
