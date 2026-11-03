@@ -2,6 +2,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include "tab5_relative.h"
 #ifdef ESP_PLATFORM
 #include "esp_err.h"
 #else
@@ -19,6 +20,9 @@ typedef struct {
  char date[11], time[9];
  double raw_x, raw_y, offset_x, offset_y, calc_x, calc_y, battery;
  uint32_t ms;
+    bool relative_record; /* Extra audit CSV only; legacy D2/D3 columns unchanged. */
+    tab5_relative_config_t relative_config;
+    tab5_relative_result_t relative;
 } tab5_service_sample_t;
 typedef struct {
  bool mounted, recording, failed;
@@ -66,6 +70,11 @@ esp_err_t tab5_services_init(const tab5_services_config_t *config);
 esp_err_t tab5_services_network_configure(const tab5_network_config_t *config);
 void tab5_services_network_snapshot(tab5_network_snapshot_t *out);
 esp_err_t tab5_services_record_start(const char *session);
+esp_err_t tab5_services_record_relative_start(const char *session);
+/* Fail closed while recording/draining/OTA/file transfer or state lock busy. */
+bool tab5_services_mode_change_allowed(void);
+int tab5_services_format_relative_csv(char *out,size_t cap,const tab5_service_sample_t *sample);
+#define TAB5_SERVICE_RELATIVE_HEADER "EventMs;EventSensor;Reference;Object;RefUs;ObjUs;RefSeq;ObjSeq;RefAgeUs;ObjAgeUs;SkewUs;Quality;Ready;AxesConfirmed;RefX;RefY;ObjX;ObjY;LiveDX;LiveDY;OffsetValid;OffsetX;OffsetY;RelDX;RelDY;Generation\n"
 /* Nonblocking: stops accepting samples; medium workers drain/close safely.
  * A new recording remains rejected until both workers finish stopping. */
 void tab5_services_record_stop(void);

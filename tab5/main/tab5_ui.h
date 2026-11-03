@@ -1,11 +1,13 @@
 #ifndef TAB5_UI_H
 #define TAB5_UI_H
 #include "tab5_measure.h"
+#include "tab5_relative.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
 typedef enum { TAB5_UI_START, TAB5_UI_STOP, TAB5_UI_ZERO, TAB5_UI_ZERO_RESET,
-    TAB5_UI_SETTINGS, TAB5_UI_NETWORK, TAB5_UI_TIME, TAB5_UI_TIME_SYNC } tab5_ui_action_kind_t;
+    TAB5_UI_SETTINGS, TAB5_UI_NETWORK, TAB5_UI_TIME, TAB5_UI_TIME_SYNC,
+    TAB5_UI_MODE, TAB5_UI_REL_CONFIG, TAB5_UI_REL_CAPTURE, TAB5_UI_REL_RESET } tab5_ui_action_kind_t;
 typedef struct {
     bool ap_enabled, sta_enabled;
     char ap_ssid[33], ap_password[65], sta_ssid[33], sta_password[65];
@@ -27,6 +29,8 @@ typedef struct {
     bool backlight_timeout_set;
     bool record_sync; /* Global device option, mirrored to PC; no implicit STOP. */
     bool record_sync_set; /* false preserves backend, including old fixtures. */
+    tab5_mode_t mode; /* MODE: active only, never persists or starts recording. */
+    tab5_relative_config_t relative_config; /* REL_CONFIG: persist on explicit save. */
 } tab5_ui_action_t;
 /* Runs in the UI task. Borrowed action: copy to main's queue before returning.
  * main owns validation, persistence, recording and network services. */
@@ -113,6 +117,11 @@ typedef struct {
     uint32_t backlight_timeout_s; /* Persisted value; 0 = never (default). */
     bool backlight_timeout_known;
     bool record_sync_known, record_sync;
+    bool dual_mode_known; /* False preserves legacy host fixtures and layout. */
+    tab5_mode_t mode;
+    tab5_relative_config_t relative_config;
+    tab5_relative_result_t relative;
+    bool dual_controls_locked; /* Recording, close/drain, OTA or file transfer. */
 } tab5_ui_state_t;
 /* All calls require the UI task lock. Display already started
  * and rotated to 1280x720 by main. No task or display created here; a short-lived stepper repeat timer is UI-owned.

@@ -92,6 +92,7 @@ typedef struct {
  tab5_service_sample_t queue[DEPTH];
  unsigned head, count;
  FILE *file[2];
+ FILE *relative_file;
  char root[32];
  uint64_t flushed;
  uint64_t capacity_checked_ms;
@@ -262,12 +263,34 @@ int tab5_services_format_csv(char *out,size_t cap,const tab5_service_sample_t *s
  if(p)for(;*p;p++)if(*p=='.')*p=',';
  return n;
 }
+int tab5_services_format_relative_csv(char *out,size_t cap,const tab5_service_sample_t *s) {
+ if(!out||!s||!s->relative_record||s->relative_config.version!=1||
+    s->relative_config.reference_index>=2||s->relative_config.object_index>=2||
+    s->relative_config.reference_index==s->relative_config.object_index)return -1;
+ const tab5_relative_result_t *r=&s->relative;char v[10][32];
+ double value[]={r->source[0][0],r->source[0][1],r->source[1][0],r->source[1][1],
+     r->ready?r->live[0]:NAN,r->ready?r->live[1]:NAN,r->offset[0],r->offset[1],
+     r->ready?r->relative[0]:NAN,r->ready?r->relative[1]:NAN};
+ for(unsigned i=0;i<10;i++){v[i][0]=0;if(isfinite(value[i]))snprintf(v[i],sizeof(v[i]),"%.3f",value[i]);}
+ int n=snprintf(out,cap,"%lu;%u;%u;%u;%llu;%llu;%llu;%llu;%llu;%llu;%llu;%lu;%u;%u;%s;%s;%s;%s;%s;%s;%u;%s;%s;%s;%s;%lu\n",
+   (unsigned long)s->ms,s->sensor,s->relative_config.reference_index+2,s->relative_config.object_index+2,
+   (unsigned long long)r->timestamp_us[0],(unsigned long long)r->timestamp_us[1],
+   (unsigned long long)r->sequence[0],(unsigned long long)r->sequence[1],
+   (unsigned long long)r->age_us[0],(unsigned long long)r->age_us[1],(unsigned long long)r->skew_us,
+   (unsigned long)r->quality,r->ready?1:0,s->relative_config.axes_confirmed,
+   v[0],v[1],v[2],v[3],v[4],v[5],r->offset_valid?1:0,v[6],v[7],v[8],v[9],(unsigned long)r->generation);
+ return n<0||(size_t)n>=cap?-1:n;
+}
 static void close_medium(medium_t *m) {
  bool bad=false;int error=0;
  for(unsigned j=0;j<2;j++)if(m->file[j]) {
   if(fflush(m->file[j]) || fsync(fileno(m->file[j]))) { bad=true;error=errno?errno:EIO; }
   if(fclose(m->file[j])) { bad=true;error=errno?errno:EIO; }
   m->file[j]=NULL;
+ }
+ if(m->relative_file){
+  if(fflush(m->relative_file)||fsync(fileno(m->relative_file))){bad=true;error=errno?errno:EIO;}
+  if(fclose(m->relative_file)){bad=true;error=errno?errno:EIO;}m->relative_file=NULL;
  }
  lock();m->status.recording=false;if(bad){m->status.failed=true;m->status.error=error;}unlock();
 }
@@ -290,11 +313,17 @@ static void media_step(unsigned i) {
   char line[320];int n=tab5_services_format_csv(line,sizeof(line),&s);
   if(n<0 || !m->file[s.sensor-2] || fwrite(line,1,n,m->file[s.sensor-2])!=(size_t)n) {
    lock();m->status.dropped++;unlock();fail_medium(m,errno);
+  } else if(m->relative_file){
+   char relative_line[640];int count=tab5_services_format_relative_csv(relative_line,sizeof(relative_line),&s);
+   if(count<0||fwrite(relative_line,1,count,m->relative_file)!=(size_t)count){
+    lock();m->status.dropped++;unlock();fail_medium(m,errno);
+   }else{lock();m->status.written++;unlock();}
   } else {lock();m->status.written++;unlock();}
  }
  if(now_ms()-m->flushed>=1000) {
   bool bad=false;
   for(unsigned j=0;j<2;j++)if(m->file[j] && (fflush(m->file[j]) || fsync(fileno(m->file[j]))))bad=true;
+  if(m->relative_file && (fflush(m->relative_file)||fsync(fileno(m->relative_file))))bad=true;
   if(bad)fail_medium(m,errno);
   m->flushed=now_ms();
  }
@@ -315,7 +344,7 @@ static void maintenance(void) {
  bool reboot=ota.committed && ota.reboot_at && now_ms()>=ota.reboot_at;
  unlock();if(reboot)esp_restart();
 }
-esp_err_t tab5_services_record_start(const char *name) {
+static esp_err_t record_start(const char *name,bool relative) {
  if(!initialized || !basename_ok(name) || strlen(name)>56)return ESP_ERR_INVALID_ARG;
  if(!storage_ready)return ESP_ERR_INVALID_STATE;
  lock();if(recording || stopping || ota.active || ota.committed || files_busy){unlock();return ESP_ERR_INVALID_STATE;}
@@ -333,11 +362,25 @@ esp_err_t tab5_services_record_start(const char *name) {
     m->file[j]=fdopen(fd,"w");if(!m->file[j]){close(fd);ok=false;break;}
     if(fputs(TAB5_SERVICE_CSV_HEADER,m->file[j])<0 || fflush(m->file[j]) || fsync(fd)){ok=false;break;}
    }
+   if(ok&&relative){
+    char path[128];snprintf(path,sizeof(path),"%s/%s_REL.CSV",m->root,name);
+    int fd=open(path,O_WRONLY|O_CREAT|O_EXCL,0666);
+    if(fd<0)ok=false;
+    else{m->relative_file=fdopen(fd,"w");if(!m->relative_file){close(fd);ok=false;}
+     else if(fputs(TAB5_SERVICE_RELATIVE_HEADER,m->relative_file)<0||fflush(m->relative_file)||fsync(fd))ok=false;}
+   }
    if(ok){lock();m->status.recording=true;m->flushed=now_ms();good++;unlock();}else fail_medium(m,errno);
   }
   mu(i);
  }
  if(!good){lock();recording=false;unlock();return ESP_FAIL;}return ESP_OK;
+}
+esp_err_t tab5_services_record_start(const char *name){return record_start(name,false);}
+esp_err_t tab5_services_record_relative_start(const char *name){return record_start(name,true);}
+bool tab5_services_mode_change_allowed(void){
+ if(!initialized||!try_lock())return false;
+ bool allowed=!recording&&!stopping&&!ota.active&&!ota.committed&&!files_busy&&!transfer.owner;
+ unlock();return allowed;
 }
 void tab5_services_record_stop(void) {
  if(!initialized)return;

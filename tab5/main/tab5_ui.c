@@ -34,7 +34,7 @@ NUI_FONT_DECLARE(font_tab5_28);NUI_FONT_DECLARE(font_tab5_36);NUI_FONT_DECLARE(f
 #define F108 (&font_tab5_108)
 enum {BG,CARD,ALT,FRAME,TEXT,DIM,MUTED,NAV,NAVSEL,NAVTEXT,NAVMUTED,PRIMARY,ORANGE,RED,OUTLINE,GHOST,OK,WARN,ERR,INFO,NEUTRAL,LINE,STYLE_COUNT};
 enum {MEASURE,ROLL,GRAPH,RECORD,SETTINGS,NETWORK};
-enum {A_START=1,A_ZERO,A_RESET,A_APPLY,A_CANCEL,A_REVEAL,A_NET_APPLY,A_LIGHT,A_DARK,A_TIME,A_NUM_OK,A_MODAL_CANCEL,A_CONFIRM,A_DISCARD,A_STAY,A_LANG,A_TEXT_OK,A_TIME_OK,A_NOTICE_CLOSE,A_TIME_SYNC,A_TZ_SELECT,A_TZ_MINUS,A_TZ_PLUS,A_BACKLIGHT,A_RECORD_SYNC};
+enum {A_START=1,A_ZERO,A_RESET,A_APPLY,A_CANCEL,A_REVEAL,A_NET_APPLY,A_LIGHT,A_DARK,A_TIME,A_NUM_OK,A_MODAL_CANCEL,A_CONFIRM,A_DISCARD,A_STAY,A_LANG,A_TEXT_OK,A_TIME_OK,A_NOTICE_CLOSE,A_TIME_SYNC,A_TZ_SELECT,A_TZ_MINUS,A_TZ_PLUS,A_BACKLIGHT,A_RECORD_SYNC,A_DEVICE,A_MODE_HEEL,A_MODE_LEVEL,A_REL_SWAP,A_REL_AXES,A_REL_BOOT,A_REL_SAVE,A_REL_CAPTURE,A_REL_RESET,A_REL_UNIT};
 static struct {
     nui_obj_t *notice,*notice_text;char last_notice[160];
     nui_obj_t *root,*rail,*pages[6],*nav[6],*selected[6],*badge,*rail_time,*rail_power,*rail_resources[3];
@@ -92,6 +92,14 @@ static struct {
     bool touch_down,dragging;int touch_x,touch_y,touch_offset;
     nui_obj_t *touch_view,*touch_content;int *touch_scroll;
 } e;
+static struct {
+    nui_obj_t *entry,*page,*value[2],*source[2],*quality,*basis,*start,*capture,*reset,*unit;
+    nui_obj_t *roles,*axes,*boot,*save,*mode[2],*hint;
+    tab5_relative_config_t draft;
+    unsigned units;
+} dual;
+static void dual_open(void);
+static void dual_refresh(void);
 static void encoder_touch(nui_obj_t *obj, int id);
 static void encoder_paint(void);
 static void encoder_modal_forget(void);
@@ -396,6 +404,87 @@ static void refresh_network(void){
 }
 static void switch_changed(nui_event_t *ev){encoder_touch(nui_event_get_target(ev),0);u.net_draft.ap_enabled=nui_obj_has_state(u.net_switch[0],NUI_STATE_CHECKED);u.net_draft.sta_enabled=nui_obj_has_state(u.net_switch[1],NUI_STATE_CHECKED);refresh_network();}
 static void chart_refresh(bool force);
+/* Dual-mode presentation owns no acquisition or calibration state. */
+static bool dual_locked(void){return u.state.dual_controls_locked||u.state.recording||u.state.sd.recording||u.state.usb.recording;}
+static void dual_send(int kind){
+    if(!u.state.dual_mode_known||dual_locked())return;
+    tab5_ui_action_t a={.kind=kind,.relative_config=dual.draft};
+    if(u.cb)u.cb(&a,u.user);
+}
+static void dual_modal_refresh(void){
+    char b[200];unsigned r=dual.draft.reference_index<2?dual.draft.reference_index:0,m=dual.draft.object_index<2?dual.draft.object_index:1;
+    snprintf(b,sizeof(b),"Опора: адрес %u   /   Объект: адрес %u",u.state.measurement.sensor[r].address,u.state.measurement.sensor[m].address);caption(dual.roles,b);
+    caption(dual.axes,dual.draft.axes_confirmed?"Оси: направление подтверждено":"Оси: подтвердить направление");
+    caption(dual.boot,dual.draft.startup_mode==TAB5_MODE_LEVEL?"При загрузке: Выравнивание":"При загрузке: Креномер");
+    bool lock=dual_locked();enabled(dual.roles,!lock);enabled(dual.axes,!lock);enabled(dual.boot,!lock);enabled(dual.save,!lock);
+    for(unsigned i=0;i<2;i++){enabled(dual.mode[i],!lock);role(dual.mode[i],u.state.mode==(tab5_mode_t)i?PRIMARY:OUTLINE);}
+    text(dual.hint,lock?"Сначала остановите запись. Backend проверяет закрытие / OTA.":"Режим при загрузке — базовый прибор, не опорный датчик.");
+}
+static void dual_open(void){
+    if(!u.state.dual_mode_known)return;
+    dual.draft=u.state.relative_config;
+    open_modal(184,76,1080,620,6);
+    label(u.dialog,"Прибор и роли датчиков",24,16,1008,48,F36,TEXT);
+    dual.mode[0]=button(u.dialog,"Креномер",24,78,492,60,OUTLINE,A_MODE_HEEL);
+    dual.mode[1]=button(u.dialog,"Выравнивание",540,78,516,60,OUTLINE,A_MODE_LEVEL);
+    dual.roles=button(u.dialog,"",24,158,1032,62,FRAME,A_REL_SWAP);
+    label(u.dialog,"Нажмите строку ролей для обмена; один датчик не занимает обе роли.",24,226,1032,32,F20,MUTED);
+    dual.axes=button(u.dialog,"",24,268,1032,60,OUTLINE,A_REL_AXES);
+    dual.boot=button(u.dialog,"",24,344,1032,60,FRAME,A_REL_BOOT);
+    dual.hint=label(u.dialog,"",24,416,1032,34,F24,MUTED);
+    label(u.dialog,"4 датчика / две пары: недоступны. Ноль REL не является калибровкой.",24,462,1032,34,F20,MUTED);
+    button(u.dialog,"Отмена",24,530,492,64,GHOST,A_MODAL_CANCEL);
+    dual.save=button(u.dialog,"Сохранить роли / запуск",540,530,516,64,PRIMARY,A_REL_SAVE);
+    dual_modal_refresh();
+}
+static void dual_build(void){
+    dual.entry=button(u.status_bar,"Прибор",180,6,136,44,NAVSEL,A_DEVICE);
+    dual.page=box(u.pages[MEASURE],0,0,1096,636,BG);
+    label(dual.page,"Выравнивание",0,0,750,58,F48,TEXT);
+    dual.unit=button(dual.page,"Градусы",804,0,292,58,OUTLINE,A_REL_UNIT);
+    dual.basis=label(dual.page,"",0,70,1096,68,F24,MUTED);
+    for(unsigned i=0;i<2;i++){
+        nui_obj_t *c=box(dual.page,i*556,144,540,176,CARD);
+        label(c,i?"Разность Y":"Разность X",20,10,500,42,F32,MUTED);
+        dual.value[i]=label(c,"—",20,54,500,110,F64,TEXT);
+        dual.source[i]=label(dual.page,"",0,338+i*46,1096,42,F28,TEXT);
+    }
+    dual.quality=label(dual.page,"",0,434,1096,82,F24,MUTED);
+    dual.start=button(dual.page,"Старт записи",0,538,360,94,ORANGE,A_START);
+    dual.capture=button(dual.page,"REL отсчёт",376,538,352,94,PRIMARY,A_REL_CAPTURE);
+    dual.reset=button(dual.page,"Сброс REL",744,538,352,94,OUTLINE,A_REL_RESET);
+}
+static void dual_refresh(void){
+    if(!u.state.dual_mode_known){if(dual.entry){hide(dual.entry,true);hide(dual.page,true);nui_obj_set_width(u.rail_time,300);}return;}
+    if(!dual.entry)dual_build();
+    hide(dual.entry,false);nui_obj_set_width(u.rail_time,164);
+
+    bool level=u.state.mode==TAB5_MODE_LEVEL;hide(dual.page,!level);
+    if(u.modal_kind==6)dual_modal_refresh();
+    if(!level)return;
+    const tab5_relative_result_t *r=&u.state.relative;char b[384];
+    if(!r->offset_valid)text(dual.basis,"Живая разность: объект минус опора. Условный ноль, не горизонт.");
+    if(r->offset_valid){
+        if(r->ready&&isfinite(r->live[0])&&isfinite(r->live[1]))snprintf(b,sizeof(b),"REL: разность минус отсчёт; цель может быть непараллельной.\nЖивая X/Y %+.2f / %+.2f°; отсчёт %+.2f / %+.2f°",(double)r->live[0],(double)r->live[1],(double)r->offset[0],(double)r->offset[1]);
+        else if(isfinite(r->offset[0])&&isfinite(r->offset[1]))snprintf(b,sizeof(b),"REL: отсчёт сохранён %+.2f / %+.2f°. Живая пара недоступна.\nСохранённый отсчёт не заменяет потерянный опорный датчик.",(double)r->offset[0],(double)r->offset[1]);
+        else snprintf(b,sizeof(b),"REL: сохранённый отсчёт недоступен. Проверьте состояние пары.");
+        text(dual.basis,b);
+    }
+    for(unsigned i=0;i<2;i++){
+        float v=r->relative[i];
+        if(!r->ready||!isfinite(v))snprintf(b,sizeof(b),"—");
+        else if(dual.units==1){if(fabsf(v)>=89)snprintf(b,sizeof(b),"вне диапазона");else snprintf(b,sizeof(b),"%+.1f мм/м",1000.0*tan(v*3.141592653589793/180.0));}
+        else snprintf(b,sizeof(b),"%+.2f°",(double)v);
+        text(dual.value[i],b);style_color(dual.value[i],NUI_STYLE_TEXT_COLOR,nui_color_hex(r->ready?u.text:u.muted),0);
+        unsigned k=i?u.state.relative_config.object_index:u.state.relative_config.reference_index;
+        if(k>=2)k=i;
+        snprintf(b,sizeof(b),"%s · адрес %u: X %+.2f°   Y %+.2f° (исходные)",i?"Объект":"Опора",u.state.measurement.sensor[k].address,(double)r->source[i][0],(double)r->source[i][1]);if(!r->timestamp_us[i]||!isfinite(r->source[i][0])||!isfinite(r->source[i][1]))snprintf(b,sizeof(b),"%s · адрес %u: исходных данных нет",i?"Объект":"Опора",u.state.measurement.sensor[k].address);text(dual.source[i],b);
+    }
+    const char *reason=r->ready?"Пара пригодна":(r->quality&TAB5_PAIR_AXES)?"Подтвердите оси в меню Прибор":(r->quality&TAB5_PAIR_MISSING)?"Нет ответа датчика":(r->quality&TAB5_PAIR_STALE)?"Устаревшие ответы":(r->quality&TAB5_PAIR_SKEW)?"Рассинхрон пары":(r->quality&TAB5_PAIR_WARMUP)?"Ожидание свежей пары":(r->quality&TAB5_PAIR_RANGE)?"Вне диапазона":"Ошибка пары";
+    snprintf(b,sizeof(b),"%s · возраст %llu / %llu мс · разнос %llu мс\nПределы: 500 / 50 мс. Время приёма, не синхронный замер.",reason,(unsigned long long)(r->age_us[0]/1000),(unsigned long long)(r->age_us[1]/1000),(unsigned long long)(r->skew_us/1000));if(!r->timestamp_us[0]||!r->timestamp_us[1])snprintf(b,sizeof(b),"%s · время пары неизвестно\nПределы: возраст 500 мс / разнос 50 мс.",reason);text(dual.quality,b);
+    caption(dual.unit,dual.units?"мм/м · tan Δ":"Градусы");caption(dual.start,u.state.recording?"Стоп записи":"Старт записи");role(dual.start,u.state.recording?RED:ORANGE);
+    enabled(dual.start,u.state.recording||(r->ready&&!dual_locked()));enabled(dual.capture,r->ready&&!dual_locked());enabled(dual.reset,r->offset_valid&&!dual_locked());
+}
 static void action_event(nui_event_t *ev){
     int id=(intptr_t)nui_event_get_user_data(ev);
     encoder_touch(nui_event_get_target(ev),id);
@@ -408,6 +497,15 @@ static void action_event(nui_event_t *ev){
     if(id>=600&&id<604){unsigned i=id-600;u.visible[i]=!u.visible[i];style_num(u.legend[i],NUI_STYLE_OPA,u.visible[i]?255:115,0);chart_refresh(true);return;}
     if(id>=610&&id<613){u.range=(unsigned)(id-610);chart_refresh(true);return;}
     switch(id){
+    case A_DEVICE:dual_open();break;
+    case A_MODE_HEEL:case A_MODE_LEVEL:if(!dual_locked()){tab5_ui_action_t a={.kind=TAB5_UI_MODE,.mode=id==A_MODE_HEEL?TAB5_MODE_HEEL:TAB5_MODE_LEVEL};if(u.cb)u.cb(&a,u.user);close_modal();}break;
+    case A_REL_SWAP:if(!dual_locked()){uint8_t i=dual.draft.reference_index;dual.draft.reference_index=dual.draft.object_index;dual.draft.object_index=i;dual.draft.axes_confirmed=0;dual_modal_refresh();}break;
+    case A_REL_AXES:if(!dual_locked()){dual.draft.axes_confirmed=!dual.draft.axes_confirmed;dual_modal_refresh();}break;
+    case A_REL_BOOT:if(!dual_locked()){dual.draft.startup_mode=!dual.draft.startup_mode;dual_modal_refresh();}break;
+    case A_REL_SAVE:dual_send(TAB5_UI_REL_CONFIG);close_modal();break;
+    case A_REL_CAPTURE:dual_send(TAB5_UI_REL_CAPTURE);break;
+    case A_REL_RESET:dual_send(TAB5_UI_REL_RESET);break;
+    case A_REL_UNIT:dual.units=!dual.units;dual_refresh();break;
     case A_NOTICE_CLOSE:if(u.notice)nui_obj_delete(u.notice);u.notice=u.notice_text=NULL;break;
     case A_START:dispatch(u.state.recording?TAB5_UI_STOP:TAB5_UI_START);break;
     case A_ZERO:confirm(A_ZERO);break;
@@ -469,7 +567,7 @@ static void encoder_modal_forget(void){
 }
 static unsigned enc_page_count(void){return (unsigned)(sizeof(u.pages)/sizeof(u.pages[0]));}
 static unsigned enc_count(void){
-    if(u.page==MEASURE)return 3;
+    if(u.page==MEASURE)return u.state.dual_mode_known?(u.state.mode==TAB5_MODE_LEVEL?5:4):3;
     if(u.page==GRAPH)return 8;
     if(u.page==RECORD)return 1;
     if(u.page==SETTINGS)return 14;
@@ -477,7 +575,7 @@ static unsigned enc_count(void){
     return 0;
 }
 static nui_obj_t *enc_object(unsigned index){
-    if(u.page==MEASURE)return index==0?u.start[0]:enc_button(index==1?A_ZERO:A_RESET);
+    if(u.page==MEASURE){if(u.state.dual_mode_known){if(index==3)return dual.entry;if(index==4)return dual.unit;if(u.state.mode==TAB5_MODE_LEVEL)return index==0?dual.start:index==1?dual.capture:dual.reset;}return index==0?u.start[0]:enc_button(index==1?A_ZERO:A_RESET);}
     if(u.page==RECORD)return u.start[1];
     if(u.page==GRAPH)return index<3?u.ranges[index]:index==3?u.chart_touch:u.legend[index-4];
     if(u.page==SETTINGS)return index<13?u.setting_rows[index]:u.set_apply;
@@ -669,7 +767,7 @@ static void enc_activate(void){
         if(e.index<9){e.edit=e.index;e.original=e.index<8?u.draft[e.index]:0;e.original_light=u.state.light_theme;e.level=ENC_EDIT;e.streak=0;e.rotating=false;enc_hint("< > вращайте — значение · нажмите — готово · удерживайте — отмена");}
         else if(e.index!=10)enc_action(e.index==9?A_TIME:e.index==11?A_BACKLIGHT:e.index==12?A_RECORD_SYNC:A_APPLY);
     }else if(u.page==GRAPH){if(e.index<3)enc_action(610+e.index);else if(e.index==3){e.cursor=true;e.level=ENC_EDIT;e.cursor_s=u.range==0?30:u.range==1?120:600;e.rotating=false;enc_cursor(0);enc_hint("вращайте — время · нажмите — выйти");}else enc_action(600+e.index-4);}
-    else if(u.page==MEASURE)enc_action(e.index==0?A_START:e.index==1?A_ZERO:A_RESET);
+    else if(u.page==MEASURE){if(u.state.dual_mode_known&&e.index==3)enc_action(A_DEVICE);else if(u.state.dual_mode_known&&u.state.mode==TAB5_MODE_LEVEL)enc_action(e.index==0?A_START:e.index==1?A_REL_CAPTURE:e.index==2?A_REL_RESET:A_REL_UNIT);else enc_action(e.index==0?A_START:e.index==1?A_ZERO:A_RESET);}
     else if(u.page==RECORD)enc_action(A_START);
     else if(u.page==NETWORK){if(e.index==0||e.index==3){unsigned i=e.index==3;nui_obj_t *sw=u.net_switch[i];if(nui_obj_has_state(sw,NUI_STATE_CHECKED))nui_obj_remove_state(sw,NUI_STATE_CHECKED);else nui_obj_add_state(sw,NUI_STATE_CHECKED);nui_obj_send_event(sw,NUI_EVENT_VALUE_CHANGED,NULL);}else if(e.index==6)enc_action(A_REVEAL);else if(e.index==7)enc_action(A_NET_APPLY);else enc_action(500+(e.index<3?e.index-1:e.index-2));}
 }
@@ -974,7 +1072,7 @@ static void build_network(void){
 }
 void tab5_ui_init(tab5_ui_action_cb_t cb,void *user){
     if(u.root){tab5_ui_destroy();}
-    memset(&u,0,sizeof(u));light_changed=sync_changed=light_sent_set=sync_sent_set=false;light_draft=0;sync_draft=false;encoder_reset();if(!role_prop)role_prop=nui_style_register_prop(0);u.cb=cb;u.user=user;palette(true);
+    memset(&u,0,sizeof(u));memset(&dual,0,sizeof(dual));light_changed=sync_changed=light_sent_set=sync_sent_set=false;light_draft=0;sync_draft=false;encoder_reset();if(!role_prop)role_prop=nui_style_register_prop(0);u.cb=cb;u.user=user;palette(true);
     u.root=box(nui_screen_active(),0,0,1280,720,BG);u.rail=box(u.root,0,0,152,720,NAV);
     const char *names[]={"Углы","Качка","График","Запись","Настройки","Сеть"};int icons[]={0,1,13,2,3,4};
     for(unsigned i=0;i<6;i++){
@@ -1132,12 +1230,13 @@ void tab5_ui_update(const tab5_ui_state_t *s){
         }else snprintf(b,sizeof(b),"%s —",resource_names[i]);
         text(u.rail_resources[i+1],b);
     }
-    if(state.datetime_known)snprintf(b,sizeof(b),"%02u.%02u.%04u  %02u:%02u:%02u",state.datetime.day,state.datetime.month,state.datetime.year,state.datetime.hour,state.datetime.minute,state.datetime.second);else snprintf(b,sizeof(b),"Установите часы");text(u.rail_time,b);
+    if(state.dual_mode_known){if(state.datetime_known)snprintf(b,sizeof(b),"%02u:%02u:%02u",state.datetime.hour,state.datetime.minute,state.datetime.second);else snprintf(b,sizeof(b),"Часы —");}else if(state.datetime_known)snprintf(b,sizeof(b),"%02u.%02u.%04u  %02u:%02u:%02u",state.datetime.day,state.datetime.month,state.datetime.year,state.datetime.hour,state.datetime.minute,state.datetime.second);else snprintf(b,sizeof(b),"Установите часы");text(u.rail_time,b);
     if(state.clock.known&&state.clock.battery_present&&isfinite(state.clock.battery_v))snprintf(b,sizeof(b),"%.2f В",(double)state.clock.battery_v);else snprintf(b,sizeof(b),"внешнее");text(u.rail_power,b);
     text(u.status_rec,state.recording?"● ЗАП":"● СТОП");role(u.status_rec,state.recording?RED:NAVSEL);
     snprintf(b,sizeof(b),"SD %s USB %s",state.sd.mounted?"✓":"—",state.usb.mounted?"✓":"—");text(u.status_media,b);
     for(unsigned i=0;i<2;i++){caption(u.start[i],state.recording?"■ Стоп записи":"● Старт записи");role(u.start[i],state.recording?RED:ORANGE);}
     uint64_t now=state.now_known?state.now_us:(uint64_t)nui_tick_get()*1000;if(!u.rendered||now<u.render_us||now-u.render_us>=100000){update_measure();if(u.page==RECORD)update_record();if(u.page==GRAPH)chart_refresh(false);u.rendered=true;u.render_us=now;}
+    dual_refresh();
     if(u.keyboard)keyboard_style(u.keyboard);
     encoder_sync();
 }
