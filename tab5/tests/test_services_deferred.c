@@ -31,7 +31,7 @@ static void csv_usb(const char *name,bool inflight){
  CHECK(recording&&media[TAB5_USB].status.recording&&!media[TAB5_SD].status.recording);
  tab5_service_sample_t sample={.sensor=2,.date="23.10.2026",.time="01:23:45",.raw_x=1.25,.raw_y=-2.5,.battery=NAN,.ms=1234},copy=sample;
  char expected[320];CHECK(tab5_services_format_csv(expected,sizeof(expected),&sample)>0);CHECK(strstr(expected,"1,25;-2,50;")!=NULL);
- CHECK(tab5_services_submit(&sample)==ESP_OK);CHECK(!memcmp(&sample,&copy,sizeof(sample)));
+ CHECK(tab5_services_submit(&sample,record_epoch)==ESP_OK);CHECK(!memcmp(&sample,&copy,sizeof(sample)));
  locks=probe.medium_lock_entries;tab5_services_record_stop();CHECK(probe.medium_lock_entries==locks&&!recording);
  for(unsigned i=0;i<4&&media[TAB5_USB].status.recording;i++)storage_worker_step(TAB5_USB);
  CHECK(!media[TAB5_USB].status.recording&&media[TAB5_USB].status.written==1);
@@ -88,7 +88,7 @@ static void fs_integration(void){
  for(unsigned medium=0;medium<2;medium++){tab5_medium_status_t status;tab5_services_status((tab5_medium_t)medium,&status);CHECK(status.known&&status.mounted&&!status.failed&&status.fs_type==(tab5_fs_type_t)probe.filesystem[medium]);}
  unsigned locks=probe.medium_lock_entries;CHECK(tab5_services_record_start("integration")==ESP_OK);CHECK(probe.medium_lock_entries==locks+2);
  tab5_service_sample_t sample={.sensor=2,.date="23.10.2026",.time="02:34:56",.raw_x=1.25,.raw_y=-2.5,.battery=12.4,.ms=1234};char expected[2][320];
- for(unsigned sensor=2;sensor<=3;sensor++){sample.sensor=sensor;CHECK(tab5_services_format_csv(expected[sensor-2],sizeof(expected[0]),&sample)>0);CHECK(tab5_services_submit(&sample)==ESP_OK);}
+ for(unsigned sensor=2;sensor<=3;sensor++){sample.sensor=sensor;CHECK(tab5_services_format_csv(expected[sensor-2],sizeof(expected[0]),&sample)>0);CHECK(tab5_services_submit(&sample,record_epoch)==ESP_OK);}
  locks=probe.medium_lock_entries;tab5_services_record_stop();CHECK(probe.medium_lock_entries==locks);
  for(unsigned i=0;i<8&&stopping;i++){storage_worker_step(TAB5_SD);storage_worker_step(TAB5_USB);}CHECK(!stopping);
  for(unsigned medium=0;medium<2;medium++)for(unsigned sensor=2;sensor<=3;sensor++){

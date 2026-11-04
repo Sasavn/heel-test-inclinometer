@@ -42,6 +42,7 @@ static QueueHandle_t samples, storage_samples, actions, usb_tx;
 static SemaphoreHandle_t app_mutex, route_mutex;
 static bool route_recording;
 static uint64_t route_start_us;
+static uint64_t route_epoch;
 static float route_battery=NAN;
 static tab5_network_config_t network;
 static bool recording, samples_on, light_theme;
@@ -49,6 +50,10 @@ static uint8_t brightness_pct=60;
 static uint32_t backlight_timeout_s;
 static bool record_sync;
 static tab5_relative_t relative_state, route_relative;
+static tab5_workspace_t workspace;
+static tab5_relative_t relative_session_meta;
+static bool relative_session_known;
+static char relative_session_name[64];
 static bool physical_inputs_ready;
 #if CONFIG_TAB5_INPUT_GPIO_ENABLE
 static bool physical_detent(int delta,uint32_t ms){return tab5_native_port_post_input(TAB5_UI_INPUT_ROT,delta,ms);}
@@ -315,6 +320,19 @@ static void load_config(tab5_measure_config_t *cfg) {
     int16_t offset=180;if(nvs_get_i16(n,"timezone",&offset)==ESP_OK&&tab5_time_offset_valid(offset))tab5_time_set_offset(offset);
     uint32_t session=0;nvs_get_u32(n,"session",&session);measurement_number=session;nvs_close(n);
 }
+static void load_workspace_config(void){
+    tab5_workspace_config_t cfg;tab5_workspace_config_default(&cfg);nvs_handle_t n;
+    if(nvs_open("tab5",NVS_READONLY,&n)==ESP_OK){
+        tab5_workspace_config_t read;size_t size=sizeof(read);
+        if(nvs_get_blob(n,"workspace",&read,&size)==ESP_OK&&size==sizeof(read)&&tab5_workspace_config_valid(&read))cfg=read;
+        nvs_close(n);
+    }
+    tab5_workspace_init(&workspace,&cfg);
+}
+static bool save_workspace_config(const tab5_workspace_config_t *cfg){
+    nvs_handle_t n;if(!tab5_workspace_config_valid(cfg)||nvs_open("tab5",NVS_READWRITE,&n)!=ESP_OK)return false;
+    esp_err_t e=nvs_set_blob(n,"workspace",cfg,sizeof(*cfg));if(e==ESP_OK)e=nvs_commit(n);nvs_close(n);return e==ESP_OK;
+}
 static void load_relative_config(void){
     tab5_relative_config_t cfg;tab5_relative_config_default(&cfg);
     nvs_handle_t n;
@@ -324,6 +342,7 @@ static void load_relative_config(void){
         nvs_close(n);
     }
     tab5_relative_init(&relative_state,&cfg);
+    load_workspace_config();
 }
 static bool save_relative_config(const tab5_relative_config_t *cfg){
     nvs_handle_t n;if(!tab5_relative_config_valid(cfg)||nvs_open("tab5",NVS_READWRITE,&n)!=ESP_OK)return false;
@@ -332,10 +351,7 @@ static bool save_relative_config(const tab5_relative_config_t *cfg){
     nvs_close(n);return e==ESP_OK;
 }
 /* Sole control owner: mode/roles/REL never change a running or closing session. */
-static bool apply_dual_action(const tab5_ui_action_t *a){
-    if(recording||!tab5_services_mode_change_allowed()){
-        snprintf(notice,sizeof(notice),"Сначала завершите запись/передачу и дождитесь закрытия файлов");return false;
-    }
+static bool apply_dual_action_body(const tab5_ui_action_t *a){
     tab5_measure_snapshot_t s;tab5_measure_snapshot(&s);
     if(a->kind==TAB5_UI_MODE){
         if(a->mode!=TAB5_MODE_HEEL&&a->mode!=TAB5_MODE_LEVEL)return false;
@@ -359,15 +375,38 @@ static bool apply_dual_action(const tab5_ui_action_t *a){
     }else if(a->kind==TAB5_UI_REL_RESET){
         tab5_relative_boundary(&relative_state,&s);
         snprintf(notice,sizeof(notice),"REL сброшен; ждём новые ответы обеих головок");
+    }else if(a->kind==TAB5_UI_WORKSPACE_CONFIG){
+        if(relative_state.mode!=TAB5_MODE_LEVEL||!save_workspace_config(&a->workspace_config)){
+            snprintf(notice,sizeof(notice),"Допуск/фильтр не сохранён: параметры или NVS");return false;}
+        tab5_workspace_configure(&workspace,&a->workspace_config);
+        snprintf(notice,sizeof(notice),"Наблюдение: настройки сохранены; допуск не является точностью");
+    }else if(a->kind==TAB5_UI_WORKSPACE_HOLD){
+        tab5_relative_result_t p;uint64_t now=esp_timer_get_time();
+        tab5_relative_evaluate(&relative_state,&s,now,&p);
+        tab5_workspace_update(&workspace,&relative_state.config,&p,now);
+        if(relative_state.mode!=TAB5_MODE_LEVEL||!tab5_workspace_hold(&workspace,a->workspace_hold,now))return false;
+        snprintf(notice,sizeof(notice),"%s",a->workspace_hold?"HOLD: значения сохранены; качество пары остаётся живым":"HOLD снят: живые значения");
+    }else if(a->kind==TAB5_UI_WORKSPACE_CLEAR){
+        if(relative_state.mode!=TAB5_MODE_LEVEL)return false;
+        tab5_workspace_clear(&workspace);
+        snprintf(notice,sizeof(notice),"Наблюдение очищено; ждём новую пару");
     }else return false;
+    tab5_relative_result_t p;uint64_t now=esp_timer_get_time();
+    tab5_relative_evaluate(&relative_state,&s,now,&p);
+    tab5_workspace_update(&workspace,&relative_state.config,&p,now);
     return true;
+}
+static bool apply_dual_action(const tab5_ui_action_t *a){
+    if(recording||!tab5_services_control_begin()){
+        snprintf(notice,sizeof(notice),"Сначала завершите запись/передачу и дождитесь закрытия файлов");return false;}
+    bool ok=apply_dual_action_body(a);tab5_services_control_end();return ok;
 }
 static esp_err_t set_recording(bool on) {
     if(on==recording)return ESP_OK;
     if(on)tab5_native_port_cancel_scroll_benchmark();
     if(!on){xSemaphoreTake(route_mutex,portMAX_DELAY);route_recording=false;xSemaphoreGive(route_mutex);
         tab5_services_record_stop();record_duration_s=(uint32_t)((esp_timer_get_time()-record_start_us)/1000000);
-        recording=false;snprintf(notice,sizeof(notice),"Запись остановлена");return ESP_OK;}
+        recording=false;snprintf(notice,sizeof(notice),"СТОП принят; очереди дописываются, ждём закрытия файлов");return ESP_OK;}
     if(!tab5_board_time_valid()){snprintf(notice,sizeof(notice),"Перед записью установите дату и время");return ESP_ERR_INVALID_STATE;}
     if(relative_state.mode==TAB5_MODE_LEVEL){
         tab5_measure_snapshot_t sample;tab5_relative_result_t pair;tab5_measure_snapshot(&sample);
@@ -377,10 +416,14 @@ static esp_err_t set_recording(bool on) {
     measurement_number++;persist();
     time_t now=time(NULL);struct tm t;tab5_time_local_now(now,&t);char session[64];
     snprintf(session,sizeof(session),"%04d-%02d-%02d_M%03u",t.tm_year+1900,t.tm_mon+1,t.tm_mday,measurement_number);
+    relative_session_known=relative_state.mode==TAB5_MODE_LEVEL;
+    relative_session_meta=relative_state;snprintf(relative_session_name,sizeof(relative_session_name),"%s",session);
     esp_err_t e=relative_state.mode==TAB5_MODE_LEVEL?tab5_services_record_relative_start(session):tab5_services_record_start(session);
+    uint64_t epoch=e==ESP_OK?tab5_services_record_epoch():0;
+    if(e==ESP_OK&&!epoch){tab5_services_record_stop();e=ESP_ERR_INVALID_STATE;}
     if(e==ESP_OK){recording=true;record_start_us=esp_timer_get_time();
         snprintf(record_name,sizeof(record_name),"%.39s",session);record_duration_s=0;
-        xSemaphoreTake(route_mutex,portMAX_DELAY);route_start_us=record_start_us;route_relative=relative_state;route_recording=true;xSemaphoreGive(route_mutex);
+        xSemaphoreTake(route_mutex,portMAX_DELAY);route_start_us=record_start_us;route_epoch=epoch;route_relative=relative_state;route_recording=true;xSemaphoreGive(route_mutex);
         snprintf(notice,sizeof(notice),"Запись %s",session);}
     else snprintf(notice,sizeof(notice),"Запись недоступна: %s",esp_err_to_name(e));
     return e;
@@ -506,7 +549,7 @@ static void command(void *unused,const char *line,tab5_service_reply_fn reply,vo
         reply(ctx,out);reply(ctx,"OK relative");
     }
     else if(strcmp(line,"zero")==0 || strcmp(line,"zero reset")==0){
-        if(recording&&relative_state.mode==TAB5_MODE_LEVEL)reply(ctx,"ERR stop relative recording before zero");
+        if(relative_state.mode==TAB5_MODE_LEVEL&&(recording||!tab5_services_mode_change_allowed()))reply(ctx,"ERR finish relative recording/transfer before zero");
         else{tab5_measure_zero(strcmp(line,"zero reset")==0);reply(ctx,"OK zero");}}
     else if(strcmp(line,"rec on")==0 || strcmp(line,"rec off")==0){reply(ctx,set_recording(strcmp(line,"rec on")==0)==ESP_OK?"OK recording":"ERR recording unavailable");}
     else if(strcmp(line,"samples on")==0 || strcmp(line,"samples off")==0){samples_on=strcmp(line,"samples on")==0;reply(ctx,samples_on?"OK samples on, dropped 0":"OK samples off, dropped 0");}
@@ -528,7 +571,7 @@ static void command(void *unused,const char *line,tab5_service_reply_fn reply,vo
     }
     else if(strcmp(line,"set theme light")==0 || strcmp(line,"set theme dark")==0){light_theme=strstr(line,"light")!=NULL;persist();reply(ctx,"OK theme");}
     else if(strncmp(line,"set ",4)==0){char key[20],tail;double value;
-        if(recording&&relative_state.mode==TAB5_MODE_LEVEL)reply(ctx,"ERR stop relative recording before measurement settings");
+        if(relative_state.mode==TAB5_MODE_LEVEL&&(recording||!tab5_services_mode_change_allowed()))reply(ctx,"ERR finish relative recording/transfer before measurement settings");
         else if(sscanf(line+4,"%19s %lf %c",key,&value,&tail)!=2 || !isfinite(value))reply(ctx,"ERR set syntax");
         else{bool ok=true;tab5_measure_config_t c=s.config;
             if(strcmp(key,"freq")==0 && value>=1 && value<=50 && value==floor(value))c.frequency_hz=(uint16_t)value;
@@ -575,14 +618,15 @@ static tab5_service_sample_t make_row(const sample_event_t *e,float voltage) {
  * disconnected PC cannot hold up delivery to the independent media writers. */
 static void storage_router_task(void *unused) {
     (void)unused;sample_event_t e;uint64_t session_start=0;
+    uint32_t observed_quality=UINT32_MAX;
     tab5_measure_snapshot_t pair_samples={0};tab5_relative_t session_relative={0};
-    for(;;){if(xQueueReceive(storage_samples,&e,portMAX_DELAY)!=pdTRUE)continue;
+    for(;;){bool have=xQueueReceive(storage_samples,&e,pdMS_TO_TICKS(100))==pdTRUE;
         xSemaphoreTake(route_mutex,portMAX_DELAY);
-        bool active=route_recording;uint64_t start=route_start_us;float voltage=route_battery;
+        bool active=route_recording;uint64_t start=route_start_us,epoch=route_epoch;float voltage=route_battery;
         tab5_relative_t current_relative=route_relative;
         xSemaphoreGive(route_mutex);
-        if(active && e.value.timestamp_us>=start){tab5_service_sample_t row=make_row(&e,voltage);
-            if(session_start!=start){session_start=start;memset(&pair_samples,0,sizeof(pair_samples));session_relative=current_relative;}
+        if(active&&session_start!=start){session_start=start;memset(&pair_samples,0,sizeof(pair_samples));session_relative=current_relative;observed_quality=UINT32_MAX;}
+        if(active && have && e.value.timestamp_us>=start){tab5_service_sample_t row=make_row(&e,voltage);
             if(session_relative.mode==TAB5_MODE_LEVEL){
                 pair_samples.sensor[e.index]=e.value;
                 /* Errors do not invoke sample_cb. Propagate current failure
@@ -594,9 +638,23 @@ static void storage_router_task(void *unused) {
                     if(!health.sensor[i].valid)pair_samples.sensor[i].valid=false;
                 }
                 row.relative_record=true;row.relative_config=session_relative.config;
-                tab5_relative_evaluate(&session_relative,&pair_samples,esp_timer_get_time(),&row.relative);
+                row.relative_observed_us=esp_timer_get_time();
+                tab5_relative_evaluate(&session_relative,&pair_samples,row.relative_observed_us,&row.relative);
             }
-            if(tab5_services_submit(&row)!=ESP_OK)__atomic_add_fetch(&storage_drops,1,__ATOMIC_RELAXED);
+            if(tab5_services_submit(&row,epoch)!=ESP_OK)__atomic_add_fetch(&storage_drops,1,__ATOMIC_RELAXED);
+        }
+        /* A quality event is NOT a raw sample. Timeout wakeups observe even
+         * BOTH silent heads; RX times/sequences remain those of actual replies. */
+        if(active&&session_relative.mode==TAB5_MODE_LEVEL){
+            tab5_measure_snapshot_t health;tab5_measure_snapshot(&health);
+            tab5_service_sample_t event={.sensor=session_relative.config.reference_index+2,
+                .relative_record=true,.relative_event=true,.relative_config=session_relative.config};
+            event.relative_observed_us=esp_timer_get_time();event.ms=(uint32_t)(event.relative_observed_us/1000);
+            tab5_relative_evaluate(&session_relative,&health,event.relative_observed_us,&event.relative);
+            if(event.relative.quality!=observed_quality){
+                if(tab5_services_submit(&event,epoch)==ESP_OK)observed_quality=event.relative.quality;
+                else __atomic_add_fetch(&storage_drops,1,__ATOMIC_RELAXED);
+            }
         }
     }
 }
@@ -649,9 +707,10 @@ void app_main(void) {
         sample_event_t sample;while(xQueueReceive(samples,&sample,0)==pdTRUE)consume_sample(&sample);
         tab5_ui_action_t a;
         while(xQueueReceive(actions,&a,0)==pdTRUE){
-            if(a.kind==TAB5_UI_MODE||a.kind==TAB5_UI_REL_CONFIG||a.kind==TAB5_UI_REL_CAPTURE||a.kind==TAB5_UI_REL_RESET){
+            if(a.kind==TAB5_UI_MODE||a.kind==TAB5_UI_REL_CONFIG||a.kind==TAB5_UI_REL_CAPTURE||a.kind==TAB5_UI_REL_RESET||
+               a.kind==TAB5_UI_WORKSPACE_CONFIG||a.kind==TAB5_UI_WORKSPACE_HOLD||a.kind==TAB5_UI_WORKSPACE_CLEAR){
                 ui_result_success=apply_dual_action(&a);ui_result_kind=a.kind;ui_result_serial++;}
-            else if(recording&&relative_state.mode==TAB5_MODE_LEVEL&&
+            else if(relative_state.mode==TAB5_MODE_LEVEL&&(recording||!tab5_services_mode_change_allowed())&&
                 (a.kind==TAB5_UI_ZERO||a.kind==TAB5_UI_ZERO_RESET||a.kind==TAB5_UI_SETTINGS)){
                 ui_result_success=false;ui_result_kind=a.kind;ui_result_serial++;
                 snprintf(notice,sizeof(notice),"Сначала остановите запись выравнивания");}
@@ -734,12 +793,23 @@ void app_main(void) {
         consume_rejected_actions();
         uint64_t now=esp_timer_get_time();resources_refresh(now);if(now-last_battery>=1000000){battery=tab5_board_battery();last_battery=now;
             xSemaphoreTake(route_mutex,portMAX_DELAY);route_battery=battery;xSemaphoreGive(route_mutex);}
-        tab5_ui_state_t ui={.recording=recording,.light_theme=light_theme,.brightness_pct=brightness_pct,
+        /* Bounded history view lives in static single-owner memory, not the
+         * 12KiB main task stack. No additional task or allocation. */
+        static tab5_ui_state_t ui;
+        ui=(tab5_ui_state_t){.recording=recording,.light_theme=light_theme,.brightness_pct=brightness_pct,
             .backlight_timeout_known=true,.backlight_timeout_s=backlight_timeout_s,
             .record_sync_known=true,.record_sync=record_sync};tab5_measure_snapshot(&ui.measurement);
+        /* Snapshot can include a reply received DURING snapshot acquisition.
+         * Freshness/history clock must be read afterwards, never before it. */
+        now=esp_timer_get_time();
         ui.dual_mode_known=true;ui.mode=relative_state.mode;ui.relative_config=relative_state.config;
         ui.dual_controls_locked=recording||!tab5_services_mode_change_allowed();
         tab5_relative_evaluate(&relative_state,&ui.measurement,now,&ui.relative);
+        if(relative_state.mode==TAB5_MODE_LEVEL){
+            tab5_workspace_update(&workspace,&relative_state.config,&ui.relative,now);
+            tab5_workspace_snapshot(&workspace,&ui.workspace);
+        }
+        tab5_relative_t display_relative=relative_state;
         ui.timezone_known=true;ui.timezone_minutes=(int16_t)tab5_time_offset();ui.time_sync_busy=tab5_time_sync_busy();
         snprintf(ui.time_sync_status,sizeof(ui.time_sync_status),"%s",time_sync_status);
         ui.resources_known=resources.known;ui.cpu_known=resources.cpu_known;ui.cpu_load_pct=resources.cpu;
@@ -771,6 +841,24 @@ void app_main(void) {
         tab5_medium_status_t sd,flash;tab5_services_status(TAB5_SD,&sd);tab5_services_status(TAB5_USB,&flash);
         ui.sd=(tab5_ui_medium_t){.known=sd.known,.mounted=sd.mounted,.recording=sd.recording,.failed=sd.failed,.written=sd.written};
         ui.usb=(tab5_ui_medium_t){.known=flash.known,.mounted=flash.mounted,.recording=flash.recording,.failed=flash.failed,.written=flash.written};
+        ui.relative_log.known=sd.known||flash.known;ui.relative_log.closing=sd.closing||flash.closing;
+        ui.relative_log.session_known=relative_session_known;
+        snprintf(ui.relative_log.session,sizeof(ui.relative_log.session),"%s",relative_session_name);
+        ui.relative_log.config=relative_session_meta.config;ui.relative_log.offset_valid=relative_session_meta.offset_valid;
+        memcpy(ui.relative_log.offset,relative_session_meta.offset,sizeof(ui.relative_log.offset));
+        ui.relative_log.generation=relative_session_meta.generation;
+        ui.relative_log.route_drops=__atomic_load_n(&route_drops,__ATOMIC_RELAXED);
+        ui.relative_log.storage_drops=__atomic_load_n(&storage_drops,__ATOMIC_RELAXED);
+        for(unsigned i=0;i<2;i++){
+            const tab5_medium_status_t *m=i?&flash:&sd;
+            ui.relative_log.medium[i].known=m->known&&m->relative_known&&
+                strcmp(m->relative_session,relative_session_name)==0;
+            ui.relative_log.medium[i].opened=m->relative_open;
+            ui.relative_log.medium[i].closed_ok=m->relative_closed_ok;
+            ui.relative_log.medium[i].failed=m->failed;ui.relative_log.medium[i].error=m->error;
+            ui.relative_log.medium[i].rows=m->relative_rows;ui.relative_log.medium[i].gaps=m->relative_gaps;
+            ui.relative_log.medium[i].queued=m->queued;ui.relative_log.medium[i].dropped=m->dropped;
+        }
         ui.capacity[0].details_known=sd.known&&sd.mounted;ui.capacity[1].details_known=flash.known&&flash.mounted;
         for(unsigned i=0;i<2;i++){
             const tab5_medium_status_t *m=i?&flash:&sd;
@@ -792,6 +880,13 @@ void app_main(void) {
              * as "from the future" against the old loop-start timestamp. */
             tab5_measure_snapshot(&ui.measurement);
             ui.now_us=esp_timer_get_time();ui.live_unfiltered=true;
+            tab5_relative_evaluate(&display_relative,&ui.measurement,ui.now_us,&ui.relative);
+            /* Late display lock must not leave a formerly green HOLD live badge. */
+            ui.workspace.live_ready=ui.relative.ready;ui.workspace.live_quality=ui.relative.quality;
+            if(!ui.relative.ready&&!ui.workspace.held)ui.workspace.values_valid=false;
+            ui.workspace.limit_known=ui.relative.ready&&ui.workspace.config.limits_enabled;
+            for(unsigned i=0;i<2;i++)ui.workspace.within_limit[i]=ui.workspace.limit_known&&
+                fabsf(ui.relative.relative[i])<=ui.workspace.config.limit_deg[i];
             portENTER_CRITICAL(&ui_perf_lock);
             for(unsigned i=0;i<2;i++)if(ui.measurement.sensor[i].valid&&ui.measurement.sensor[i].timestamp_us<=ui.now_us){
                 uint64_t age=ui.now_us-ui.measurement.sensor[i].timestamp_us;

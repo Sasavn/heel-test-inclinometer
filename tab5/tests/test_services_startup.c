@@ -43,7 +43,7 @@ int main(void) {
  CHECK(tab5_services_retry(TAB5_USB)==0x1703);tab5_services_status(TAB5_USB,&usb);CHECK(usb.error==0x1703);
  CHECK(tab5_services_record_start("startup_sd_survives")==ESP_OK);
  tab5_service_sample_t sample={.sensor=2,.date="21.10.2026",.time="12:00:00",.raw_x=1.25,.battery=NAN};
- CHECK(tab5_services_submit(&sample)==ESP_OK);media_step(TAB5_SD);stop_and_drain();
+ CHECK(tab5_services_submit(&sample,record_epoch)==ESP_OK);media_step(TAB5_SD);stop_and_drain();
  CHECK(media[TAB5_SD].status.written==1 && !media[TAB5_SD].status.failed);
  FILE *f=fopen("test-sd/startup_sd_survives_D2.CSV","rb");CHECK(f!=NULL);char content[512];size_t n=fread(content,1,sizeof(content)-1,f);content[n]=0;fclose(f);
  /* Windows host stdio translates LF on disk; firmware VFS does not. The pure

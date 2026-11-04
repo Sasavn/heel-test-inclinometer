@@ -23,6 +23,8 @@ typedef struct {
     bool relative_record; /* Extra audit CSV only; legacy D2/D3 columns unchanged. */
     tab5_relative_config_t relative_config;
     tab5_relative_result_t relative;
+    bool relative_event; /* Quality transition, audit-only: NEVER a fabricated raw row. */
+    uint64_t relative_observed_us; /* Observation time, distinct from source RX times. */
 } tab5_service_sample_t;
 typedef struct {
  bool mounted, recording, failed;
@@ -36,6 +38,9 @@ typedef struct {
  bool capacity_known;
  uint64_t total_bytes, free_bytes;
  uint8_t volume_id; /* Registered FatFs pdrv; 0xff when not mounted/unknown. */
+ bool relative_known, relative_open, relative_closed_ok, closing;
+ uint32_t relative_rows, relative_gaps;
+ char relative_session[64]; /* Coherent cached-status identity; prevents cross-session counters. */
 } tab5_medium_status_t;
 /* Reply is one UTF-8 line WITHOUT LF; transport appends LF. Context is borrowed
  * for the synchronous call only. Application emits OK to terminate replies. */
@@ -73,12 +78,18 @@ esp_err_t tab5_services_record_start(const char *session);
 esp_err_t tab5_services_record_relative_start(const char *session);
 /* Fail closed while recording/draining/OTA/file transfer or state lock busy. */
 bool tab5_services_mode_change_allowed(void);
+/* Reserve controls atomically against recorder/OTA/file transfers; no I/O under lock. */
+bool tab5_services_control_begin(void);
+void tab5_services_control_end(void);
 int tab5_services_format_relative_csv(char *out,size_t cap,const tab5_service_sample_t *sample);
-#define TAB5_SERVICE_RELATIVE_HEADER "EventMs;EventSensor;Reference;Object;RefUs;ObjUs;RefSeq;ObjSeq;RefAgeUs;ObjAgeUs;SkewUs;Quality;Ready;AxesConfirmed;RefX;RefY;ObjX;ObjY;LiveDX;LiveDY;OffsetValid;OffsetX;OffsetY;RelDX;RelDY;Generation\n"
+#define TAB5_SERVICE_RELATIVE_HEADER "EventMs;EventSensor;Reference;Object;RefUs;ObjUs;RefSeq;ObjSeq;RefAgeUs;ObjAgeUs;SkewUs;Quality;Ready;AxesConfirmed;RefX;RefY;ObjX;ObjY;LiveDX;LiveDY;OffsetValid;OffsetX;OffsetY;RelDX;RelDY;Generation;Event;ObservedUs\n"
 /* Nonblocking: stops accepting samples; medium workers drain/close safely.
  * A new recording remains rejected until both workers finish stopping. */
 void tab5_services_record_stop(void);
-esp_err_t tab5_services_submit(const tab5_service_sample_t *sample);
+/* Capture after successful START. Zero means no active session. Submit checks
+ * the captured epoch under the SAME lock as enqueue; late A cannot enter B. */
+uint64_t tab5_services_record_epoch(void);
+esp_err_t tab5_services_submit(const tab5_service_sample_t *sample,uint64_t epoch);
 /* Nonblocking coherent snapshot; if state is busy returns the last published
  * value. known=false means no initialized snapshot, never a fabricated failure. */
 void tab5_services_status(tab5_medium_t medium, tab5_medium_status_t *out);

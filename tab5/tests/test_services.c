@@ -7,8 +7,8 @@
 #include <direct.h>
 static unsigned checks;
 #define CHECK(x) do {checks++;if(!(x)){fprintf(stderr,"FAIL %d: %s\n",__LINE__,#x);exit(1);}}while(0)
-static size_t test_write(const void *p,size_t n,size_t count,FILE *f){for(unsigned i=0;i<2;i++)for(unsigned j=0;j<2;j++)if(f==media[i].file[j] && (test_fault[i] || !test_present[i])){errno=test_fault[i]?test_fault[i]:ENODEV;return 0;}return fwrite(p,n,count,f);}
-static int test_sync(int fd){for(unsigned i=0;i<2;i++)for(unsigned j=0;j<2;j++)if(media[i].file[j] && fd==fileno(media[i].file[j]) && (test_fault[i] || !test_present[i])){errno=test_fault[i]?test_fault[i]:ENODEV;return -1;}return _commit(fd);}
+static size_t test_write(const void *p,size_t n,size_t count,FILE *f){for(unsigned i=0;i<2;i++)if(test_fault[i]||!test_present[i]){if(f==media[i].relative_file||f==media[i].file[0]||f==media[i].file[1]){errno=test_fault[i]?test_fault[i]:ENODEV;return 0;}}return fwrite(p,n,count,f);}
+static int test_sync(int fd){for(unsigned i=0;i<2;i++)if(test_fault[i]||!test_present[i]){FILE *files[]={media[i].file[0],media[i].file[1],media[i].relative_file};for(unsigned j=0;j<3;j++)if(files[j]&&fd==fileno(files[j])){errno=test_fault[i]?test_fault[i]:ENODEV;return -1;}}return _commit(fd);}
 static char answer[512];static unsigned replies;
 static char info[512];static uint32_t received_crc,received_bytes,final_crc,final_bytes;
 static void reply(void *ctx,const char *s){
@@ -71,11 +71,11 @@ int main(void){
  begin();upload();test_boot_fail=1;line(1,"ota end");CHECK(!test_boot_selected);reset_ota();
  CHECK(tab5_services_record_start("2026-10-21_M001")==0);
  line(1,"ota begin tab5 esp32p4 2 1.5.0-esp32 768 0000000000000000000000000000000000000000000000000000000000000000");CHECK(!strcmp(answer,"ERR ota busy"));
- CHECK(retry_and_complete(0)!=0);CHECK(tab5_services_submit(&s)==0);media_step(0);media_step(1);CHECK(media[0].status.written==1 && media[1].status.written==1);
- test_lock_busy=1;CHECK(tab5_services_submit(&s)==ESP_ERR_NO_MEM);test_lock_busy=0;CHECK(!media[0].count && !media[1].count);
- test_present[0]=false;CHECK(tab5_services_submit(&s)==0);media_step(0);media_step(1);CHECK(media[0].status.failed && media[1].status.written==2);test_present[0]=true;CHECK(retry_and_complete(0)!=0);stop_and_drain();CHECK(retry_and_complete(0)==0);
- CHECK(tab5_services_record_start("2026-10-21_M002")==0);CHECK(!media[0].status.written && !media[1].status.written && !media[0].status.dropped);test_fault[1]=ENOSPC;CHECK(tab5_services_submit(&s)==0);media_step(1);media_step(0);CHECK(media[1].status.failed && !media[0].status.failed);stop_and_drain();test_fault[1]=0;CHECK(retry_and_complete(1)==0);
- CHECK(tab5_services_record_start("2026-10-21_M003")==0);for(unsigned i=0;i<DEPTH;i++)CHECK(tab5_services_submit(&s)==0);CHECK(tab5_services_submit(&s)!=0);CHECK(media[0].status.dropped==1 && media[1].status.dropped==1);media_step(1);CHECK(tab5_services_submit(&s)==0);CHECK(media[0].status.dropped==2 && media[1].status.dropped==1);stop_and_drain();
+ CHECK(retry_and_complete(0)!=0);CHECK(tab5_services_submit(&s,record_epoch)==0);media_step(0);media_step(1);CHECK(media[0].status.written==1 && media[1].status.written==1);
+ test_lock_busy=1;CHECK(tab5_services_submit(&s,record_epoch)==ESP_ERR_NO_MEM);test_lock_busy=0;CHECK(!media[0].count && !media[1].count);
+ test_present[0]=false;CHECK(tab5_services_submit(&s,record_epoch)==0);media_step(0);media_step(1);CHECK(media[0].status.failed && media[1].status.written==2);test_present[0]=true;CHECK(retry_and_complete(0)!=0);stop_and_drain();CHECK(retry_and_complete(0)==0);
+ CHECK(tab5_services_record_start("2026-10-21_M002")==0);CHECK(!media[0].status.written && !media[1].status.written && !media[0].status.dropped);test_fault[1]=ENOSPC;CHECK(tab5_services_submit(&s,record_epoch)==0);media_step(1);media_step(0);CHECK(media[1].status.failed && !media[0].status.failed);stop_and_drain();test_fault[1]=0;CHECK(retry_and_complete(1)==0);
+ CHECK(tab5_services_record_start("2026-10-21_M003")==0);for(unsigned i=0;i<DEPTH;i++)CHECK(tab5_services_submit(&s,record_epoch)==0);CHECK(tab5_services_submit(&s,record_epoch)!=0);CHECK(media[0].status.dropped==1 && media[1].status.dropped==1);media_step(1);CHECK(tab5_services_submit(&s,record_epoch)==0);CHECK(media[0].status.dropped==2 && media[1].status.dropped==1);stop_and_drain();
  CHECK(tab5_services_record_start("2026-10-21_M001")!=0);CHECK(media[0].status.error==EEXIST);CHECK(retry_and_complete(0)==0);CHECK(retry_and_complete(1)==0);
  line(1,"get 2026-10-21_M001_D2.CSV");CHECK(!strncmp(answer,"G,",2));unsigned guard=0;while(files_busy && guard++<100)tab5_services_poll(1,reply,NULL);CHECK(!files_busy && !strcmp(answer,"OK"));
  CHECK(received_bytes==final_bytes && received_crc==final_crc && received_bytes>0);

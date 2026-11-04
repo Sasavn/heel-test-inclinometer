@@ -115,6 +115,9 @@ static uint64_t medium_retried[2];
 static void storage_worker_step(unsigned i) __attribute__((unused));
 static tab5_retry_backoff_t sd_retry;
 static bool recording, initialized, storage_ready, files_busy, stopping, boot_health;
+static bool control_busy;
+static bool relative_session;
+static uint64_t record_epoch;
 static bool usb_driver_ready;
 static esp_err_t usb_driver_error;
 static bool tcp_started, network_task_failed;
@@ -272,17 +275,19 @@ int tab5_services_format_relative_csv(char *out,size_t cap,const tab5_service_sa
      r->ready?r->live[0]:NAN,r->ready?r->live[1]:NAN,r->offset[0],r->offset[1],
      r->ready?r->relative[0]:NAN,r->ready?r->relative[1]:NAN};
  for(unsigned i=0;i<10;i++){v[i][0]=0;if(isfinite(value[i]))snprintf(v[i],sizeof(v[i]),"%.3f",value[i]);}
- int n=snprintf(out,cap,"%lu;%u;%u;%u;%llu;%llu;%llu;%llu;%llu;%llu;%llu;%lu;%u;%u;%s;%s;%s;%s;%s;%s;%u;%s;%s;%s;%s;%lu\n",
+ int n=snprintf(out,cap,"%lu;%u;%u;%u;%llu;%llu;%llu;%llu;%llu;%llu;%llu;%lu;%u;%u;%s;%s;%s;%s;%s;%s;%u;%s;%s;%s;%s;%lu;%s;%llu\n",
    (unsigned long)s->ms,s->sensor,s->relative_config.reference_index+2,s->relative_config.object_index+2,
    (unsigned long long)r->timestamp_us[0],(unsigned long long)r->timestamp_us[1],
    (unsigned long long)r->sequence[0],(unsigned long long)r->sequence[1],
    (unsigned long long)r->age_us[0],(unsigned long long)r->age_us[1],(unsigned long long)r->skew_us,
    (unsigned long)r->quality,r->ready?1:0,s->relative_config.axes_confirmed,
-   v[0],v[1],v[2],v[3],v[4],v[5],r->offset_valid?1:0,v[6],v[7],v[8],v[9],(unsigned long)r->generation);
+   v[0],v[1],v[2],v[3],v[4],v[5],r->offset_valid?1:0,v[6],v[7],v[8],v[9],(unsigned long)r->generation,
+   s->relative_event?(r->ready?"RECOVERY":"GAP"):"SAMPLE",(unsigned long long)s->relative_observed_us);
  return n<0||(size_t)n>=cap?-1:n;
 }
 static void close_medium(medium_t *m) {
  bool bad=false;int error=0;
+ bool had_relative=m->relative_file!=NULL;
  for(unsigned j=0;j<2;j++)if(m->file[j]) {
   if(fflush(m->file[j]) || fsync(fileno(m->file[j]))) { bad=true;error=errno?errno:EIO; }
   if(fclose(m->file[j])) { bad=true;error=errno?errno:EIO; }
@@ -292,7 +297,9 @@ static void close_medium(medium_t *m) {
   if(fflush(m->relative_file)||fsync(fileno(m->relative_file))){bad=true;error=errno?errno:EIO;}
   if(fclose(m->relative_file)){bad=true;error=errno?errno:EIO;}m->relative_file=NULL;
  }
- lock();m->status.recording=false;if(bad){m->status.failed=true;m->status.error=error;}unlock();
+ lock();m->status.recording=false;m->status.closing=false;m->status.relative_open=false;
+ if(had_relative)m->status.relative_closed_ok=!bad&&!m->status.failed;
+ if(bad){m->status.failed=true;m->status.error=error;}unlock();
 }
 static void fail_medium(medium_t *m,int error) {
  lock();
@@ -311,13 +318,14 @@ static void media_step(unsigned i) {
  unlock();
  if(have) {
   char line[320];int n=tab5_services_format_csv(line,sizeof(line),&s);
-  if(n<0 || !m->file[s.sensor-2] || fwrite(line,1,n,m->file[s.sensor-2])!=(size_t)n) {
+  if(!s.relative_event&&(n<0 || !m->file[s.sensor-2] || fwrite(line,1,n,m->file[s.sensor-2])!=(size_t)n)) {
    lock();m->status.dropped++;unlock();fail_medium(m,errno);
   } else if(m->relative_file){
    char relative_line[640];int count=tab5_services_format_relative_csv(relative_line,sizeof(relative_line),&s);
    if(count<0||fwrite(relative_line,1,count,m->relative_file)!=(size_t)count){
     lock();m->status.dropped++;unlock();fail_medium(m,errno);
-   }else{lock();m->status.written++;unlock();}
+   }else{lock();if(!s.relative_event)m->status.written++;
+    m->status.relative_rows++;if(s.relative_event&&!s.relative.ready)m->status.relative_gaps++;unlock();}
   } else {lock();m->status.written++;unlock();}
  }
  if(now_ms()-m->flushed>=1000) {
@@ -347,12 +355,17 @@ static void maintenance(void) {
 static esp_err_t record_start(const char *name,bool relative) {
  if(!initialized || !basename_ok(name) || strlen(name)>56)return ESP_ERR_INVALID_ARG;
  if(!storage_ready)return ESP_ERR_INVALID_STATE;
- lock();if(recording || stopping || ota.active || ota.committed || files_busy){unlock();return ESP_ERR_INVALID_STATE;}
- recording=true;strcpy(session_name,name);unlock();
+ lock();if(recording || stopping || ota.active || ota.committed || files_busy || control_busy){unlock();return ESP_ERR_INVALID_STATE;}
+ recording=true;relative_session=relative;if(++record_epoch==0)record_epoch++;
+ strcpy(session_name,name);unlock();
  unsigned good=0;
  for(unsigned i=0;i<2;i++) {
-  medium_t *m=&media[i];lock();bool available=!medium_busy[i]&&m->status.mounted&&!m->status.failed;unlock();if(!available||!ml(i))continue;
-  lock();m->head=0;m->count=0;m->status.queued=0;m->status.written=0;m->status.dropped=0;unlock();
+  medium_t *m=&media[i];lock();bool available=!medium_busy[i]&&m->status.mounted&&!m->status.failed;
+  m->head=0;m->count=0;m->status.queued=0;m->status.written=0;m->status.dropped=0;
+  m->status.relative_known=relative;m->status.relative_open=false;m->status.relative_closed_ok=false;
+  snprintf(m->status.relative_session,sizeof(m->status.relative_session),"%s",relative?name:"");
+  m->status.relative_rows=0;m->status.relative_gaps=0;m->status.closing=false;unlock();
+  if(!available||!ml(i))continue;
   if(m->status.mounted && !m->status.failed) {
    bool ok=true;
    for(unsigned j=0;j<2;j++) {
@@ -369,7 +382,7 @@ static esp_err_t record_start(const char *name,bool relative) {
     else{m->relative_file=fdopen(fd,"w");if(!m->relative_file){close(fd);ok=false;}
      else if(fputs(TAB5_SERVICE_RELATIVE_HEADER,m->relative_file)<0||fflush(m->relative_file)||fsync(fd))ok=false;}
    }
-   if(ok){lock();m->status.recording=true;m->flushed=now_ms();good++;unlock();}else fail_medium(m,errno);
+   if(ok){lock();m->status.recording=true;m->status.relative_open=relative;m->flushed=now_ms();good++;unlock();}else fail_medium(m,errno);
   }
   mu(i);
  }
@@ -379,18 +392,32 @@ esp_err_t tab5_services_record_start(const char *name){return record_start(name,
 esp_err_t tab5_services_record_relative_start(const char *name){return record_start(name,true);}
 bool tab5_services_mode_change_allowed(void){
  if(!initialized||!try_lock())return false;
- bool allowed=!recording&&!stopping&&!ota.active&&!ota.committed&&!files_busy&&!transfer.owner;
+ bool allowed=!recording&&!stopping&&!ota.active&&!ota.committed&&!files_busy&&!transfer.owner&&!control_busy;
  unlock();return allowed;
 }
+bool tab5_services_control_begin(void){
+ if(!initialized||!try_lock())return false;
+ bool ok=!recording&&!stopping&&!ota.active&&!ota.committed&&!files_busy&&!transfer.owner&&!control_busy;
+ if(ok)control_busy=true;
+ unlock();return ok;
+}
+void tab5_services_control_end(void){lock();control_busy=false;unlock();}
 void tab5_services_record_stop(void) {
  if(!initialized)return;
- lock();recording=false;stopping=true;unlock();
+ lock();recording=false;stopping=true;for(unsigned i=0;i<2;i++)media[i].status.closing=media[i].status.recording;unlock();
  /* Workers drain accepted samples and close their own files. No caller I/O. */
 }
-esp_err_t tab5_services_submit(const tab5_service_sample_t *s) {
- char validate[320];if(tab5_services_format_csv(validate,sizeof(validate),s)<0)return ESP_ERR_INVALID_ARG;
+uint64_t tab5_services_record_epoch(void){
+ if(!initialized)return 0;
+ lock();uint64_t epoch=recording?record_epoch:0;unlock();return epoch;
+}
+esp_err_t tab5_services_submit(const tab5_service_sample_t *s,uint64_t epoch) {
+ char validate[640];if(!s)return ESP_ERR_INVALID_ARG;
+ if(s->relative_event){if(tab5_services_format_relative_csv(validate,sizeof(validate),s)<0||s->sensor<2||s->sensor>3)return ESP_ERR_INVALID_ARG;}
+ else if(tab5_services_format_csv(validate,sizeof(validate),s)<0)return ESP_ERR_INVALID_ARG;
  if(!try_lock())return ESP_ERR_NO_MEM;
- if(!recording){unlock();return ESP_ERR_INVALID_STATE;}
+ if(!recording||!epoch||epoch!=record_epoch){unlock();return ESP_ERR_INVALID_STATE;}
+ if(s->relative_event&&!relative_session){unlock();return ESP_ERR_INVALID_STATE;}
  unsigned accepted=0;
  for(unsigned i=0;i<2;i++) {
   medium_t *m=&media[i];if(!m->status.recording || m->status.failed)continue;
@@ -439,7 +466,7 @@ static bool ota_line(uint32_t owner,const char *line,tab5_service_reply_fn reply
   else {abort_ota();strcpy(response,"OK ota aborted");}
  } else if(!strncmp(line,"ota begin ",10)) {
   char board[16],chip[16],version[32],sha[65],extra;unsigned proto;unsigned long size;
-  if(ota.active || ota.committed || recording || stopping || files_busy)strcpy(response,"ERR ota busy");
+  if(ota.active || ota.committed || recording || stopping || files_busy || control_busy)strcpy(response,"ERR ota busy");
   else if(!boot_confirmed())strcpy(response,"ERR ota boot unconfirmed");
   else if(sscanf(line+10,"%15s %15s %u %31s %lu %64s %c",board,chip,&proto,version,&size,sha,&extra)!=6 || strcmp(board,"tab5") || strcmp(chip,"esp32p4") || proto!=2 || !version_ok(version) || strlen(sha)!=64 || unhex(sha,ota.expected,32)!=32)strcpy(response,"ERR ota target/version/hash");
   else {
@@ -536,7 +563,7 @@ static bool file_line(uint32_t owner,const char *line,tab5_service_reply_fn repl
   else if(transfer.owner&&!ml(transfer.medium))strcpy(response,"ERR busy");
   else {if(transfer.owner){unsigned i=transfer.medium;transfer_close();mu(i);}strcpy(response,"OK get aborted");}
  } else {
-  lock();bool busy=recording || stopping || ota.active || files_busy;
+  lock();bool busy=recording || stopping || ota.active || files_busy || control_busy;
   if(!busy)files_busy=true;
   unsigned i=media[0].status.mounted&&!media[0].status.failed&&!medium_busy[0]?0:1;
   if(medium_busy[i]||!media[i].status.mounted||media[i].status.failed)busy=true;

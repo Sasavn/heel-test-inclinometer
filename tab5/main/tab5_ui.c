@@ -34,7 +34,7 @@ NUI_FONT_DECLARE(font_tab5_28);NUI_FONT_DECLARE(font_tab5_36);NUI_FONT_DECLARE(f
 #define F108 (&font_tab5_108)
 enum {BG,CARD,ALT,FRAME,TEXT,DIM,MUTED,NAV,NAVSEL,NAVTEXT,NAVMUTED,PRIMARY,ORANGE,RED,OUTLINE,GHOST,OK,WARN,ERR,INFO,NEUTRAL,LINE,STYLE_COUNT};
 enum {MEASURE,ROLL,GRAPH,RECORD,SETTINGS,NETWORK};
-enum {A_START=1,A_ZERO,A_RESET,A_APPLY,A_CANCEL,A_REVEAL,A_NET_APPLY,A_LIGHT,A_DARK,A_TIME,A_NUM_OK,A_MODAL_CANCEL,A_CONFIRM,A_DISCARD,A_STAY,A_LANG,A_TEXT_OK,A_TIME_OK,A_NOTICE_CLOSE,A_TIME_SYNC,A_TZ_SELECT,A_TZ_MINUS,A_TZ_PLUS,A_BACKLIGHT,A_RECORD_SYNC,A_DEVICE,A_MODE_HEEL,A_MODE_LEVEL,A_REL_SWAP,A_REL_AXES,A_REL_BOOT,A_REL_SAVE,A_REL_CAPTURE,A_REL_RESET,A_REL_UNIT};
+enum {A_START=1,A_ZERO,A_RESET,A_APPLY,A_CANCEL,A_REVEAL,A_NET_APPLY,A_LIGHT,A_DARK,A_TIME,A_NUM_OK,A_MODAL_CANCEL,A_CONFIRM,A_DISCARD,A_STAY,A_LANG,A_TEXT_OK,A_TIME_OK,A_NOTICE_CLOSE,A_TIME_SYNC,A_TZ_SELECT,A_TZ_MINUS,A_TZ_PLUS,A_BACKLIGHT,A_RECORD_SYNC,A_DEVICE,A_MODE_HEEL,A_MODE_LEVEL,A_REL_SWAP,A_REL_AXES,A_REL_BOOT,A_REL_SAVE,A_REL_CAPTURE,A_REL_RESET,A_REL_UNIT,A_WS_HOLD,A_WS_CLEAR,A_WS_LIMITS,A_WS_X_MINUS,A_WS_X_PLUS,A_WS_Y_MINUS,A_WS_Y_PLUS,A_WS_FILTER,A_WS_ENABLE,A_WS_SAVE};
 static struct {
     nui_obj_t *notice,*notice_text;char last_notice[160];
     nui_obj_t *root,*rail,*pages[6],*nav[6],*selected[6],*badge,*rail_time,*rail_power,*rail_resources[3];
@@ -98,6 +98,16 @@ static struct {
     tab5_relative_config_t draft;
     unsigned units;
 } dual;
+static struct {
+    nui_obj_t *page[3],*obs[2],*stats[2],*hold,*clear,*limits,*basis,*live,*trend;
+    nui_obj_t *pair[2],*pair_status,*pair_note,*log[2],*log_meta,*log_state,*stop;
+    nui_obj_t *limits_text,*filter_button,*enable_button,*save;
+    tab5_workspace_config_t draft;
+    uint32_t revision,generation;bool seen,light,held;
+} ws;
+static nui_obj_t *enc_button(int id);
+static void workspace_refresh(void);
+static void workspace_limits(void);
 static void dual_open(void);
 static void dual_refresh(void);
 static void encoder_touch(nui_obj_t *obj, int id);
@@ -403,6 +413,7 @@ static void refresh_network(void){
     u.net_dirty=!net_equal(&u.net_draft,&u.state.network)||u.network_failed;enabled(u.net_apply,u.net_dirty&&!u.net_pending);caption(u.reveal,u.unmasked?"Скрыть пароли":"Показать пароли");
 }
 static void switch_changed(nui_event_t *ev){encoder_touch(nui_event_get_target(ev),0);u.net_draft.ap_enabled=nui_obj_has_state(u.net_switch[0],NUI_STATE_CHECKED);u.net_draft.sta_enabled=nui_obj_has_state(u.net_switch[1],NUI_STATE_CHECKED);refresh_network();}
+static bool workspace_level(void);
 static void chart_refresh(bool force);
 /* Dual-mode presentation owns no acquisition or calibration state. */
 static bool dual_locked(void){return u.state.dual_controls_locked||u.state.recording||u.state.sd.recording||u.state.usb.recording;}
@@ -480,10 +491,100 @@ static void dual_refresh(void){
         if(k>=2)k=i;
         snprintf(b,sizeof(b),"%s · адрес %u: X %+.2f°   Y %+.2f° (исходные)",i?"Объект":"Опора",u.state.measurement.sensor[k].address,(double)r->source[i][0],(double)r->source[i][1]);if(!r->timestamp_us[i]||!isfinite(r->source[i][0])||!isfinite(r->source[i][1]))snprintf(b,sizeof(b),"%s · адрес %u: исходных данных нет",i?"Объект":"Опора",u.state.measurement.sensor[k].address);text(dual.source[i],b);
     }
-    const char *reason=r->ready?"Пара пригодна":(r->quality&TAB5_PAIR_AXES)?"Подтвердите оси в меню Прибор":(r->quality&TAB5_PAIR_MISSING)?"Нет ответа датчика":(r->quality&TAB5_PAIR_STALE)?"Устаревшие ответы":(r->quality&TAB5_PAIR_SKEW)?"Рассинхрон пары":(r->quality&TAB5_PAIR_WARMUP)?"Ожидание свежей пары":(r->quality&TAB5_PAIR_RANGE)?"Вне диапазона":"Ошибка пары";
-    snprintf(b,sizeof(b),"%s · возраст %llu / %llu мс · разнос %llu мс\nПределы: 500 / 50 мс. Время приёма, не синхронный замер.",reason,(unsigned long long)(r->age_us[0]/1000),(unsigned long long)(r->age_us[1]/1000),(unsigned long long)(r->skew_us/1000));if(!r->timestamp_us[0]||!r->timestamp_us[1])snprintf(b,sizeof(b),"%s · время пары неизвестно\nПределы: возраст 500 мс / разнос 50 мс.",reason);text(dual.quality,b);
+    const bool pair_time_known=u.state.now_known&&r->timestamp_us[0]&&r->timestamp_us[1]&&r->age_us[0]!=UINT64_MAX&&r->age_us[1]!=UINT64_MAX;
+    const char *reason=!pair_time_known?"Время пары неизвестно":r->ready?"Пара пригодна":(r->quality&TAB5_PAIR_AXES)?"Подтвердите оси в меню Прибор":(r->quality&TAB5_PAIR_MISSING)?"Нет ответа датчика":(r->quality&TAB5_PAIR_STALE)?"Устаревшие ответы":(r->quality&TAB5_PAIR_SKEW)?"Рассинхрон пары":(r->quality&TAB5_PAIR_WARMUP)?"Ожидание свежей пары":(r->quality&TAB5_PAIR_RANGE)?"Вне диапазона":"Ошибка пары";
+    snprintf(b,sizeof(b),"%s · возраст %llu / %llu мс · разнос %llu мс\nПределы: 500 / 50 мс. Время приёма, не синхронный замер.",reason,(unsigned long long)(r->age_us[0]/1000),(unsigned long long)(r->age_us[1]/1000),(unsigned long long)(r->skew_us/1000));if(!pair_time_known)snprintf(b,sizeof(b),"%s · время пары неизвестно\nПределы: возраст 500 мс / разнос 50 мс.",reason);text(dual.quality,b);
     caption(dual.unit,dual.units?"мм/м · tan Δ":"Градусы");caption(dual.start,u.state.recording?"Стоп записи":"Старт записи");role(dual.start,u.state.recording?RED:ORANGE);
     enabled(dual.start,u.state.recording||(r->ready&&!dual_locked()));enabled(dual.capture,r->ready&&!dual_locked());enabled(dual.reset,r->offset_valid&&!dual_locked());
+}
+static bool workspace_level(void){return u.state.dual_mode_known&&u.state.mode==TAB5_MODE_LEVEL;}
+static void workspace_action(int kind){
+    if(!workspace_level()||dual_locked())return;
+    tab5_ui_action_t a={.kind=kind,.workspace_hold=!u.state.workspace.held,.workspace_config=ws.draft};
+    if(u.cb)u.cb(&a,u.user);
+}
+static void workspace_limits_refresh(void){
+    char b[120];snprintf(b,sizeof(b),"Допуск X ±%.2f°     Y ±%.2f°",(double)ws.draft.limit_deg[0],(double)ws.draft.limit_deg[1]);text(ws.limits_text,b);
+    caption(ws.filter_button,ws.draft.filter_enabled?"EMA: включён (только показ)":"EMA: выключен");caption(ws.enable_button,ws.draft.limits_enabled?"Допуски: включены":"Допуски: выключены");enabled(ws.save,!dual_locked());for(int id=A_WS_X_MINUS;id<=A_WS_ENABLE;id++)enabled(enc_button(id),!dual_locked());
+}
+static void workspace_limits(void){
+    if(!workspace_level())return;
+    ws.draft=u.state.workspace.config;
+    open_modal(260,100,960,570,7);label(u.dialog,"Наблюдение: настройки",24,16,912,48,F36,TEXT);
+    ws.limits_text=label(u.dialog,"",24,88,912,44,F32,TEXT);
+    button(u.dialog,"X −0.01°",24,144,216,64,OUTLINE,A_WS_X_MINUS);button(u.dialog,"X +0.01°",256,144,216,64,OUTLINE,A_WS_X_PLUS);
+    button(u.dialog,"Y −0.01°",488,144,216,64,OUTLINE,A_WS_Y_MINUS);button(u.dialog,"Y +0.01°",720,144,216,64,OUTLINE,A_WS_Y_PLUS);
+    ws.filter_button=button(u.dialog,"",24,224,912,64,FRAME,A_WS_FILTER);ws.enable_button=button(u.dialog,"",24,304,912,64,FRAME,A_WS_ENABLE);
+    label(u.dialog,"Допуск задаёт оператор: это не точность датчика.\nEMA не меняет исходные данные, журнал и live-проверку допуска.",24,390,912,68,F24,MUTED);
+    button(u.dialog,"Отмена",24,482,436,64,GHOST,A_MODAL_CANCEL);ws.save=button(u.dialog,"Сохранить",480,482,456,64,PRIMARY,A_WS_SAVE);workspace_limits_refresh();
+}
+static void workspace_trend(nui_event_t *ev){
+    const tab5_workspace_view_t *v=&u.state.workspace;nui_layer_t *l=nui_event_get_layer(ev);nui_area_t a;nui_obj_get_coords(ws.trend,&a);
+    unsigned n=v->count<TAB5_WORKSPACE_CAPACITY?v->count:TAB5_WORKSPACE_CAPACITY;float lo=0,hi=0;bool found=false;
+    for(unsigned j=0;j<n;j++){const tab5_workspace_point_t*p=&v->history[(v->next+TAB5_WORKSPACE_CAPACITY-n+j)%TAB5_WORKSPACE_CAPACITY];if(!p->gap)for(unsigned k=0;k<2;k++)if(isfinite(p->value[k])){if(!found){lo=hi=p->value[k];found=true;}lo=fminf(lo,p->value[k]);hi=fmaxf(hi,p->value[k]);}}
+    if(hi-lo<.02f){lo-=.01f;hi+=.01f;}
+    draw_line(l,a.x1+12,a.y2-16,a.x2-12,a.y2-16,u.border,1,0);
+    if(n<2||!found)return;
+    uint64_t first=v->history[(v->next+TAB5_WORKSPACE_CAPACITY-n)%TAB5_WORKSPACE_CAPACITY].timestamp_us;
+    uint64_t last=v->history[(v->next+TAB5_WORKSPACE_CAPACITY-1)%TAB5_WORKSPACE_CAPACITY].timestamp_us;
+    if(last<=first)return;
+    for(unsigned k=0;k<2;k++)for(unsigned j=1;j<n;j++){
+        const tab5_workspace_point_t*p=&v->history[(v->next+TAB5_WORKSPACE_CAPACITY-n+j-1)%TAB5_WORKSPACE_CAPACITY],*q=&v->history[(v->next+TAB5_WORKSPACE_CAPACITY-n+j)%TAB5_WORKSPACE_CAPACITY];
+        if(p->gap||q->gap||!isfinite(p->value[k])||!isfinite(q->value[k])||p->timestamp_us<first||q->timestamp_us>last||q->timestamp_us<=p->timestamp_us)continue;
+        float width=a.x2-a.x1-24,height=a.y2-a.y1-32;
+        draw_line(l,a.x1+12+width*(double)(p->timestamp_us-first)/(double)(last-first),a.y2-16-height*(p->value[k]-lo)/(hi-lo),a.x1+12+width*(double)(q->timestamp_us-first)/(double)(last-first),a.y2-16-height*(q->value[k]-lo)/(hi-lo),k?u.info:u.warn,2,0);
+    }
+}
+static void workspace_build(void){
+    for(unsigned i=0;i<3;i++)ws.page[i]=box(u.pages[ROLL+i],0,0,1096,636,BG);
+    nui_obj_t *p=ws.page[0];label(p,"Наблюдение",0,0,680,58,F48,TEXT);
+    ws.hold=button(p,"HOLD",790,0,306,60,OUTLINE,A_WS_HOLD);ws.basis=label(p,"",0,72,1096,62,F24,MUTED);
+    for(unsigned i=0;i<2;i++){nui_obj_t*c=box(p,i*556,144,540,140,CARD);label(c,i?"Y относительный":"X относительный",16,8,508,38,F28,MUTED);ws.obs[i]=label(c,"—",16,42,508,68,F56,TEXT);ws.stats[i]=label(p,"",i*556,292,540,44,F24,TEXT);}
+    ws.trend=box(p,0,344,1096,142,CARD);nui_obj_add_event_cb(ws.trend,workspace_trend,NUI_EVENT_DRAW_MAIN,NULL);
+    ws.live=label(p,"",0,492,1096,56,F24,MUTED);ws.clear=button(p,"Сброс наблюдения",0,564,520,72,OUTLINE,A_WS_CLEAR);ws.limits=button(p,"Фильтр / допуски",540,564,556,72,PRIMARY,A_WS_LIMITS);
+    p=ws.page[1];label(p,"Качество пары",0,0,1096,60,F48,TEXT);ws.pair_status=label(p,"",0,76,1096,74,F28,TEXT);
+    for(unsigned i=0;i<2;i++)ws.pair[i]=label(box(p,0,166+i*144,1096,132,CARD),"",20,12,1056,108,F28,TEXT);
+    ws.pair_note=label(p,"",0,468,1096,160,F24,MUTED);
+    p=ws.page[2];label(p,"Журнал выравнивания",0,0,1096,60,F48,TEXT);ws.log_state=label(p,"",0,72,1096,62,F28,TEXT);ws.log_meta=label(p,"",0,142,1096,100,F24,MUTED);
+    for(unsigned i=0;i<2;i++)ws.log[i]=label(box(p,0,254+i*116,1096,104,CARD),"",16,10,1064,84,F24,TEXT);
+    label(p,"Профиль / плоскостность: недоступно. Нужны база, маршрут и методика.",0,494,1096,54,F24,MUTED);ws.stop=button(p,"Стоп записи",0,558,1096,78,RED,A_START);
+}
+static void workspace_refresh(void){
+    bool level=workspace_level();
+    const char *names[]={"Углы","Качка","График","Запись"},*rel[]={"Выравнивание","Наблюдение","Качество пары","Журнал"};
+    for(unsigned i=0;i<4;i++)for(unsigned c=0;c<nui_obj_get_child_count(u.nav[i]);c++){nui_obj_t*o=nui_obj_get_child(u.nav[i],c);if(nui_obj_check_type(o,&nui_label_class)){text(o,level?rel[i]:names[i]);style_font(o,level?F16:F24,0);}}
+    if(!level){for(unsigned i=0;i<3;i++)if(ws.page[i])hide(ws.page[i],true);return;}
+    if(!ws.page[0])workspace_build();
+    for(unsigned i=0;i<3;i++)hide(ws.page[i],false);
+    const tab5_workspace_view_t*v=&u.state.workspace;const tab5_relative_result_t*r=&u.state.relative;char b[512];
+    if(u.page==ROLL){
+        const char *source=r->offset_valid?"REL: живая - отсчёт":"LIVE: объект - опора";
+        if(v->held)snprintf(b,sizeof(b),"%s · HOLD %llu мс · точка %llu мс\nЗаморожено; min/max с явного сброса.",source,(unsigned long long)(v->held_us/1000),(unsigned long long)(v->values_us/1000));
+        else snprintf(b,sizeof(b),"%s · %s · пары %llu / разрывы %llu\nMin/max с явного сброса; время точки %llu мс",source,v->config.filter_enabled?(v->filter_warm?"EMA готов":"EMA прогрев"):"без EMA",(unsigned long long)v->live_pairs,(unsigned long long)v->live_gaps,(unsigned long long)(v->values_us/1000));
+        text(ws.basis,b);
+        for(unsigned i=0;i<2;i++){if(v->known&&v->values_valid&&isfinite(v->value[i]))snprintf(b,sizeof(b),"%+.2f°",(double)v->value[i]);else snprintf(b,sizeof(b),"—");text(ws.obs[i],b);if(v->stats_valid&&isfinite(v->minimum[i])&&isfinite(v->maximum[i]))snprintf(b,sizeof(b),"min %+.2f° max %+.2f° (сброс)",(double)v->minimum[i],(double)v->maximum[i]);else snprintf(b,sizeof(b),"min / max: —");text(ws.stats[i],b);}
+        uint64_t span=0;if(v->count>1&&v->count<=TAB5_WORKSPACE_CAPACITY){uint64_t a=v->history[(v->next+TAB5_WORKSPACE_CAPACITY-v->count)%TAB5_WORKSPACE_CAPACITY].timestamp_us,z=v->history[(v->next+TAB5_WORKSPACE_CAPACITY-1)%TAB5_WORKSPACE_CAPACITY].timestamp_us;if(z>=a)span=z-a;}
+        if(r->timestamp_us[0]&&r->timestamp_us[1]&&r->age_us[0]!=UINT64_MAX&&r->age_us[1]!=UINT64_MAX)snprintf(b,sizeof(b),"LIVE: %s 0x%02lx · возраст %llu/%llu мс · X %s / Y %s\nX жёлтый / Y синий · время приёма %.1f с · разрывы без соединения",r->ready?"OK":"отказ",(unsigned long)r->quality,(unsigned long long)(r->age_us[0]/1000),(unsigned long long)(r->age_us[1]/1000),!(r->ready&&v->limit_known)?"—":v->within_limit[0]?"в допуске":"вне",!(r->ready&&v->limit_known)?"—":v->within_limit[1]?"в допуске":"вне",span/1e6);
+        else snprintf(b,sizeof(b),"LIVE: недоступна 0x%02lx · возраст — / —\nX жёлтый / Y синий · время приёма %.1f с · разрывы без соединения",(unsigned long)r->quality,span/1e6);
+        text(ws.live,b);
+        caption(ws.hold,v->held?"Снять HOLD":"HOLD");enabled(ws.hold,!dual_locked()&&(v->held||(r->ready&&v->values_valid)));enabled(ws.clear,!dual_locked());enabled(ws.limits,!dual_locked()&&v->known);
+        if(!ws.seen||ws.revision!=v->revision||ws.generation!=v->generation||ws.light!=u.light||ws.held!=v->held){nui_obj_invalidate(ws.trend);ws.revision=v->revision;ws.generation=v->generation;ws.light=u.light;ws.held=v->held;ws.seen=true;}
+    }else if(u.page==GRAPH){
+        snprintf(b,sizeof(b),"%s · quality 0x%02lx\nРазнос приёма: %s",r->ready?"Пара пригодна":"Результат недоступен",(unsigned long)r->quality,r->timestamp_us[0]&&r->timestamp_us[1]?"см. времена ниже":"—");if(r->timestamp_us[0]&&r->timestamp_us[1])snprintf(b,sizeof(b),"%s · quality 0x%02lx · разнос %llu мс",r->ready?"Пара пригодна":"Результат недоступен",(unsigned long)r->quality,(unsigned long long)(r->skew_us/1000));text(ws.pair_status,b);
+        for(unsigned i=0;i<2;i++){unsigned k=i?u.state.relative_config.object_index:u.state.relative_config.reference_index;if(k>1)k=i;const tab5_measure_sensor_t*m=&u.state.measurement.sensor[k];if(r->sequence[i]&&r->timestamp_us[i]&&r->age_us[i]!=UINT64_MAX)snprintf(b,sizeof(b),"%s · адрес %u · возраст %llu мс · приём %llu мс\nОтветов %llu / ошибок %llu · последняя ошибка %u · подряд %u",i?"Объект":"Опора",m->address,(unsigned long long)(r->age_us[i]/1000),(unsigned long long)(r->timestamp_us[i]/1000),(unsigned long long)m->good,(unsigned long long)m->errors,m->last_error,m->fail_streak);else snprintf(b,sizeof(b),"%s · адрес %u · время/возраст —\nОтветов %llu / ошибок %llu · последняя ошибка %u",i?"Объект":"Опора",m->address,(unsigned long long)m->good,(unsigned long long)m->errors,m->last_error);text(ws.pair[i],b);}
+        text(ws.pair_note,"Пределы: возраст 500 мс / разнос 50 мс. Это время приёма, не выборки.\nquality: 01 нет ответа; 02 stale; 04 skew; 08 оси; 10 прогрев; 20 диапазон; 40 ошибка.\nОшибка: 0 OK / 1 timeout / 2 CRC / 3 frame / 4 exception / 5 IO.\nВремя измерения внутри датчика и гистограмма ошибок недоступны.");
+    }else if(u.page==RECORD){
+        text(ws.log_state,u.state.relative_log.closing?"Закрываются файлы; дождитесь подтверждения":u.state.recording?"Запись идёт · HOLD не останавливает журнал":"Запись остановлена");
+        char filename[96],offset[96];const bool session_known=u.state.relative_log.session_known&&u.state.relative_log.session[0];
+        if(session_known)snprintf(filename,sizeof(filename),"%.63s_REL.CSV",u.state.relative_log.session);else snprintf(filename,sizeof(filename),"сеанс не создан");
+        if(u.state.relative_log.offset_valid&&isfinite(u.state.relative_log.offset[0])&&isfinite(u.state.relative_log.offset[1]))snprintf(offset,sizeof(offset),"%+.2f / %+.2f°",(double)u.state.relative_log.offset[0],(double)u.state.relative_log.offset[1]);else snprintf(offset,sizeof(offset),"не задан");
+        snprintf(b,sizeof(b),"REL: %s · исходные D2/D3 отдельно\nРоли: %u / %u · offset X/Y %s · gen %lu\nПотери с загрузки: router %lu / storage %lu",filename,u.state.relative_log.config.reference_index+2,u.state.relative_log.config.object_index+2,offset,(unsigned long)u.state.relative_log.generation,(unsigned long)u.state.relative_log.route_drops,(unsigned long)u.state.relative_log.storage_drops);
+        if(!session_known)snprintf(b,sizeof(b),"REL: сеанс не создан\nРоли и отсчёт файла появятся после попытки создания сеанса.");
+        text(ws.log_meta,b);
+        for(unsigned i=0;i<2;i++){if(!u.state.relative_log.known||!u.state.relative_log.medium[i].known)snprintf(b,sizeof(b),"%s: состояние журнала недоступно",i?"USB":"SD");else snprintf(b,sizeof(b),"%s: %s · строк REL %lu / разрывов %lu\nОчередь %lu / потери %lu · код ошибки %d",i?"USB":"SD",u.state.relative_log.medium[i].failed?"ошибка":u.state.relative_log.medium[i].opened?"открыт":u.state.relative_log.medium[i].closed_ok?"закрыт успешно":"не открыт",(unsigned long)u.state.relative_log.medium[i].rows,(unsigned long)u.state.relative_log.medium[i].gaps,(unsigned long)u.state.relative_log.medium[i].queued,(unsigned long)u.state.relative_log.medium[i].dropped,u.state.relative_log.medium[i].error);text(ws.log[i],b);}
+        enabled(ws.stop,u.state.recording);caption(ws.stop,u.state.recording?"Стоп записи":"Запись остановлена");
+    }
+    if(u.modal_kind==7)workspace_limits_refresh();
 }
 static void action_event(nui_event_t *ev){
     int id=(intptr_t)nui_event_get_user_data(ev);
@@ -497,6 +598,13 @@ static void action_event(nui_event_t *ev){
     if(id>=600&&id<604){unsigned i=id-600;u.visible[i]=!u.visible[i];style_num(u.legend[i],NUI_STYLE_OPA,u.visible[i]?255:115,0);chart_refresh(true);return;}
     if(id>=610&&id<613){u.range=(unsigned)(id-610);chart_refresh(true);return;}
     switch(id){
+    case A_WS_HOLD:workspace_action(TAB5_UI_WORKSPACE_HOLD);break;
+    case A_WS_CLEAR:workspace_action(TAB5_UI_WORKSPACE_CLEAR);break;
+    case A_WS_LIMITS:workspace_limits();break;
+    case A_WS_FILTER:ws.draft.filter_enabled=!ws.draft.filter_enabled;workspace_limits_refresh();break;
+    case A_WS_ENABLE:ws.draft.limits_enabled=!ws.draft.limits_enabled;workspace_limits_refresh();break;
+    case A_WS_X_MINUS:case A_WS_X_PLUS:case A_WS_Y_MINUS:case A_WS_Y_PLUS:{unsigned axis=id>=A_WS_Y_MINUS;bool plus=id==A_WS_X_PLUS||id==A_WS_Y_PLUS;ws.draft.limit_deg[axis]=fmaxf(.01f,fminf(90,roundf((ws.draft.limit_deg[axis]+(plus?.01f:-.01f))*100)/100));workspace_limits_refresh();break;}
+    case A_WS_SAVE:workspace_action(TAB5_UI_WORKSPACE_CONFIG);close_modal();break;
     case A_DEVICE:dual_open();break;
     case A_MODE_HEEL:case A_MODE_LEVEL:if(!dual_locked()){tab5_ui_action_t a={.kind=TAB5_UI_MODE,.mode=id==A_MODE_HEEL?TAB5_MODE_HEEL:TAB5_MODE_LEVEL};if(u.cb)u.cb(&a,u.user);close_modal();}break;
     case A_REL_SWAP:if(!dual_locked()){uint8_t i=dual.draft.reference_index;dual.draft.reference_index=dual.draft.object_index;dual.draft.object_index=i;dual.draft.axes_confirmed=0;dual_modal_refresh();}break;
@@ -568,7 +676,8 @@ static void encoder_modal_forget(void){
 static unsigned enc_page_count(void){return (unsigned)(sizeof(u.pages)/sizeof(u.pages[0]));}
 static unsigned enc_count(void){
     if(u.page==MEASURE)return u.state.dual_mode_known?(u.state.mode==TAB5_MODE_LEVEL?5:4):3;
-    if(u.page==GRAPH)return 8;
+    if(workspace_level()&&u.page==ROLL)return 3;
+    if(u.page==GRAPH)return workspace_level()?0:8;
     if(u.page==RECORD)return 1;
     if(u.page==SETTINGS)return 14;
     if(u.page==NETWORK)return 8; /* includes STA password and Apply */
@@ -576,7 +685,8 @@ static unsigned enc_count(void){
 }
 static nui_obj_t *enc_object(unsigned index){
     if(u.page==MEASURE){if(u.state.dual_mode_known){if(index==3)return dual.entry;if(index==4)return dual.unit;if(u.state.mode==TAB5_MODE_LEVEL)return index==0?dual.start:index==1?dual.capture:dual.reset;}return index==0?u.start[0]:enc_button(index==1?A_ZERO:A_RESET);}
-    if(u.page==RECORD)return u.start[1];
+    if(workspace_level()&&u.page==ROLL)return index==0?ws.hold:index==1?ws.clear:ws.limits;
+    if(u.page==RECORD)return workspace_level()?ws.stop:u.start[1];
     if(u.page==GRAPH)return index<3?u.ranges[index]:index==3?u.chart_touch:u.legend[index-4];
     if(u.page==SETTINGS)return index<13?u.setting_rows[index]:u.set_apply;
     if(u.page==NETWORK){nui_obj_t *items[]={u.net_switch[0],u.net_fields[0],u.net_fields[1],u.net_switch[1],u.net_fields[2],u.net_fields[3],u.reveal,u.net_apply};return index<8?items[index]:NULL;}
@@ -766,7 +876,8 @@ static void enc_activate(void){
     if(u.page==SETTINGS){
         if(e.index<9){e.edit=e.index;e.original=e.index<8?u.draft[e.index]:0;e.original_light=u.state.light_theme;e.level=ENC_EDIT;e.streak=0;e.rotating=false;enc_hint("< > вращайте — значение · нажмите — готово · удерживайте — отмена");}
         else if(e.index!=10)enc_action(e.index==9?A_TIME:e.index==11?A_BACKLIGHT:e.index==12?A_RECORD_SYNC:A_APPLY);
-    }else if(u.page==GRAPH){if(e.index<3)enc_action(610+e.index);else if(e.index==3){e.cursor=true;e.level=ENC_EDIT;e.cursor_s=u.range==0?30:u.range==1?120:600;e.rotating=false;enc_cursor(0);enc_hint("вращайте — время · нажмите — выйти");}else enc_action(600+e.index-4);}
+    }else if(workspace_level()&&u.page==ROLL){enc_action(e.index==0?A_WS_HOLD:e.index==1?A_WS_CLEAR:A_WS_LIMITS);}
+    else if(u.page==GRAPH){if(e.index<3)enc_action(610+e.index);else if(e.index==3){e.cursor=true;e.level=ENC_EDIT;e.cursor_s=u.range==0?30:u.range==1?120:600;e.rotating=false;enc_cursor(0);enc_hint("вращайте — время · нажмите — выйти");}else enc_action(600+e.index-4);}
     else if(u.page==MEASURE){if(u.state.dual_mode_known&&e.index==3)enc_action(A_DEVICE);else if(u.state.dual_mode_known&&u.state.mode==TAB5_MODE_LEVEL)enc_action(e.index==0?A_START:e.index==1?A_REL_CAPTURE:e.index==2?A_REL_RESET:A_REL_UNIT);else enc_action(e.index==0?A_START:e.index==1?A_ZERO:A_RESET);}
     else if(u.page==RECORD)enc_action(A_START);
     else if(u.page==NETWORK){if(e.index==0||e.index==3){unsigned i=e.index==3;nui_obj_t *sw=u.net_switch[i];if(nui_obj_has_state(sw,NUI_STATE_CHECKED))nui_obj_remove_state(sw,NUI_STATE_CHECKED);else nui_obj_add_state(sw,NUI_STATE_CHECKED);nui_obj_send_event(sw,NUI_EVENT_VALUE_CHANGED,NULL);}else if(e.index==6)enc_action(A_REVEAL);else if(e.index==7)enc_action(A_NET_APPLY);else enc_action(500+(e.index<3?e.index-1:e.index-2));}
@@ -860,6 +971,7 @@ static void chart_touch(nui_event_t *ev){
     (void)ev;
 }
 static void chart_refresh(bool force){
+    if(workspace_level())return;
     if(!u.chart_cached||u.chart_live_unfiltered!=u.state.live_unfiltered){
         text(u.cursor_label,u.state.live_unfiltered?"Угол без сглаживания · Коснитесь графика для отсчёта":"Коснитесь графика для отсчёта");
         u.chart_live_unfiltered=u.state.live_unfiltered;
@@ -1072,7 +1184,7 @@ static void build_network(void){
 }
 void tab5_ui_init(tab5_ui_action_cb_t cb,void *user){
     if(u.root){tab5_ui_destroy();}
-    memset(&u,0,sizeof(u));memset(&dual,0,sizeof(dual));light_changed=sync_changed=light_sent_set=sync_sent_set=false;light_draft=0;sync_draft=false;encoder_reset();if(!role_prop)role_prop=nui_style_register_prop(0);u.cb=cb;u.user=user;palette(true);
+    memset(&u,0,sizeof(u));memset(&dual,0,sizeof(dual));memset(&ws,0,sizeof(ws));light_changed=sync_changed=light_sent_set=sync_sent_set=false;light_draft=0;sync_draft=false;encoder_reset();if(!role_prop)role_prop=nui_style_register_prop(0);u.cb=cb;u.user=user;palette(true);
     u.root=box(nui_screen_active(),0,0,1280,720,BG);u.rail=box(u.root,0,0,152,720,NAV);
     const char *names[]={"Углы","Качка","График","Запись","Настройки","Сеть"};int icons[]={0,1,13,2,3,4};
     for(unsigned i=0;i<6;i++){
@@ -1096,6 +1208,7 @@ void tab5_ui_init(tab5_ui_action_cb_t cb,void *user){
 static void elapsed(char *dest,size_t n,uint64_t seconds){snprintf(dest,n,"%02u:%02u:%02u",(unsigned)(seconds/3600),(unsigned)(seconds/60%60),(unsigned)(seconds%60));}
 static uint64_t duration(void){if(u.state.rec_duration_known)return u.state.rec_duration_s;if(u.state.rec_known&&u.state.now_known&&u.state.now_us>=u.state.rec_started_us)return (u.state.now_us-u.state.rec_started_us)/1000000;return 0;}
 static void update_record(void){
+    if(workspace_level())return;
     char b[240],d[40];elapsed(d,sizeof(d),duration());text(u.rec_chip,u.state.recording?"● идёт запись":"остановлена");role(u.rec_chip,u.state.recording?ERR:NEUTRAL);
     text(u.rec_file_label,u.state.rec_known&&u.state.rec_file[0]?u.state.rec_file:"—");
     snprintf(b,sizeof(b),"%llu строк · %s · %s",(unsigned long long)(u.state.sd.recording?u.state.sd.written:u.state.usb.written),u.state.rec_duration_known?d:"время —",u.state.sd.recording&&u.state.usb.recording?"SD и USB":u.state.sd.recording?"SD":u.state.usb.recording?"USB":"запись выключена");text(u.rec_detail_label,b);
@@ -1111,7 +1224,7 @@ static void update_record(void){
     }
 }
 static void update_measure(void){
-    const tab5_ui_state_t *s=&u.state;char b[240];bool any=false,both=true;float worst=0;
+    const tab5_ui_state_t *s=&u.state;char b[240];if(workspace_level()&&u.page==ROLL)return;bool any=false,both=true;float worst=0;
     unsigned fill=s->measurement.sensor[0].roll_fill_s;
     for(unsigned i=0;i<2;i++){
         const tab5_measure_sensor_t *m=&s->measurement.sensor[i];
@@ -1236,7 +1349,7 @@ void tab5_ui_update(const tab5_ui_state_t *s){
     snprintf(b,sizeof(b),"SD %s USB %s",state.sd.mounted?"✓":"—",state.usb.mounted?"✓":"—");text(u.status_media,b);
     for(unsigned i=0;i<2;i++){caption(u.start[i],state.recording?"■ Стоп записи":"● Старт записи");role(u.start[i],state.recording?RED:ORANGE);}
     uint64_t now=state.now_known?state.now_us:(uint64_t)nui_tick_get()*1000;if(!u.rendered||now<u.render_us||now-u.render_us>=100000){update_measure();if(u.page==RECORD)update_record();if(u.page==GRAPH)chart_refresh(false);u.rendered=true;u.render_us=now;}
-    dual_refresh();
+    dual_refresh();workspace_refresh();
     if(u.keyboard)keyboard_style(u.keyboard);
     encoder_sync();
 }
