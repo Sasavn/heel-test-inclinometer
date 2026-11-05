@@ -1202,7 +1202,11 @@ void tab5_ui_init(tab5_ui_action_cb_t cb,void *user){
     build_measure();build_roll();build_graph();build_record();build_settings();build_network();
     /* Production default: parent-matte cache, with renderer OOM fallback. */
     tab5_ui_set_scroll_cache_enabled(true);show_page(MEASURE);
-    tab5_ui_state_t state={.light_theme=true};tab5_measure_config_default(&state.measurement.config);tab5_ui_update(&state);
+    /* u.state was cleared above. Keep the initial snapshot in UI-owned storage,
+     * not a second full history-bearing object on the boot task stack. */
+    u.state.light_theme=true;
+    tab5_measure_config_default(&u.state.measurement.config);
+    tab5_ui_update(&u.state);
 }
 
 static void elapsed(char *dest,size_t n,uint64_t seconds){snprintf(dest,n,"%02u:%02u:%02u",(unsigned)(seconds/3600),(unsigned)(seconds/60%60),(unsigned)(seconds%60));}
@@ -1294,19 +1298,21 @@ static void update_notice(const char *s){
 }
 void tab5_ui_update(const tab5_ui_state_t *s){
     if(!u.root||!s)return;
-    /* Work on a borrowed snapshot copy only; never feed presentation values
-     * back into acquisition, recording, roll or zero-offset calculation. */
-    tab5_ui_state_t state=*s;
-    if(state.live_unfiltered)for(unsigned i=0;i<TAB5_SENSOR_COUNT;i++){
-        tab5_measure_sensor_t *m=&state.measurement.sensor[i];
+    /* Copy a borrowed snapshot directly into existing UI-owned storage.
+     * Calls are serialized by the UI lock; never put the full history-bearing
+     * state on a task stack or write presentation values back to the caller.
+     * Init may deliberately pass this same owned snapshot. */
+    if(s!=&u.state)u.state=*s;
+    const tab5_ui_state_t *state=&u.state;
+    if(state->live_unfiltered)for(unsigned i=0;i<TAB5_SENSOR_COUNT;i++){
+        tab5_measure_sensor_t *m=&u.state.measurement.sensor[i];
         m->x=m->decoded_x-m->zero_x;
         m->y=m->decoded_y-m->zero_y;
     }
-    u.state=state;
     if(u.modal_kind==4&&u.confirm_action==A_ZERO)text(nui_obj_get_child(u.dialog,0),confirm_message(A_ZERO));
     encoder_sync(); /* Load clean/first brightness before dirty counting. */
-    tab5_ui_graph_sample(&u.graph,&state);
-    if(u.light!=state.light_theme){palette(state.light_theme);style_color(u.hero,NUI_STYLE_BG_GRAD_COLOR,nui_color_hex(u.navsel),0);}
+    tab5_ui_graph_sample(&u.graph,state);
+    if(u.light!=state->light_theme){palette(state->light_theme);style_color(u.hero,NUI_STYLE_BG_GRAD_COLOR,nui_color_hex(u.navsel),0);}
     style_color(u.chart,NUI_STYLE_BG_COLOR,nui_color_hex(u.card),0);
     style_num(u.chart,NUI_STYLE_BG_OPA,255,0);style_num(u.chart,NUI_STYLE_RADIUS,0,0);
     style_num(u.chart,NUI_STYLE_BORDER_WIDTH,0,0);style_num(u.chart,NUI_STYLE_SHADOW_WIDTH,0,0);
@@ -1316,39 +1322,39 @@ void tab5_ui_update(const tab5_ui_state_t *s){
     for(unsigned k=0;k<4;k++){
         style_color(u.stats[k],NUI_STYLE_BG_COLOR,nui_color_hex(u.card),0);style_num(u.stats[k],NUI_STYLE_BG_OPA,255,0);style_num(u.stats[k],NUI_STYLE_RADIUS,0,0);
     }
-    update_result();update_notice(state.status);if(u.notice_text)style_color(u.notice_text,NUI_STYLE_TEXT_COLOR,nui_color_hex(backend_failure()?u.err:u.info),0);
-    if(u.pending&&!u.settings_failed&&(!state.action_result_known||u.settings_ack)&&(!light_sent_set||(state.backlight_timeout_known&&state.backlight_timeout_s==light_sent))&&(!sync_sent_set||(state.record_sync_known&&state.record_sync==sync_sent))&&cfg_equal(&state.measurement.config,&u.sent)){tab5_measure_config_t current=draft_config();u.pending=false;light_changed=sync_changed=false;u.dirty=!cfg_equal(&current,&u.sent);}
-    if(!u.dirty&&!u.pending)config_values(&state.measurement.config,u.draft);
-    if(u.net_pending&&!u.network_failed&&(!state.action_result_known||u.network_ack)&&net_equal(&state.network,&u.net_sent)){u.net_pending=false;u.net_dirty=!net_equal(&u.net_draft,&u.net_sent);text(u.net_hint,"Сеть: настройки применены");role(u.net_hint,MUTED);}
-    if(!u.net_dirty&&!u.net_pending&&u.modal_kind!=2)u.net_draft=state.network;
+    update_result();update_notice(state->status);if(u.notice_text)style_color(u.notice_text,NUI_STYLE_TEXT_COLOR,nui_color_hex(backend_failure()?u.err:u.info),0);
+    if(u.pending&&!u.settings_failed&&(!state->action_result_known||u.settings_ack)&&(!light_sent_set||(state->backlight_timeout_known&&state->backlight_timeout_s==light_sent))&&(!sync_sent_set||(state->record_sync_known&&state->record_sync==sync_sent))&&cfg_equal(&state->measurement.config,&u.sent)){tab5_measure_config_t current=draft_config();u.pending=false;light_changed=sync_changed=false;u.dirty=!cfg_equal(&current,&u.sent);}
+    if(!u.dirty&&!u.pending)config_values(&state->measurement.config,u.draft);
+    if(u.net_pending&&!u.network_failed&&(!state->action_result_known||u.network_ack)&&net_equal(&state->network,&u.net_sent)){u.net_pending=false;u.net_dirty=!net_equal(&u.net_draft,&u.net_sent);text(u.net_hint,"Сеть: настройки применены");role(u.net_hint,MUTED);}
+    if(!u.net_dirty&&!u.net_pending&&u.modal_kind!=2)u.net_draft=state->network;
     refresh_settings();refresh_network();
     for(unsigned i=0;i<2;i++){
-        role(u.theme_btn[i],state.light_theme==(i==0)?PRIMARY:DIM);
+        role(u.theme_btn[i],state->light_theme==(i==0)?PRIMARY:DIM);
         style_color(u.net_switch[i],NUI_STYLE_BG_COLOR,nui_color_hex(u.action),NUI_PART_INDICATOR|NUI_STATE_CHECKED);style_color(u.net_switch[i],NUI_STYLE_BG_COLOR,nui_color_hex(u.light?0xFFFFFF:0x0B1733),NUI_PART_KNOB);
-        text(u.net_address[i],!state.link.known?"—":i?(state.link.sta_connected?state.link.sta_ip:"—"):(state.link.ap_started?state.link.ap_ip:"—"));bool on=state.link.known&&(i?state.link.sta_connected:state.link.ap_started);text(u.net_chip[i],on?(i?"✓ подключено":"✓ работает"):"—");role(u.net_chip[i],on?OK:NEUTRAL);
+        text(u.net_address[i],!state->link.known?"—":i?(state->link.sta_connected?state->link.sta_ip:"—"):(state->link.ap_started?state->link.ap_ip:"—"));bool on=state->link.known&&(i?state->link.sta_connected:state->link.ap_started);text(u.net_chip[i],on?(i?"✓ подключено":"✓ работает"):"—");role(u.net_chip[i],on?OK:NEUTRAL);
     }
-    char b[240];if(state.tcp_peer_known)snprintf(b,sizeof(b),"✓ клиент %s",state.tcp_peer);else if(state.tcp_clients_known)snprintf(b,sizeof(b),"клиентов %u · адрес —",state.tcp_clients);else snprintf(b,sizeof(b),"клиент: данных нет");text(u.tcp_chip,b);role(u.tcp_chip,state.tcp_clients_known&&state.tcp_clients?OK:NEUTRAL);
-    if(state.link.known)snprintf(b,sizeof(b),"%s : %u",state.link.sta_connected?state.link.sta_ip:state.link.ap_started?state.link.ap_ip:"—",state.link.tcp_port);else snprintf(b,sizeof(b),"—");text(u.tcp_address,b);
-    text(u.clock_text,state.clock.known&&state.clock.time_valid?state.clock.datetime:"Установите часы");text(u.panel_text,state.panel[0]?state.panel:"Экран: автоматический выбор");snprintf(b,sizeof(b),"Прошивка: %s",state.firmware[0]?state.firmware:"—");text(u.fw_text,b);
-    if(state.cpu_known)snprintf(b,sizeof(b),"ЦП %u%%",state.cpu_load_pct>100?100u:(unsigned)state.cpu_load_pct);
+    char b[240];if(state->tcp_peer_known)snprintf(b,sizeof(b),"✓ клиент %s",state->tcp_peer);else if(state->tcp_clients_known)snprintf(b,sizeof(b),"клиентов %u · адрес —",state->tcp_clients);else snprintf(b,sizeof(b),"клиент: данных нет");text(u.tcp_chip,b);role(u.tcp_chip,state->tcp_clients_known&&state->tcp_clients?OK:NEUTRAL);
+    if(state->link.known)snprintf(b,sizeof(b),"%s : %u",state->link.sta_connected?state->link.sta_ip:state->link.ap_started?state->link.ap_ip:"—",state->link.tcp_port);else snprintf(b,sizeof(b),"—");text(u.tcp_address,b);
+    text(u.clock_text,state->clock.known&&state->clock.time_valid?state->clock.datetime:"Установите часы");text(u.panel_text,state->panel[0]?state->panel:"Экран: автоматический выбор");snprintf(b,sizeof(b),"Прошивка: %s",state->firmware[0]?state->firmware:"—");text(u.fw_text,b);
+    if(state->cpu_known)snprintf(b,sizeof(b),"ЦП %u%%",state->cpu_load_pct>100?100u:(unsigned)state->cpu_load_pct);
     else snprintf(b,sizeof(b),"ЦП —");
     text(u.rail_resources[0],b);
-    const uint32_t used[]={state.ram_used_bytes,state.psram_used_bytes};
-    const uint32_t total[]={state.ram_total_bytes,state.psram_total_bytes};
+    const uint32_t used[]={state->ram_used_bytes,state->psram_used_bytes};
+    const uint32_t total[]={state->ram_total_bytes,state->psram_total_bytes};
     const char *resource_names[]={"ОЗУ","PS"};
     for(unsigned i=0;i<2;i++){
-        if(state.resources_known&&total[i]){
+        if(state->resources_known&&total[i]){
             unsigned pct=used[i]>=total[i]?100u:(unsigned)((uint64_t)used[i]*100/total[i]);
             snprintf(b,sizeof(b),"%s %u%%",resource_names[i],pct);
         }else snprintf(b,sizeof(b),"%s —",resource_names[i]);
         text(u.rail_resources[i+1],b);
     }
-    if(state.dual_mode_known){if(state.datetime_known)snprintf(b,sizeof(b),"%02u:%02u:%02u",state.datetime.hour,state.datetime.minute,state.datetime.second);else snprintf(b,sizeof(b),"Часы —");}else if(state.datetime_known)snprintf(b,sizeof(b),"%02u.%02u.%04u  %02u:%02u:%02u",state.datetime.day,state.datetime.month,state.datetime.year,state.datetime.hour,state.datetime.minute,state.datetime.second);else snprintf(b,sizeof(b),"Установите часы");text(u.rail_time,b);
-    if(state.clock.known&&state.clock.battery_present&&isfinite(state.clock.battery_v))snprintf(b,sizeof(b),"%.2f В",(double)state.clock.battery_v);else snprintf(b,sizeof(b),"внешнее");text(u.rail_power,b);
-    text(u.status_rec,state.recording?"● ЗАП":"● СТОП");role(u.status_rec,state.recording?RED:NAVSEL);
-    snprintf(b,sizeof(b),"SD %s USB %s",state.sd.mounted?"✓":"—",state.usb.mounted?"✓":"—");text(u.status_media,b);
-    for(unsigned i=0;i<2;i++){caption(u.start[i],state.recording?"■ Стоп записи":"● Старт записи");role(u.start[i],state.recording?RED:ORANGE);}
-    uint64_t now=state.now_known?state.now_us:(uint64_t)nui_tick_get()*1000;if(!u.rendered||now<u.render_us||now-u.render_us>=100000){update_measure();if(u.page==RECORD)update_record();if(u.page==GRAPH)chart_refresh(false);u.rendered=true;u.render_us=now;}
+    if(state->dual_mode_known){if(state->datetime_known)snprintf(b,sizeof(b),"%02u:%02u:%02u",state->datetime.hour,state->datetime.minute,state->datetime.second);else snprintf(b,sizeof(b),"Часы —");}else if(state->datetime_known)snprintf(b,sizeof(b),"%02u.%02u.%04u  %02u:%02u:%02u",state->datetime.day,state->datetime.month,state->datetime.year,state->datetime.hour,state->datetime.minute,state->datetime.second);else snprintf(b,sizeof(b),"Установите часы");text(u.rail_time,b);
+    if(state->clock.known&&state->clock.battery_present&&isfinite(state->clock.battery_v))snprintf(b,sizeof(b),"%.2f В",(double)state->clock.battery_v);else snprintf(b,sizeof(b),"внешнее");text(u.rail_power,b);
+    text(u.status_rec,state->recording?"● ЗАП":"● СТОП");role(u.status_rec,state->recording?RED:NAVSEL);
+    snprintf(b,sizeof(b),"SD %s USB %s",state->sd.mounted?"✓":"—",state->usb.mounted?"✓":"—");text(u.status_media,b);
+    for(unsigned i=0;i<2;i++){caption(u.start[i],state->recording?"■ Стоп записи":"● Старт записи");role(u.start[i],state->recording?RED:ORANGE);}
+    uint64_t now=state->now_known?state->now_us:(uint64_t)nui_tick_get()*1000;if(!u.rendered||now<u.render_us||now-u.render_us>=100000){update_measure();if(u.page==RECORD)update_record();if(u.page==GRAPH)chart_refresh(false);u.rendered=true;u.render_us=now;}
     dual_refresh();workspace_refresh();
     if(u.keyboard)keyboard_style(u.keyboard);
     encoder_sync();
