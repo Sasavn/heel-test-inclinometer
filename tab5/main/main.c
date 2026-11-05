@@ -502,11 +502,53 @@ static void status(tab5_service_reply_fn reply,void *ctx) {
     cJSON_AddNumberToObject(j,"routing_queue_drops",__atomic_load_n(&route_drops,__ATOMIC_RELAXED));
     char *out=cJSON_PrintUnformatted(j);if(out){reply(ctx,out);cJSON_free(out);reply(ctx,"OK");}else reply(ctx,"ERR memory");cJSON_Delete(j);
 }
+static void input_status(tab5_service_reply_fn reply,void *ctx){
+    tab5_gpio_status s;tab5_input_gpio_snapshot(&s);
+    cJSON *j=cJSON_CreateObject();if(!j){reply(ctx,"ERR input status memory");return;}
+    bool available=s.initialized&&s.sampled;
+    cJSON_AddBoolToObject(j,"enabled",s.enabled);cJSON_AddBoolToObject(j,"initialized",s.initialized);
+    cJSON_AddBoolToObject(j,"raw_available",available);cJSON_AddBoolToObject(j,"read_only",true);
+    cJSON_AddNumberToObject(j,"start_error",s.start_error);
+    cJSON_AddNumberToObject(j,"poll_ms",s.config.poll_ms);cJSON_AddNumberToObject(j,"debounce_ms",s.config.debounce_ms);
+    cJSON_AddNumberToObject(j,"samples",s.samples);
+    cJSON_AddNumberToObject(j,"retry_loops",s.rejected[0]+s.rejected[1]+s.rejected[2]);
+    cJSON_AddNumberToObject(j,"poll_gap_ms",s.poll_gap_ms);cJSON_AddNumberToObject(j,"poll_gap_max_ms",s.poll_gap_max_ms);
+    if(available){cJSON_AddNumberToObject(j,"sample_ms",s.sampled_ms);
+        cJSON_AddNumberToObject(j,"age_ms",(uint32_t)((uint32_t)(esp_timer_get_time()/1000)-s.sampled_ms));}
+    else{cJSON_AddNullToObject(j,"sample_ms");cJSON_AddNullToObject(j,"age_ms");}
+    const char *names[]={"a","b","press","rec"};int pins[]={s.config.a,s.config.b,s.config.press,s.config.record};
+    cJSON *gpio=cJSON_AddObjectToObject(j,"gpio"),*raw=cJSON_AddObjectToObject(j,"raw"),*changes=cJSON_AddObjectToObject(j,"changes");
+    for(unsigned i=0;i<4;i++){
+        if(s.initialized)cJSON_AddNumberToObject(gpio,names[i],pins[i]);else cJSON_AddNullToObject(gpio,names[i]);
+        if(available)cJSON_AddNumberToObject(raw,names[i],s.raw[i]);else cJSON_AddNullToObject(raw,names[i]);
+        cJSON_AddNumberToObject(changes,names[i],s.raw_changes[i]);
+    }
+    cJSON *decoder=cJSON_AddObjectToObject(j,"decoder");
+    cJSON_AddNumberToObject(decoder,"ab_changes",s.ab_changes);cJSON_AddNumberToObject(decoder,"invalid_ab",s.invalid_ab);
+    cJSON_AddNumberToObject(decoder,"partial",s.decoder_partial);
+    cJSON_AddNumberToObject(decoder,"positive",s.detent_positive);cJSON_AddNumberToObject(decoder,"negative",s.detent_negative);
+    cJSON_AddNumberToObject(decoder,"press_down",s.press_down);cJSON_AddNumberToObject(decoder,"press_up",s.press_up);
+    cJSON_AddNumberToObject(decoder,"rec_on",s.record_on);cJSON_AddNumberToObject(decoder,"rec_off",s.record_off);
+    cJSON *callbacks=cJSON_AddObjectToObject(j,"callbacks");const char *cb_names[]={"encoder","button","record"};
+    for(unsigned i=0;i<3;i++){cJSON *c=cJSON_AddObjectToObject(callbacks,cb_names[i]);
+        cJSON_AddNumberToObject(c,"attempts",s.attempts[i]);cJSON_AddNumberToObject(c,"accepted",s.accepted[i]);cJSON_AddNumberToObject(c,"rejected",s.rejected[i]);
+        if(s.attempts[i]){cJSON_AddNumberToObject(c,"event_ms",s.event_ms[i]);cJSON_AddNumberToObject(c,"attempt_ms",s.attempt_ms[i]);
+            cJSON_AddNumberToObject(c,"event_age_ms",s.event_age_ms[i]);cJSON_AddNumberToObject(c,"event_age_max_ms",s.event_age_max_ms[i]);}
+        else{cJSON_AddNullToObject(c,"event_ms");cJSON_AddNullToObject(c,"attempt_ms");cJSON_AddNullToObject(c,"event_age_ms");cJSON_AddNullToObject(c,"event_age_max_ms");}}
+    tab5_native_input_stats_t q;tab5_native_port_input_stats(&q);
+    cJSON *queue=cJSON_AddObjectToObject(j,"ui_queue");
+    cJSON_AddNumberToObject(queue,"posted",q.posted);cJSON_AddNumberToObject(queue,"consumed",q.consumed);
+    cJSON_AddNumberToObject(queue,"rejected",q.rejected);cJSON_AddNumberToObject(queue,"pending",q.pending);
+    char *text=cJSON_PrintUnformatted(j);if(text){reply(ctx,text);cJSON_free(text);reply(ctx,"OK input status");}
+    else reply(ctx,"ERR input status memory");
+    cJSON_Delete(j);
+}
 static void command(void *unused,const char *line,tab5_service_reply_fn reply,void *ctx) {
     (void)unused;xSemaphoreTake(app_mutex,portMAX_DELAY);
     tab5_measure_snapshot_t s;tab5_measure_snapshot(&s);
     if(strcmp(line,"ver")==0){char version[160];snprintf(version,sizeof(version),"BWM427 inclinometer firmware v%s, board=tab5 chip=esp32p4 proto=2",FW_VERSION);reply(ctx,version);reply(ctx,"OK");}
     else if(strcmp(line,"status")==0 || strcmp(line,"diag")==0)status(reply,ctx);
+    else if(strcmp(line,"input status")==0)input_status(reply,ctx);
     else if(strcmp(line,"ui bench status")==0)ui_benchmark_reply(reply,ctx);
     else if(strcmp(line,"ui bench cancel")==0){tab5_native_port_cancel_scroll_benchmark();reply(ctx,"OK benchmark cancel queued");}
     else if(strcmp(line,"ui bench scroll off")==0 || strcmp(line,"ui bench scroll on")==0 || strcmp(line,"ui bench scroll legacy")==0){
@@ -689,7 +731,7 @@ void app_main(void) {
     tab5_native_port_backlight_configure(backlight_timeout_s,brightness_pct);
 #if CONFIG_TAB5_INPUT_GPIO_ENABLE
     /* Explicit optional wiring profile; no GPIO configuration in default build. */
-    const tab5_gpio_config input_config={.a=3,.b=4,.press=2,.record=48,.debounce_ms=30,.poll_ms=5};
+    const tab5_gpio_config input_config={.a=3,.b=4,.press=2,.record=48,.debounce_ms=30,.poll_ms=1};
     const tab5_gpio_callbacks input_callbacks={.detent=physical_detent,.button=physical_press,.record=physical_record};
     esp_err_t input_result=tab5_input_gpio_start(&input_config,&input_callbacks);
     physical_inputs_ready=input_result==ESP_OK;

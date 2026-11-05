@@ -36,7 +36,7 @@ enum {BG,CARD,ALT,FRAME,TEXT,DIM,MUTED,NAV,NAVSEL,NAVTEXT,NAVMUTED,PRIMARY,ORANG
 enum {MEASURE,ROLL,GRAPH,RECORD,SETTINGS,NETWORK};
 enum {A_START=1,A_ZERO,A_RESET,A_APPLY,A_CANCEL,A_REVEAL,A_NET_APPLY,A_LIGHT,A_DARK,A_TIME,A_NUM_OK,A_MODAL_CANCEL,A_CONFIRM,A_DISCARD,A_STAY,A_LANG,A_TEXT_OK,A_TIME_OK,A_NOTICE_CLOSE,A_TIME_SYNC,A_TZ_SELECT,A_TZ_MINUS,A_TZ_PLUS,A_BACKLIGHT,A_RECORD_SYNC,A_DEVICE,A_MODE_HEEL,A_MODE_LEVEL,A_REL_SWAP,A_REL_AXES,A_REL_BOOT,A_REL_SAVE,A_REL_CAPTURE,A_REL_RESET,A_REL_UNIT,A_WS_HOLD,A_WS_CLEAR,A_WS_LIMITS,A_WS_X_MINUS,A_WS_X_PLUS,A_WS_Y_MINUS,A_WS_Y_PLUS,A_WS_FILTER,A_WS_ENABLE,A_WS_SAVE};
 static struct {
-    nui_obj_t *notice,*notice_text;char last_notice[160];
+    nui_obj_t *notice,*notice_text,*notice_close;char last_notice[160];
     nui_obj_t *root,*rail,*pages[6],*nav[6],*selected[6],*badge,*rail_time,*rail_power,*rail_resources[3];
     nui_obj_t *status_bar,*status_rec,*status_media,*measure_roll[2],*roll_window,*roll_calm,*roll_status[2];
     nui_obj_t *settings_view,*settings_content,*setting_rows[13],*brightness_value;
@@ -88,7 +88,8 @@ static struct {
     uint32_t sync_request_serial;
     char sync_previous_status[128];
     uint8_t sent_brightness;bool brightness_pending,brightness_seen;
-    uint32_t hint_ms;
+    uint32_t hint_ms,notice_tick;
+    bool notice_ring;
     bool touch_down,dragging;int touch_x,touch_y,touch_offset;
     nui_obj_t *touch_view,*touch_content;int *touch_scroll;
 } e;
@@ -115,6 +116,7 @@ static void encoder_paint(void);
 static void encoder_modal_forget(void);
 static void encoder_reset(void);
 static void encoder_sync(void);
+static void close_notice(void);
 static void enc_cursor(int delta);
 static void time_feedback(void);
 /* One non-inherited marker per shared role style, registered once across UI
@@ -449,7 +451,7 @@ static void dual_open(void){
     dual_modal_refresh();
 }
 static void dual_build(void){
-    dual.entry=button(u.status_bar,"Прибор",180,6,136,44,NAVSEL,A_DEVICE);
+    dual.entry=button(u.pages[SETTINGS],"Прибор",0,96,1096,72,OUTLINE,A_DEVICE);
     dual.page=box(u.pages[MEASURE],0,0,1096,636,BG);
     label(dual.page,"Выравнивание",0,0,750,58,F48,TEXT);
     dual.unit=button(dual.page,"Градусы",804,0,292,58,OUTLINE,A_REL_UNIT);
@@ -466,9 +468,9 @@ static void dual_build(void){
     dual.reset=button(dual.page,"Сброс REL",744,538,352,94,OUTLINE,A_REL_RESET);
 }
 static void dual_refresh(void){
-    if(!u.state.dual_mode_known){if(dual.entry){hide(dual.entry,true);hide(dual.page,true);nui_obj_set_width(u.rail_time,300);}return;}
+    if(!u.state.dual_mode_known){if(dual.entry){hide(dual.entry,true);hide(dual.page,true);nui_obj_set_y(u.settings_view,96);nui_obj_set_height(u.settings_view,540);}return;}
     if(!dual.entry)dual_build();
-    hide(dual.entry,false);nui_obj_set_width(u.rail_time,164);
+    hide(dual.entry,false);nui_obj_set_y(u.settings_view,184);nui_obj_set_height(u.settings_view,452);
 
     bool level=u.state.mode==TAB5_MODE_LEVEL;hide(dual.page,!level);
     if(u.modal_kind==6)dual_modal_refresh();
@@ -614,7 +616,7 @@ static void action_event(nui_event_t *ev){
     case A_REL_CAPTURE:dual_send(TAB5_UI_REL_CAPTURE);break;
     case A_REL_RESET:dual_send(TAB5_UI_REL_RESET);break;
     case A_REL_UNIT:dual.units=!dual.units;dual_refresh();break;
-    case A_NOTICE_CLOSE:if(u.notice)nui_obj_delete(u.notice);u.notice=u.notice_text=NULL;break;
+    case A_NOTICE_CLOSE:close_notice();break;
     case A_START:dispatch(u.state.recording?TAB5_UI_STOP:TAB5_UI_START);break;
     case A_ZERO:confirm(A_ZERO);break;
     case A_RESET:confirm(A_RESET);break;
@@ -673,22 +675,29 @@ static void encoder_modal_forget(void){
     e.paint_dirty=true;e.buttons_n=n;e.level=e.saved_level;e.index=e.saved_index;
     if(e.frame)hide(e.frame,true);
 }
+/* A notice overlays (rather than replaces) the current encoder context. Its
+ * Close button is deliberately outside the modal/page button registry. */
+static void close_notice(void){
+    if(!u.notice)return;
+    nui_obj_delete(u.notice);u.notice=u.notice_text=u.notice_close=NULL;
+    e.ring=e.notice_ring;e.rotating=false;e.streak=0;e.paint_dirty=true;
+}
 static unsigned enc_page_count(void){return (unsigned)(sizeof(u.pages)/sizeof(u.pages[0]));}
 static unsigned enc_count(void){
-    if(u.page==MEASURE)return u.state.dual_mode_known?(u.state.mode==TAB5_MODE_LEVEL?5:4):3;
+    if(u.page==MEASURE)return u.state.dual_mode_known&&u.state.mode==TAB5_MODE_LEVEL?4:3;
     if(workspace_level()&&u.page==ROLL)return 3;
     if(u.page==GRAPH)return workspace_level()?0:8;
     if(u.page==RECORD)return 1;
-    if(u.page==SETTINGS)return 14;
+    if(u.page==SETTINGS)return u.state.dual_mode_known?15:14;
     if(u.page==NETWORK)return 8; /* includes STA password and Apply */
     return 0;
 }
 static nui_obj_t *enc_object(unsigned index){
-    if(u.page==MEASURE){if(u.state.dual_mode_known){if(index==3)return dual.entry;if(index==4)return dual.unit;if(u.state.mode==TAB5_MODE_LEVEL)return index==0?dual.start:index==1?dual.capture:dual.reset;}return index==0?u.start[0]:enc_button(index==1?A_ZERO:A_RESET);}
+    if(u.page==MEASURE){if(u.state.dual_mode_known){if(index==3)return dual.unit;if(u.state.mode==TAB5_MODE_LEVEL)return index==0?dual.start:index==1?dual.capture:dual.reset;}return index==0?u.start[0]:enc_button(index==1?A_ZERO:A_RESET);}
     if(workspace_level()&&u.page==ROLL)return index==0?ws.hold:index==1?ws.clear:ws.limits;
     if(u.page==RECORD)return workspace_level()?ws.stop:u.start[1];
     if(u.page==GRAPH)return index<3?u.ranges[index]:index==3?u.chart_touch:u.legend[index-4];
-    if(u.page==SETTINGS)return index<13?u.setting_rows[index]:u.set_apply;
+    if(u.page==SETTINGS){if(u.state.dual_mode_known){if(!index)return dual.entry;index--;}return index<13?u.setting_rows[index]:u.set_apply;}
     if(u.page==NETWORK){nui_obj_t *items[]={u.net_switch[0],u.net_fields[0],u.net_fields[1],u.net_switch[1],u.net_fields[2],u.net_fields[3],u.reveal,u.net_apply};return index<8?items[index]:NULL;}
     return NULL;
 }
@@ -749,7 +758,7 @@ void tab5_ui_clear_scroll_cache(void){
     if(u.notice)nui_obj_clear_layer_cache(u.notice);
 }
 bool tab5_ui_scroll_benchmark_begin(tab5_ui_scroll_benchmark_state_t *saved,int *maximum){
-    if(!saved||!maximum||!u.root||u.modal_kind||e.touch_down||u.state.recording||u.dirty||u.pending)return false;
+    if(!saved||!maximum||!u.root||u.modal_kind||u.notice||e.touch_down||u.state.recording||u.dirty||u.pending)return false;
     *saved=(tab5_ui_scroll_benchmark_state_t){.page=u.page,.index=e.index,.level=e.level,.settings_offset=e.settings_offset,.ring=e.ring,.valid=true};
     e.ring=false;show_page(SETTINGS);encoder_paint();
     *maximum=nui_obj_get_height(u.settings_content)-nui_obj_get_height(u.settings_view);
@@ -792,14 +801,17 @@ static void encoder_sync(void){
         else if(!u.settings_failed){u.pending=true;u.draft[7]=e.sent_brightness;}
     }
     if(e.hint&&(uint32_t)(nui_tick_get()-e.hint_ms)>=2600)hide(e.hint,true);
-    if(e.frame)encoder_paint();
+    if(e.frame||e.ring)encoder_paint();
     if(e.cursor)enc_cursor(0);
 }
 static void encoder_paint(void){
-    if(!u.root||(!e.frame&&!e.ring))return;
+    if(!u.root)return;
+    /* Keep the whole primary STOP touch target exposed while recording. */
+    if(u.notice)nui_obj_set_y(u.notice,u.page==MEASURE&&u.state.recording&&!u.modal_kind?464:584);
+    if(!e.frame&&!e.ring)return;
     nui_area_t a={0};
-    nui_obj_t *obj=!e.ring?NULL:u.modal_kind?enc_modal_object(&a):e.level==ENC_MENU?u.nav[u.page]:enc_object(e.index);
-    bool editing=e.ring&&!u.modal_kind&&e.level==ENC_EDIT&&u.page==SETTINGS;
+    nui_obj_t *obj=!e.ring?NULL:u.notice?u.notice_close:u.modal_kind?enc_modal_object(&a):e.level==ENC_MENU?u.nav[u.page]:enc_object(e.index);
+    bool editing=e.ring&&!u.notice&&!u.modal_kind&&e.level==ENC_EDIT&&u.page==SETTINGS;
     if(editing)obj=e.edit<8?u.step_value[e.edit]:u.setting_rows[8];
     if(obj){
         enc_scroll(obj,u.settings_view,u.settings_content,&e.settings_offset);
@@ -807,7 +819,7 @@ static void encoder_paint(void){
         if(obj!=u.keyboard)nui_obj_get_coords(obj,&a);
     }
     const int64_t key[16]={(intptr_t)obj,a.x1,a.y1,a.x2,a.y2,e.ring,e.level,u.page,
-        u.modal_kind,e.modal_index,e.index,e.edit,u.light,(intptr_t)u.veil,editing,0};
+        u.modal_kind,e.modal_index,e.index,e.edit,u.light,(intptr_t)u.veil,editing,(intptr_t)u.notice};
     if(e.paint_valid&&!e.paint_dirty&&!memcmp(key,e.paint_key,sizeof(key)))return;
     memcpy(e.paint_key,key,sizeof(key));e.paint_valid=true;e.paint_dirty=false;
     if(!e.frame){e.frame=box(u.root,0,0,10,10,GHOST);style_num(e.frame,NUI_STYLE_BG_OPA,0,0);style_color(e.frame,NUI_STYLE_BORDER_COLOR,nui_color_hex(0xF87128),0);style_num(e.frame,NUI_STYLE_BORDER_WIDTH,5,0);e.mode=chip(u.root,"",730,10,100,ORANGE);}
@@ -815,12 +827,13 @@ static void encoder_paint(void){
     if(e.edit_row){style_num(e.edit_row,NUI_STYLE_BG_OPA,0,0);e.edit_row=NULL;}
     for(unsigned i=0;i<2;i++)if(e.edit_marks[i])hide(e.edit_marks[i],true);
     if(!e.ring)return;
-    const char *modes[]={"меню","выбор","правка","окно"};text(e.mode,modes[u.modal_kind?ENC_MODAL:e.level]);
+    const char *modes[]={"меню","выбор","правка","окно"};text(e.mode,modes[u.notice||u.modal_kind?ENC_MODAL:e.level]);
     if(!obj)return;
     if(editing){e.edit_row=u.setting_rows[e.edit];style_color(e.edit_row,NUI_STYLE_BG_COLOR,nui_color_hex(0xF87128),0);style_num(e.edit_row,NUI_STYLE_BG_OPA,28,0);}
-    bool inside=e.level==ENC_MENU||(!u.modal_kind&&(u.page==SETTINGS||u.page==NETWORK));int pad=inside?-2:4;
+    bool inside=!u.notice&&(e.level==ENC_MENU||(!u.modal_kind&&(u.page==SETTINGS||u.page==NETWORK)));int pad=inside?-2:4;
     nui_obj_set_pos(e.frame,a.x1-pad,a.y1-pad);nui_obj_set_size(e.frame,a.x2-a.x1+1+pad*2,a.y2-a.y1+1+pad*2);
-    style_num(e.frame,NUI_STYLE_BORDER_WIDTH,e.level==ENC_EDIT?4:5,0);
+    style_num(e.frame,NUI_STYLE_BORDER_WIDTH,!u.notice&&e.level==ENC_EDIT?4:5,0);
+    if(u.notice)nui_obj_move_foreground(u.notice);
     nui_obj_move_foreground(e.frame);nui_obj_move_foreground(e.mode);
     if(editing&&e.edit<8){
         for(unsigned i=0;i<2;i++){
@@ -830,7 +843,10 @@ static void encoder_paint(void){
     }
 }
 static void encoder_touch(nui_obj_t *obj,int id){
-    if(e.injecting)return;
+    if(e.injecting||id==A_NOTICE_CLOSE)return;
+    /* Notices own encoder input only. Touch keeps its ordinary page/control
+     * semantics (in particular STOP), and transfers the context to restore. */
+    if(u.notice)e.notice_ring=false;
     e.paint_dirty=true;e.ring=false;e.streak=0;e.rotating=false;
     if(u.modal_kind){
         if(u.modal_kind==5){for(unsigned i=0;i<6;i++)if(obj==u.date_fields[i])e.modal_index=i;
@@ -838,7 +854,7 @@ static void encoder_touch(nui_obj_t *obj,int id){
             else if(id==A_MODAL_CANCEL)e.modal_index=7;else if(id==A_TIME_SYNC)e.modal_index=8;else if(id==A_TIME_OK)e.modal_index=9;}
         else {nui_obj_t *items[256];unsigned n=enc_modal_buttons(items);unsigned keys=u.keyboard?(unsigned)nui_native_keyboard_get_keys(u.keyboard,NULL,NULL,0):0;for(unsigned i=0;i<n;i++)if(items[i]==obj)e.modal_index=keys+i;}
     }else if(id>=100&&id<100+(int)enc_page_count()){e.level=ENC_MENU;e.index=0;}
-    else {e.level=ENC_SELECT;for(unsigned i=0;i<enc_count();i++){nui_obj_t *item=enc_object(i);if(item&&enc_descendant(obj,item)){e.index=i;break;}}if(u.page==SETTINGS&&id>=200&&id<216)e.index=(id-200)/2;}
+    else {e.level=ENC_SELECT;for(unsigned i=0;i<enc_count();i++){nui_obj_t *item=enc_object(i);if(item&&enc_descendant(obj,item)){e.index=i;break;}}if(u.page==SETTINGS&&id>=200&&id<216)e.index=(id-200)/2+(u.state.dual_mode_known?1:0);}
     encoder_paint();
 }
 static void event(nui_event_t *ev){action_event(ev);encoder_paint();}
@@ -874,11 +890,13 @@ static void enc_edit_nudge(int direction,unsigned multiplier){
 }
 static void enc_activate(void){
     if(u.page==SETTINGS){
-        if(e.index<9){e.edit=e.index;e.original=e.index<8?u.draft[e.index]:0;e.original_light=u.state.light_theme;e.level=ENC_EDIT;e.streak=0;e.rotating=false;enc_hint("< > вращайте — значение · нажмите — готово · удерживайте — отмена");}
-        else if(e.index!=10)enc_action(e.index==9?A_TIME:e.index==11?A_BACKLIGHT:e.index==12?A_RECORD_SYNC:A_APPLY);
+        unsigned index=e.index;
+        if(u.state.dual_mode_known){if(!index){enc_action(A_DEVICE);return;}index--;}
+        if(index<9){e.edit=index;e.original=index<8?u.draft[index]:0;e.original_light=u.state.light_theme;e.level=ENC_EDIT;e.streak=0;e.rotating=false;enc_hint("< > вращайте — значение · нажмите — готово · удерживайте — отмена");}
+        else if(index!=10)enc_action(index==9?A_TIME:index==11?A_BACKLIGHT:index==12?A_RECORD_SYNC:A_APPLY);
     }else if(workspace_level()&&u.page==ROLL){enc_action(e.index==0?A_WS_HOLD:e.index==1?A_WS_CLEAR:A_WS_LIMITS);}
     else if(u.page==GRAPH){if(e.index<3)enc_action(610+e.index);else if(e.index==3){e.cursor=true;e.level=ENC_EDIT;e.cursor_s=u.range==0?30:u.range==1?120:600;e.rotating=false;enc_cursor(0);enc_hint("вращайте — время · нажмите — выйти");}else enc_action(600+e.index-4);}
-    else if(u.page==MEASURE){if(u.state.dual_mode_known&&e.index==3)enc_action(A_DEVICE);else if(u.state.dual_mode_known&&u.state.mode==TAB5_MODE_LEVEL)enc_action(e.index==0?A_START:e.index==1?A_REL_CAPTURE:e.index==2?A_REL_RESET:A_REL_UNIT);else enc_action(e.index==0?A_START:e.index==1?A_ZERO:A_RESET);}
+    else if(u.page==MEASURE){if(u.state.dual_mode_known&&u.state.mode==TAB5_MODE_LEVEL)enc_action(e.index==0?A_START:e.index==1?A_REL_CAPTURE:e.index==2?A_REL_RESET:A_REL_UNIT);else enc_action(e.index==0?A_START:e.index==1?A_ZERO:A_RESET);}
     else if(u.page==RECORD)enc_action(A_START);
     else if(u.page==NETWORK){if(e.index==0||e.index==3){unsigned i=e.index==3;nui_obj_t *sw=u.net_switch[i];if(nui_obj_has_state(sw,NUI_STATE_CHECKED))nui_obj_remove_state(sw,NUI_STATE_CHECKED);else nui_obj_add_state(sw,NUI_STATE_CHECKED);nui_obj_send_event(sw,NUI_EVENT_VALUE_CHANGED,NULL);}else if(e.index==6)enc_action(A_REVEAL);else if(e.index==7)enc_action(A_NET_APPLY);else enc_action(500+(e.index<3?e.index-1:e.index-2));}
 }
@@ -898,18 +916,27 @@ static void enc_time_rotate(int32_t delta){
 }
 void tab5_ui_encoder_wake(uint32_t time_ms){
     if(!u.root)return;
-    e.ring=true;e.last_ms=time_ms;e.rotating=false;e.streak=0;encoder_paint();
+    e.ring=true;e.last_ms=time_ms;e.rotating=false;e.streak=0;
+    if(u.notice)e.notice_tick=nui_tick_get();
+    encoder_paint();
 }
 void tab5_ui_input(tab5_ui_input_event_t input,int32_t delta,uint32_t time_ms){
     if(!u.root)return;
     if(input==TAB5_UI_INPUT_TOUCH){e.ring=false;e.rotating=false;e.streak=0;encoder_paint();return;}
-    if(input==TAB5_UI_INPUT_IDLE){if(e.ring&&(uint32_t)(time_ms-e.last_ms)>=15000){e.ring=false;e.rotating=false;if(e.hint)hide(e.hint,true);encoder_paint();}return;}
+    if(input==TAB5_UI_INPUT_IDLE){if(e.ring&&(u.notice?(uint32_t)(nui_tick_get()-e.notice_tick):(uint32_t)(time_ms-e.last_ms))>=15000){e.ring=false;e.rotating=false;if(e.hint)hide(e.hint,true);encoder_paint();}return;}
     if(input>TAB5_UI_INPUT_TOUCH||(input==TAB5_UI_INPUT_ROT&&!delta))return;
-    bool asleep=!e.ring||(uint32_t)(time_ms-e.last_ms)>=15000;e.last_ms=time_ms;
+    /* Renderer ticks are relative to UI startup; input timestamps are absolute.
+     * A newly arrived notice must focus Close even after a long input idle. */
+    bool asleep=!e.ring||(u.notice?(uint32_t)(nui_tick_get()-e.notice_tick):(uint32_t)(time_ms-e.last_ms))>=15000;e.last_ms=time_ms;
+    if(u.notice)e.notice_tick=nui_tick_get();
     if(asleep){e.ring=true;e.rotating=false;e.streak=0;encoder_paint();return;}
     e.injecting=true;
     if(input!=TAB5_UI_INPUT_ROT){e.rotating=false;e.streak=0;}
-    if(u.modal_kind){
+    if(u.notice){
+        /* Stay on Close for any number/direction of detents. No fallthrough:
+         * an event opening a notice cannot also dismiss it or act underneath. */
+        if(input==TAB5_UI_INPUT_PRESS||input==TAB5_UI_INPUT_LONG)close_notice();
+    }else if(u.modal_kind){
         if(input==TAB5_UI_INPUT_LONG)close_modal();
         else if(input==TAB5_UI_INPUT_PRESS)enc_modal_press();
         else if(u.modal_kind==5)enc_time_rotate(delta);
@@ -917,7 +944,7 @@ void tab5_ui_input(tab5_ui_input_event_t input,int32_t delta,uint32_t time_ms){
     }else if(e.level==ENC_EDIT){
         if(input==TAB5_UI_INPUT_ROT){int direction=delta>0?1:-1;uint64_t ticks=delta>0?(uint64_t)delta:(uint64_t)(-(int64_t)delta);/* same timestamp for a batched group */
             if(ticks>4096)ticks=4096;
-            for(uint64_t i=0;i<ticks;i++)enc_edit_nudge(direction,enc_acceleration(direction,time_ms));}
+            for(uint64_t i=0;i<ticks&&!u.notice;i++)enc_edit_nudge(direction,enc_acceleration(direction,time_ms));}
         else {if(input==TAB5_UI_INPUT_LONG&&!e.cursor){if(e.edit<8){u.draft[e.edit]=e.original;refresh_settings();}else if(e.original_light!=u.state.light_theme)enc_action(e.original_light?A_LIGHT:A_DARK);}e.level=ENC_SELECT;e.cursor=false;if(e.cursor_line)hide(e.cursor_line,true);if(e.hint)hide(e.hint,true);}
     }else if(e.level==ENC_MENU){
         if(input==TAB5_UI_INPUT_ROT){ask_navigation(enc_clamp(u.page,delta,enc_page_count()));if(u.page==GRAPH)chart_refresh(true);}
@@ -1291,9 +1318,11 @@ static void update_result(void){
 static void update_notice(const char *s){
     if(!strcmp(u.last_notice,s))return;
     snprintf(u.last_notice,sizeof(u.last_notice),"%s",s);
-    if(!*s){if(u.notice)nui_obj_delete(u.notice);u.notice=u.notice_text=NULL;return;}
+    if(!*s){close_notice();return;}
     bool error=backend_failure();
-    if(!u.notice){u.notice=box(u.root,240,584,1024,120,INFO);nui_obj_set_layer_cache(u.notice,tab5_ui_scroll_cache_enabled());nui_obj_add_flag(u.notice,NUI_OBJ_FLAG_CLICKABLE);u.notice_text=label(u.notice,"",20,14,912,92,F36,TEXT);button(u.notice,"✗",948,32,56,56,GHOST,A_NOTICE_CLOSE);}
+    if(!u.notice){e.notice_ring=e.ring;u.notice=box(u.root,240,584,1024,120,INFO);nui_obj_set_layer_cache(u.notice,tab5_ui_scroll_cache_enabled());nui_obj_add_flag(u.notice,NUI_OBJ_FLAG_CLICKABLE);u.notice_text=label(u.notice,"",20,14,912,92,F36,TEXT);u.notice_close=button(u.notice,"✗",948,32,56,56,GHOST,A_NOTICE_CLOSE);}
+    e.ring=true;e.notice_tick=nui_tick_get();e.rotating=false;e.streak=0;e.paint_dirty=true;
+    if(e.hint)hide(e.hint,true);
     role(u.notice,error?ERR:INFO);style_color(u.notice_text,NUI_STYLE_TEXT_COLOR,nui_color_hex(error?u.err:u.info),0);text(u.notice_text,s);nui_obj_move_foreground(u.notice);
 }
 void tab5_ui_update(const tab5_ui_state_t *s){
