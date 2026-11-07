@@ -56,8 +56,11 @@ void tab5_workspace_update(tab5_workspace_t *s,const tab5_relative_config_t *rol
     if(!p->ready){
         if(!s->broken){point(v,now,NAN,NAN,true);v->live_gaps++;}
         s->broken=true;v->values_valid=false;v->filter_warm=false;s->filter_count=0;
-        /* Require both sources to advance after ANY observed quality failure. */
-        for(unsigned i=0;i<2;i++)if(p->sequence[i]>s->used_sequence[i])s->used_sequence[i]=p->sequence[i];
+        /* Initial/boundary warmup is an incomplete candidate, not a consumed
+         * pair. Otherwise A's first reply would be lost before B completes it.
+         * Actual faults still require both sources to advance. */
+        if(!(p->quality&TAB5_PAIR_WARMUP))
+            for(unsigned i=0;i<2;i++)if(p->sequence[i]>s->used_sequence[i])s->used_sequence[i]=p->sequence[i];
         return;
     }
     if(p->sequence[0]<=s->used_sequence[0]||p->sequence[1]<=s->used_sequence[1])return;

@@ -320,7 +320,7 @@ static void media_step(unsigned i) {
   char line[320];int n=tab5_services_format_csv(line,sizeof(line),&s);
   if(!s.relative_event&&(n<0 || !m->file[s.sensor-2] || fwrite(line,1,n,m->file[s.sensor-2])!=(size_t)n)) {
    lock();m->status.dropped++;unlock();fail_medium(m,errno);
-  } else if(m->relative_file){
+  } else if(m->relative_file&&!s.relative_raw_only){
    char relative_line[640];int count=tab5_services_format_relative_csv(relative_line,sizeof(relative_line),&s);
    if(count<0||fwrite(relative_line,1,count,m->relative_file)!=(size_t)count){
     lock();m->status.dropped++;unlock();fail_medium(m,errno);

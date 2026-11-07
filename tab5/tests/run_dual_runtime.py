@@ -38,7 +38,9 @@ static tab5_workspace_config_t committed_workspace,staged_workspace;
 static bool workspace_missing=true,control_reserved;
 static tab5_measure_snapshot_t actual;
 static uint64_t now=1020000;
-void tab5_measure_snapshot(tab5_measure_snapshot_t *s){*s=actual;}
+/* Deliver ordered acquisition before control snapshot; separate phase-locked
+ * regression exercises the actual consume_sample body. */
+void tab5_measure_snapshot(tab5_measure_snapshot_t *s){tab5_relative_result_t p;tab5_relative_observe(&relative_state,&actual,now,&p);*s=actual;}
 static int64_t esp_timer_get_time(void){return now;}
 static int nvs_open(const char *k,int mode,int *h){(void)k;(void)mode;*h=1;staged=committed;staged_workspace=committed_workspace;return 0;}
 static int nvs_get_blob(int h,const char *k,void *out,size_t *size){(void)h;if(!strcmp(k,"workspace")){if(workspace_missing||*size!=sizeof(committed_workspace))return 1;memcpy(out,&committed_workspace,*size);return 0;}if(missing||*size!=sizeof(committed))return 1;memcpy(out,&committed,*size);return 0;}

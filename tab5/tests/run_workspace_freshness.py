@@ -8,7 +8,7 @@ p=argparse.ArgumentParser();p.add_argument('--out',type=Path,required=True)
 p.add_argument('--main-source',type=Path,default=root/'tab5/main/main.c',help='Optional frozen baseline source for expected-failure reproduction')
 a=p.parse_args();a.out.mkdir(parents=True,exist_ok=True)
 source=a.main_source.read_text(encoding='utf-8')
-start=source.index('static tab5_ui_state_t ui;');end=source.index('tab5_relative_t display_relative=',start)
+start=source.index('static tab5_ui_state_t ui;');end=source.index('/* Coherent live publication',start)
 fragment=source[start:end]
 shim=r'''
 #include "tab5_ui.h"
@@ -37,6 +37,7 @@ int main(void){
  tab5_relative_config_t roles;tab5_relative_config_default(&roles);roles.axes_confirmed=1;roles.startup_mode=TAB5_MODE_LEVEL;
  tab5_relative_init(&relative_state,&roles);tab5_workspace_init(&workspace,NULL);
  for(unsigned i=0;i<2;i++)actual.sensor[i]=(tab5_measure_sensor_t){.address=i+2,.valid=true,.good=1,.timestamp_us=1000000+i*16000,.decoded_x=(float)i,.decoded_y=-(float)i};
+ tab5_relative_result_t pair;tab5_relative_observe(&relative_state,&actual,clock_us,&pair);
  production_cycle();reply_during_snapshot=true;production_cycle();
  assert(workspace.live.live_pairs==1); /* Only ref advanced: no invented pair. */
  printf("PASS exact main observation fragment: clock AFTER snapshot, concurrent reply RX skew=%llu us, no false STALE/GAP/value reset, no duplicate history\n",(unsigned long long)(actual.sensor[0].timestamp_us-actual.sensor[1].timestamp_us));

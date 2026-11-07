@@ -17,6 +17,7 @@ int main(void){
  c.axes_confirmed=1;c.startup_mode=TAB5_MODE_LEVEL;tab5_relative_init(&state,&c);
  tab5_relative_evaluate(&state,&s,1020000,&r);assert(r.ready&&r.live[0]==1&&r.live[1]==-1&&r.skew_us==16000);
  assert(r.source[0][0]==.25f&&r.sequence[1]==1&&r.age_us[0]==20000);
+ tab5_relative_observe(&state,&s,1020000,&r);
  assert(tab5_relative_capture(&state,&s,1020000));tab5_relative_evaluate(&state,&s,1020000,&r);
  assert(r.offset_valid&&r.relative[0]==0&&r.live[0]==1);
  s.sensor[1].decoded_x+=.5f;tab5_relative_evaluate(&state,&s,1020000,&r);assert(r.relative[0]==.5f);

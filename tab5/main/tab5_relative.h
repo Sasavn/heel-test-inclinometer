@@ -28,6 +28,11 @@ typedef struct {
     bool offset_valid;
     float offset[2];
     uint32_t generation;
+    /* Single-owner publication state, never persisted. Copies used for a new
+     * recorder epoch MUST call pair_reset before consuming ordered events. */
+    bool pair_known;
+    uint64_t pair_used[2]; /* Role order, including rejected/failed replies. */
+    tab5_relative_result_t pair;
 } tab5_relative_t;
 
 void tab5_relative_config_default(tab5_relative_config_t *out);
@@ -37,5 +42,15 @@ void tab5_relative_init(tab5_relative_t *state,const tab5_relative_config_t *con
 void tab5_relative_boundary(tab5_relative_t *state,const tab5_measure_snapshot_t *sample);
 void tab5_relative_evaluate(const tab5_relative_t *state,const tab5_measure_snapshot_t *sample,
                             uint64_t now_us,tab5_relative_result_t *out);
+/* Pure validator above also audits candidates. Feed observe from ordered RX;
+ * runtime readers use read below. Publish only both-new pairs, retain original
+ * RX provenance on partial updates, invalidate actual faults. Serialize owner. */
+void tab5_relative_pair_reset(tab5_relative_t *state);
+void tab5_relative_observe(tab5_relative_t *state,const tab5_measure_snapshot_t *sample,
+                           uint64_t now_us,tab5_relative_result_t *out);
+/* Read/health check cannot publish healthy latest/latest input. Feed observe
+ * from ordered acquisition events even when no UI reader samples valid phases. */
+void tab5_relative_read(tab5_relative_t *state,const tab5_measure_snapshot_t *health,
+                        uint64_t now_us,tab5_relative_result_t *out);
 bool tab5_relative_capture(tab5_relative_t *state,const tab5_measure_snapshot_t *sample,uint64_t now_us);
 #endif

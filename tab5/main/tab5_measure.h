@@ -49,7 +49,8 @@ typedef struct {
     uint64_t next_cycle_us;
 } tab5_measure_core_t;
 /* Callback runs in UART task AFTER unlocking; sample is borrowed for call only.
- * A valid callback is the only recording trigger; snapshot is never a log source.
+ * last_error==OK is a real recording trigger; errors are health notifications
+ * with UNCHANGED good/timestamp, never raw rows. Snapshot is never a log source.
  * Do not block UART task: copy/queue sample for storage/protocol. */
 typedef void (*tab5_measure_sample_cb_t)(unsigned index,
     const tab5_measure_sensor_t *sample, void *user);

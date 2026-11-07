@@ -21,6 +21,7 @@ typedef struct {
  double raw_x, raw_y, offset_x, offset_y, calc_x, calc_y, battery;
  uint32_t ms;
     bool relative_record; /* Extra audit CSV only; legacy D2/D3 columns unchanged. */
+    bool relative_raw_only; /* Real D2/D3 row, no duplicate/incomplete REL SAMPLE. */
     tab5_relative_config_t relative_config;
     tab5_relative_result_t relative;
     bool relative_event; /* Quality transition, audit-only: NEVER a fabricated raw row. */

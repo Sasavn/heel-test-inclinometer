@@ -195,10 +195,14 @@ static void measure_task(void *unused) {
             uint16_t raw[2];tab5_measure_error_t e=transact(i,raw,&end);
             tab5_measure_sensor_t sample;
             xSemaphoreTake(mutex,portMAX_DELAY);
-            if(e==TAB5_MEASURE_OK){tab5_measure_core_sample(&device,i,raw,end);sample=device.state.sensor[i];}
+            if(e==TAB5_MEASURE_OK)tab5_measure_core_sample(&device,i,raw,end);
             else tab5_measure_core_error(&device,i,e);
+            sample=device.state.sensor[i];
             xSemaphoreGive(mutex);
-            if(e==TAB5_MEASURE_OK && sample_cb)sample_cb(i,&sample,sample_user);
+            /* Error notification keeps original good/time; consumers must not
+             * turn it into a raw sample. Queue it even if next RX recovers
+             * before a UI/health snapshot can observe this failure. */
+            if(sample_cb)sample_cb(i,&sample,sample_user);
         }
     }
 }

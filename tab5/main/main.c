@@ -36,7 +36,7 @@
 #include <time.h>
 
 #define FW_VERSION (esp_app_get_description()->version)
-typedef struct { unsigned index; tab5_measure_sensor_t value; } sample_event_t;
+typedef struct { unsigned index; tab5_measure_sensor_t value; uint64_t observed_us; } sample_event_t;
 typedef struct { char line[3072]; } tx_line_t;
 static QueueHandle_t samples, storage_samples, actions, usb_tx;
 static SemaphoreHandle_t app_mutex, route_mutex;
@@ -241,7 +241,7 @@ static void usb_reply(void *ctx,const char *line) {
     if(xQueueSend(usb_tx,&item,0)!=pdTRUE)__atomic_add_fetch(&usb_drops,1,__ATOMIC_RELAXED);
 }
 static void sample_callback(unsigned i,const tab5_measure_sensor_t *s,void *unused) {
-    (void)unused;sample_event_t e={.index=i,.value=*s};
+    (void)unused;sample_event_t e={.index=i,.value=*s,.observed_us=esp_timer_get_time()};
     if(xQueueSend(samples,&e,0)!=pdTRUE)__atomic_add_fetch(&sample_drops,1,__ATOMIC_RELAXED);
     if(xQueueSend(storage_samples,&e,0)!=pdTRUE)__atomic_add_fetch(&route_drops,1,__ATOMIC_RELAXED);
 }
@@ -382,7 +382,7 @@ static bool apply_dual_action_body(const tab5_ui_action_t *a){
         snprintf(notice,sizeof(notice),"Наблюдение: настройки сохранены; допуск не является точностью");
     }else if(a->kind==TAB5_UI_WORKSPACE_HOLD){
         tab5_relative_result_t p;uint64_t now=esp_timer_get_time();
-        tab5_relative_evaluate(&relative_state,&s,now,&p);
+        tab5_relative_read(&relative_state,&s,now,&p);
         tab5_workspace_update(&workspace,&relative_state.config,&p,now);
         if(relative_state.mode!=TAB5_MODE_LEVEL||!tab5_workspace_hold(&workspace,a->workspace_hold,now))return false;
         snprintf(notice,sizeof(notice),"%s",a->workspace_hold?"HOLD: значения сохранены; качество пары остаётся живым":"HOLD снят: живые значения");
@@ -392,7 +392,7 @@ static bool apply_dual_action_body(const tab5_ui_action_t *a){
         snprintf(notice,sizeof(notice),"Наблюдение очищено; ждём новую пару");
     }else return false;
     tab5_relative_result_t p;uint64_t now=esp_timer_get_time();
-    tab5_relative_evaluate(&relative_state,&s,now,&p);
+    tab5_relative_read(&relative_state,&s,now,&p);
     tab5_workspace_update(&workspace,&relative_state.config,&p,now);
     return true;
 }
@@ -410,7 +410,7 @@ static esp_err_t set_recording(bool on) {
     if(!tab5_board_time_valid()){snprintf(notice,sizeof(notice),"Перед записью установите дату и время");return ESP_ERR_INVALID_STATE;}
     if(relative_state.mode==TAB5_MODE_LEVEL){
         tab5_measure_snapshot_t sample;tab5_relative_result_t pair;tab5_measure_snapshot(&sample);
-        tab5_relative_evaluate(&relative_state,&sample,esp_timer_get_time(),&pair);
+        tab5_relative_read(&relative_state,&sample,esp_timer_get_time(),&pair);
         if(!pair.ready){snprintf(notice,sizeof(notice),"Запись выравнивания: нужна свежая пара и подтверждённые оси");return ESP_ERR_INVALID_STATE;}
     }
     measurement_number++;persist();
@@ -581,7 +581,7 @@ static void command(void *unused,const char *line,tab5_service_reply_fn reply,vo
             cJSON_Delete(j);free(tasks);reply(ctx,"OK ui tasks");}
     }
     else if(strcmp(line,"relative status")==0){
-        tab5_relative_result_t r;tab5_relative_evaluate(&relative_state,&s,esp_timer_get_time(),&r);
+        tab5_relative_result_t r;tab5_relative_read(&relative_state,&s,esp_timer_get_time(),&r);
         char out[640];
         snprintf(out,sizeof(out),"{\"mode\":\"%s\",\"reference\":%u,\"object\":%u,\"ready\":%s,\"quality\":%lu,\"skew_us\":%llu,\"ref_us\":%llu,\"obj_us\":%llu,\"ref_seq\":%llu,\"obj_seq\":%llu,\"rel_offset\":%s,\"generation\":%lu,\"hardware_sync\":false,\"heads_supported\":2}",
             relative_state.mode==TAB5_MODE_LEVEL?"level":"heel",relative_state.config.reference_index+2,relative_state.config.object_index+2,
@@ -659,40 +659,67 @@ static tab5_service_sample_t make_row(const sample_event_t *e,float voltage) {
 /* Separate from UI/commands: a slow Wi-Fi reconfiguration, NVS save or a
  * disconnected PC cannot hold up delivery to the independent media writers. */
 static void storage_router_task(void *unused) {
-    (void)unused;sample_event_t e;uint64_t session_start=0;
+    (void)unused;sample_event_t e;uint64_t session_start=0,session_epoch=0;
     uint32_t observed_quality=UINT32_MAX;
-    tab5_measure_snapshot_t pair_samples={0};tab5_relative_t session_relative={0};
+    uint64_t recorded_sequence[2]={0};
+    /* Single router owner: keep aggregates off the task stack. */
+    static tab5_measure_snapshot_t pair_samples,health;
+    static tab5_relative_t session_relative,current_relative;
     for(;;){bool have=xQueueReceive(storage_samples,&e,pdMS_TO_TICKS(100))==pdTRUE;
         xSemaphoreTake(route_mutex,portMAX_DELAY);
         bool active=route_recording;uint64_t start=route_start_us,epoch=route_epoch;float voltage=route_battery;
-        tab5_relative_t current_relative=route_relative;
+        current_relative=route_relative;
         xSemaphoreGive(route_mutex);
-        if(active&&session_start!=start){session_start=start;memset(&pair_samples,0,sizeof(pair_samples));session_relative=current_relative;observed_quality=UINT32_MAX;}
-        if(active && have && e.value.timestamp_us>=start){tab5_service_sample_t row=make_row(&e,voltage);
+        if(active&&(session_start!=start||session_epoch!=epoch)){
+            session_start=start;session_epoch=epoch;memset(&pair_samples,0,sizeof(pair_samples));
+            session_relative=current_relative;tab5_relative_pair_reset(&session_relative);
+            memset(recorded_sequence,0,sizeof(recorded_sequence));observed_quality=UINT32_MAX;
+        }
+        if(active&&session_relative.mode==TAB5_MODE_LEVEL)tab5_measure_snapshot(&health);
+        if(active&&have&&e.value.last_error!=TAB5_MEASURE_OK&&e.observed_us>=start&&
+           session_relative.mode==TAB5_MODE_LEVEL&&e.index<TAB5_SENSOR_COUNT){
+            /* Ordered transient error survives even when current health has
+             * already recovered. It is never written as a raw head sample. */
+            pair_samples.sensor[e.index].fail_streak=e.value.fail_streak;
+            pair_samples.sensor[e.index].last_error=e.value.last_error;
+            if(!e.value.valid)pair_samples.sensor[e.index].valid=false;
+            tab5_relative_result_t failed;
+            tab5_relative_read(&session_relative,&pair_samples,esp_timer_get_time(),&failed);
+        }
+        if(active && have && e.value.last_error==TAB5_MEASURE_OK&&e.value.timestamp_us>=start){tab5_service_sample_t row=make_row(&e,voltage);
             if(session_relative.mode==TAB5_MODE_LEVEL){
                 pair_samples.sensor[e.index]=e.value;
-                /* Errors do not invoke sample_cb. Propagate current failure
-                 * flags without inventing a new sample or replacing its time. */
-                tab5_measure_snapshot_t health;tab5_measure_snapshot(&health);
+                /* Current health may invalidate, never replace the queued
+                 * sample's values, sequence or RX time. */
                 for(unsigned i=0;i<2;i++){
                     pair_samples.sensor[i].fail_streak=health.sensor[i].fail_streak;
                     pair_samples.sensor[i].last_error=health.sensor[i].last_error;
                     if(!health.sensor[i].valid)pair_samples.sensor[i].valid=false;
                 }
-                row.relative_record=true;row.relative_config=session_relative.config;
+                row.relative_record=true;row.relative_raw_only=true;row.relative_config=session_relative.config;
                 row.relative_observed_us=esp_timer_get_time();
-                tab5_relative_evaluate(&session_relative,&pair_samples,row.relative_observed_us,&row.relative);
+                tab5_relative_observe(&session_relative,&pair_samples,row.relative_observed_us,&row.relative);
+                if(row.relative.ready&&row.relative.sequence[0]>recorded_sequence[0]&&
+                   row.relative.sequence[1]>recorded_sequence[1])row.relative_raw_only=false;
             }
             if(tab5_services_submit(&row,epoch)!=ESP_OK)__atomic_add_fetch(&storage_drops,1,__ATOMIC_RELAXED);
+            else if(row.relative_record&&!row.relative_raw_only)
+                memcpy(recorded_sequence,row.relative.sequence,sizeof(recorded_sequence));
         }
         /* A quality event is NOT a raw sample. Timeout wakeups observe even
          * BOTH silent heads; RX times/sequences remain those of actual replies. */
         if(active&&session_relative.mode==TAB5_MODE_LEVEL){
-            tab5_measure_snapshot_t health;tab5_measure_snapshot(&health);
+            /* Health can invalidate old queued data, never provide a newer RX
+             * basis or import a pre-session pair into this historical route. */
+            for(unsigned i=0;i<2;i++){
+                pair_samples.sensor[i].fail_streak=health.sensor[i].fail_streak;
+                pair_samples.sensor[i].last_error=health.sensor[i].last_error;
+                if(!health.sensor[i].valid)pair_samples.sensor[i].valid=false;
+            }
             tab5_service_sample_t event={.sensor=session_relative.config.reference_index+2,
                 .relative_record=true,.relative_event=true,.relative_config=session_relative.config};
             event.relative_observed_us=esp_timer_get_time();event.ms=(uint32_t)(event.relative_observed_us/1000);
-            tab5_relative_evaluate(&session_relative,&health,event.relative_observed_us,&event.relative);
+            tab5_relative_read(&session_relative,&pair_samples,event.relative_observed_us,&event.relative);
             if(event.relative.quality!=observed_quality){
                 if(tab5_services_submit(&event,epoch)==ESP_OK)observed_quality=event.relative.quality;
                 else __atomic_add_fetch(&storage_drops,1,__ATOMIC_RELAXED);
@@ -701,6 +728,16 @@ static void storage_router_task(void *unused) {
     }
 }
 static void consume_sample(const sample_event_t *e) {
+    /* Main already owns app_mutex here. UART callback remains queue-only.
+     * Feed EVERY ordered reply, independently of the UI's observation phase. */
+    static tab5_measure_snapshot_t pair_samples;
+    static tab5_relative_result_t pair;
+    if(e->index<TAB5_SENSOR_COUNT){pair_samples.sensor[e->index]=e->value;
+        uint64_t now=esp_timer_get_time();
+        tab5_relative_observe(&relative_state,&pair_samples,now,&pair);
+        if(relative_state.mode==TAB5_MODE_LEVEL)
+            tab5_workspace_update(&workspace,&relative_state.config,&pair,now);}
+    if(e->value.last_error!=TAB5_MEASURE_OK)return;
     const tab5_measure_sensor_t *p=&e->value;
     tab5_service_sample_t row=make_row(e,battery);
     if(samples_on){char line[200];snprintf(line,sizeof(line),"R,%u,%lu,%lu,%ld,%ld,%ld,%ld,%ld",row.sensor,(unsigned long)p->good,(unsigned long)row.ms,
@@ -846,12 +883,12 @@ void app_main(void) {
         now=esp_timer_get_time();
         ui.dual_mode_known=true;ui.mode=relative_state.mode;ui.relative_config=relative_state.config;
         ui.dual_controls_locked=recording||!tab5_services_mode_change_allowed();
-        tab5_relative_evaluate(&relative_state,&ui.measurement,now,&ui.relative);
+        tab5_relative_read(&relative_state,&ui.measurement,now,&ui.relative);
         if(relative_state.mode==TAB5_MODE_LEVEL){
             tab5_workspace_update(&workspace,&relative_state.config,&ui.relative,now);
             tab5_workspace_snapshot(&workspace,&ui.workspace);
         }
-        tab5_relative_t display_relative=relative_state;
+        /* Coherent live publication remains in relative_state, never a UI copy. */
         ui.timezone_known=true;ui.timezone_minutes=(int16_t)tab5_time_offset();ui.time_sync_busy=tab5_time_sync_busy();
         snprintf(ui.time_sync_status,sizeof(ui.time_sync_status),"%s",time_sync_status);
         ui.resources_known=resources.known;ui.cpu_known=resources.cpu_known;ui.cpu_load_pct=resources.cpu;
@@ -916,13 +953,14 @@ void app_main(void) {
         ui.tcp_clients_known=net.known;ui.tcp_clients=(uint16_t)net.clients;
         snprintf(ui.link.ap_ip,sizeof(ui.link.ap_ip),"%s",net.ap_ip);snprintf(ui.link.sta_ip,sizeof(ui.link.sta_ip),"%s",net.sta_ip);
         xSemaphoreGive(app_mutex);
-        if(now-last_ui>=100000){last_ui=now;if(tab5_native_port_lock(20)){
+        if(now-last_ui>=100000){last_ui=now;if(xSemaphoreTake(app_mutex,pdMS_TO_TICKS(20))==pdTRUE){
+          if(tab5_native_port_lock(20)){
             /* Service/battery calls and the display lock can take time. Take the
              * measurement first, then its time bound; never reject a new reply
              * as "from the future" against the old loop-start timestamp. */
             tab5_measure_snapshot(&ui.measurement);
             ui.now_us=esp_timer_get_time();ui.live_unfiltered=true;
-            tab5_relative_evaluate(&display_relative,&ui.measurement,ui.now_us,&ui.relative);
+            tab5_relative_read(&relative_state,&ui.measurement,ui.now_us,&ui.relative);
             /* Late display lock must not leave a formerly green HOLD live badge. */
             ui.workspace.live_ready=ui.relative.ready;ui.workspace.live_quality=ui.relative.quality;
             if(!ui.relative.ready&&!ui.workspace.held)ui.workspace.values_valid=false;
@@ -941,7 +979,10 @@ void app_main(void) {
             if(!trial_confirmed && now>=2000000 && esp_get_free_heap_size()>16384){
                 esp_err_t health=tab5_services_confirm_boot();
                 trial_confirmed=health==ESP_OK || health==ESP_ERR_NOT_FOUND;
-            }}else {portENTER_CRITICAL(&ui_perf_lock);ui_perf.lock_misses++;portEXIT_CRITICAL(&ui_perf_lock);}}
+            }
+          }else {portENTER_CRITICAL(&ui_perf_lock);ui_perf.lock_misses++;portEXIT_CRITICAL(&ui_perf_lock);}
+          xSemaphoreGive(app_mutex);
+        }else {portENTER_CRITICAL(&ui_perf_lock);ui_perf.lock_misses++;portEXIT_CRITICAL(&ui_perf_lock);}}
         vTaskDelay(pdMS_TO_TICKS(10));
     }
 }

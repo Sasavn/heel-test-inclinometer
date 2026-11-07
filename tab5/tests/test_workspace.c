@@ -20,6 +20,7 @@ static void production_pair_fixtures(void){
      .x=75,.y=-52,.zero_x=19,.zero_y=29,.filtered_x=35,.filtered_y=-29};
  tab5_relative_evaluate(&relative,&sample,1020000,&pair);C(pair.ready&&fabsf(pair.relative[0]-.08f)<1e-6f);
  tab5_workspace_update(&w,&roles,&pair,1020000);C(fabsf(w.live.value[1]+.04f)<1e-6f);
+ tab5_relative_observe(&relative,&sample,1020000,&pair);
  C(tab5_relative_capture(&relative,&sample,1020000));
  sample.sensor[1].decoded_x=1.31f;sample.sensor[1].decoded_y=-.46f;
  sample.sensor[0].good++;sample.sensor[1].good++;sample.sensor[0].timestamp_us+=100000;sample.sensor[1].timestamp_us+=100000;

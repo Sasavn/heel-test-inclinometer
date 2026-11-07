@@ -40,17 +40,25 @@ int main(void){
  line(1,"ota begin tab5 esp32p4 2 1.5.0-esp32 768 00");CHECK(strstr(answer,"ERR")!=NULL);
  CHECK(!tab5_services_mode_change_allowed());tab5_services_control_end();
  CHECK(tab5_services_record_relative_start("workspace_gaps")==ESP_OK);
+ /* Every real head row survives, without duplicate REL SAMPLE on a partial
+  * update. Exercise the actual two independent medium writers. */
+ s.sensor=2;s.relative_event=false;s.relative_raw_only=true;
+ CHECK(tab5_services_submit(&s,tab5_services_record_epoch())==ESP_OK);
+ while(media[0].count||media[1].count){media_step(0);media_step(1);}
+ CHECK(media[0].status.written==1&&media[1].status.written==1);
+ CHECK(media[0].status.relative_rows==0&&media[1].status.relative_rows==0);
+ s.relative_raw_only=false;
  s.sensor=2;s.relative_event=true;s.relative_observed_us=9000000;
  CHECK(tab5_services_submit(&s,record_epoch)==ESP_OK);media_step(0);media_step(1);
  tab5_medium_status_t status;tab5_services_status(TAB5_SD,&status);
- CHECK(status.relative_open&&status.relative_rows==1&&status.relative_gaps==1&&status.written==0);
+ CHECK(status.relative_open&&status.relative_rows==1&&status.relative_gaps==1&&status.written==1);
  CHECK(!strcmp(status.relative_session,"workspace_gaps"));
  s.relative.ready=true;s.relative.quality=0;s.relative_observed_us+=100000;
  CHECK(tab5_services_submit(&s,record_epoch)==ESP_OK);
  tab5_services_record_stop();CHECK(!tab5_services_control_begin());tab5_services_status(TAB5_SD,&status);CHECK(status.closing);
  stop_and_drain();tab5_services_status(TAB5_SD,&status);
  CHECK(!status.relative_open&&status.relative_closed_ok&&!status.closing&&status.relative_rows==2&&status.relative_gaps==1);
- f=fopen("test-sd/workspace_gaps_D2.CSV","r");CHECK(f&&fgets(row,sizeof(row),f)&&!strcmp(row,TAB5_SERVICE_CSV_HEADER));CHECK(!fgets(row,sizeof(row),f));fclose(f);
+ f=fopen("test-sd/workspace_gaps_D2.CSV","r");CHECK(f&&fgets(row,sizeof(row),f)&&!strcmp(row,TAB5_SERVICE_CSV_HEADER));CHECK(fgets(row,sizeof(row),f));CHECK(!fgets(row,sizeof(row),f));fclose(f);
  f=fopen("test-sd/workspace_gaps_REL.CSV","r");CHECK(f&&fgets(row,sizeof(row),f));
  CHECK(fgets(row,sizeof(row),f)&&strstr(row,";GAP;9000000\n"));CHECK(fgets(row,sizeof(row),f)&&strstr(row,";RECOVERY;9100000\n"));fclose(f);
  CHECK(tab5_services_record_relative_start("workspace_write_failure")==ESP_OK);
