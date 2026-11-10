@@ -38,7 +38,7 @@
 #include <string.h>
 
 #define SD_CHUNK       512                           // f_write только целыми секторами
-#define SD_BUF_SIZE    (SD_CHUNK + 2 * SD_ROW_MAX)   // буфер файла: кусок + строки сверху
+#define SD_BUF_SIZE    (SD_CHUNK + 640)   // буфер файла: кусок + строки сверху
 #define SD_SYNC_MS     1000                          // f_sync не чаще раза в секунду
 #define SD_CHECK_MS    2000                          // проверка/монтирование карты без записи
 #define SD_BAD_RETRY_MS 10000                        // карта отвечает, но не монтируется (нет FAT и т. п.)
@@ -68,7 +68,11 @@ typedef struct {
 } sd_file_t;
 
 static FATFS s_fs;
-static sd_file_t s_file[APP_SENSOR_COUNT];
+static sd_file_t s_file[APP_SENSOR_COUNT + 1]; /* slot 2: REL only */
+static bool s_level_recording;
+static uint64_t s_rel_sequence[2];
+static uint32_t s_rel_quality;
+static char s_rel_row[640];
 static app_time_t s_rec_date;                    // дата начала текущего замера (для имён)
 static bool s_any_file;                          // в текущем замере создан хоть один файл
 static uint32_t s_sync_ms;
@@ -274,6 +278,18 @@ uint16_t sd_number_after(uint16_t num) {
 
 // Один проход f_readdir по корню: наибольший номер замера (имена обоих видов,
 // любой датчик) -> g_app.file_number = он + 1
+
+static void relative_name(char out[SD_NAME_LEN],const app_time_t *date,uint16_t number) {
+    sd_make_name(out,date,number,2);char *suffix=strrchr(out,'_');strcpy(suffix,"_REL.CSV");
+}
+static bool relative_name_number(const char *name,uint16_t *number) {
+    size_t n=strlen(name);if(n<8||n>=SD_NAME_LEN)return false;
+    char copy[SD_NAME_LEN];strcpy(copy,name);char *suffix=strrchr(copy,'_');
+    if(!suffix)return false;
+    const char *expected="_REL.CSV";for(unsigned i=0;i<9;i++)if(to_upper(suffix[i])!=expected[i])return false;
+    strcpy(suffix,"_D2.CSV");uint8_t addr;return sd_parse_name(copy,number,&addr);
+}
+
 static FRESULT scan_numbers(void) {
 	static DIR dir;       // static: не тратить стек суперцикла
 	static FILINFO fno;   // с длинным именем (_USE_LFN) — ~270 байт
@@ -289,7 +305,7 @@ static FRESULT scan_numbers(void) {
 		}
 		uint16_t num;
 		uint8_t addr;
-		if (!(fno.fattrib & AM_DIR) && sd_parse_name(fno.fname, &num, &addr)
+		if (!(fno.fattrib & AM_DIR) && (sd_parse_name(fno.fname, &num, &addr) || relative_name_number(fno.fname, &num))
 				&& num > highest) {
 			highest = num;
 		}
@@ -420,7 +436,7 @@ static FRESULT file_flush(sd_file_t *f, bool all) {
 
 // Закрыть все файлы без проверки ошибок (после сбоя)
 static void close_all_quiet(void) {
-	for (uint8_t i = 0; i < APP_SENSOR_COUNT; i++) {
+	for (uint8_t i = 0; i < APP_SENSOR_COUNT + 1; i++) {
 		if (s_file[i].open) {
 			f_close(&s_file[i].fil);
 			s_file[i].open = false;
@@ -472,6 +488,46 @@ static bool file_open(uint8_t i) {
 }
 
 // Тумблер в REC: файлы для всех отвечающих датчиков
+
+static bool relative_open(void) {
+    sd_file_t *f=&s_file[APP_SENSOR_COUNT];char name[SD_NAME_LEN];FRESULT res;
+    for(;;){
+        if(!g_app.file_number){rec_fail(FR_DENIED);return false;}
+        relative_name(name,&s_rec_date,g_app.file_number);
+        res=f_open(&f->fil,name,FA_CREATE_NEW|FA_WRITE);
+        if(res!=FR_EXIST)break;
+        g_app.file_number=sd_number_after(g_app.file_number);
+    }
+    if(res!=FR_OK){rec_fail(res);return false;}
+    f->open=true;strcpy(f->buf,RELATIVE_CSV_HEADER);f->len=strlen(RELATIVE_CSV_HEADER);
+    s_any_file=true;g_app.rec_sensor_mask=3;return true;
+}
+static void relative_append(const relative_result_t *r,const char *event) {
+    sd_file_t *f=&s_file[APP_SENSOR_COUNT];
+    uint64_t observed=app_relative_now();
+    unsigned role=r->timestamp_us[1]>=r->timestamp_us[0]?1:0;
+    bool sample=!strcmp(event,"SAMPLE");
+    uint32_t event_ms=(uint32_t)((sample?r->timestamp_us[role]:observed)/1000);
+    unsigned sensor=sample?(role?g_relative.config.object_index:g_relative.config.reference_index)+2:
+        g_relative.config.object_index+2;
+    int n=relative_format_csv(s_rel_row,sizeof(s_rel_row),event_ms,
+        sensor,&g_relative.config,r,event,observed);
+    if(n<0||(size_t)f->len+(size_t)n>sizeof(f->buf)){rec_fail(FR_INT_ERR);return;}
+    memcpy(f->buf+f->len,s_rel_row,(size_t)n);f->len+=(uint16_t)n;g_app.rec_rows++;
+    if(f->len>=SD_CHUNK){FRESULT res=file_flush(f,false);if(res!=FR_OK)rec_fail(res);}
+}
+static void relative_write(void) {
+    if(!s_level_recording||g_app.sd_state!=SD_RECORDING)return;
+    relative_result_t r;app_relative_read(&r);
+    if(s_rel_quality!=r.quality){
+        s_rel_quality=r.quality;relative_append(&r,r.ready?"RECOVERY":"GAP");
+        if(g_app.sd_state!=SD_RECORDING)return;
+    }
+    if(r.ready && r.sequence[0]>s_rel_sequence[0] && r.sequence[1]>s_rel_sequence[1]){
+        relative_append(&r,"SAMPLE");s_rel_sequence[0]=r.sequence[0];s_rel_sequence[1]=r.sequence[1];
+    }
+}
+
 static void rec_start(uint32_t now) {
 	g_app.rec_start_ms = now;
 	s_rec_date = g_app.time; // все файлы замера — с датой начала (и после полуночи)
@@ -480,6 +536,12 @@ static void rec_start(uint32_t now) {
 	g_app.sd_state = SD_RECORDING;
 	s_any_file = false;
 	s_sync_ms = now;
+    s_level_recording=g_relative.mode==REL_MODE_LEVEL;
+    if(s_level_recording){
+        s_file[APP_SENSOR_COUNT].open=false;s_file[APP_SENSOR_COUNT].len=0;
+        s_rel_sequence[0]=s_rel_sequence[1]=0;s_rel_quality=UINT32_MAX;
+        app_relative_record_boundary();relative_open();return;
+    }
 	for (uint8_t i = 0; i < APP_SENSOR_COUNT; i++) {
 		s_file[i].open = false;
 		s_file[i].len = 0;
@@ -494,7 +556,7 @@ static void rec_start(uint32_t now) {
 // Тумблер в STOP: дописать буферы, закрыть файлы, следующий номер
 static void rec_stop(void) {
 	FRESULT err = FR_OK;
-	for (uint8_t i = 0; i < APP_SENSOR_COUNT; i++) {
+	for (uint8_t i = 0; i < APP_SENSOR_COUNT + 1; i++) {
 		sd_file_t *f = &s_file[i];
 		if (!f->open) {
 			continue;
@@ -529,7 +591,7 @@ static void rec_stop(void) {
 
 // Раз в секунду: дописать остатки буферов и f_sync
 static void rec_sync(void) {
-	for (uint8_t i = 0; i < APP_SENSOR_COUNT; i++) {
+	for (uint8_t i = 0; i < APP_SENSOR_COUNT + 1; i++) {
 		sd_file_t *f = &s_file[i];
 		if (!f->open) {
 			continue;
@@ -595,6 +657,7 @@ void sd_logger_task(void) {
 		}
 		break;
 	}
+	relative_write();
 }
 
 bool sd_logger_file_name(uint8_t i, char out[SD_NAME_LEN]) {
@@ -602,12 +665,16 @@ bool sd_logger_file_name(uint8_t i, char out[SD_NAME_LEN]) {
 		return false;
 	}
 	const app_time_t *date = (g_app.sd_state == SD_RECORDING) ? &s_rec_date : &g_app.time;
+	if ((g_app.sd_state==SD_RECORDING?s_level_recording:g_relative.mode==REL_MODE_LEVEL)) {
+		if(i)return false;
+        relative_name(out,date,g_app.file_number);return true;
+	}
 	sd_make_name(out, date, g_app.file_number, APP_SENSOR_ADDR(i));
 	return true;
 }
 
 void sd_logger_write_cycle(const bool fresh[APP_SENSOR_COUNT]) {
-	if (g_app.sd_state != SD_RECORDING) {
+	if (g_app.sd_state != SD_RECORDING || s_level_recording) {
 		return;
 	}
 	for (uint8_t i = 0; i < APP_SENSOR_COUNT; i++) {

@@ -87,7 +87,7 @@ typedef enum {
 	IT_TIME = 0, IT_SD, IT_FREQ, IT_ALPHA, IT_RWIN, IT_RRATE, IT_RCALM, IT_RHYST,
 	IT_ADDR, IT_ZERO, IT_GAP, IT_BAT, IT_THEME, IT_HELP, IT_BACK,
 	IT_PG_SENS, IT_PG_ROLL, IT_PG_POWER, IT_PG_DEV,   // разделы (только плитки)
-	IT_COUNT
+	IT_INSTRUMENT, IT_COUNT
 } item_t;
 
 // Страница меню: экран со своей группой энкодера и заголовком. Корень
@@ -185,6 +185,8 @@ static page_t pg_sens, pg_roll, pg_power, pg_dev;
 
 static void menu_event_cb(lv_event_t *e) {
 	switch ((item_t) (uintptr_t) lv_event_get_user_data(e)) {
+	case IT_INSTRUMENT:
+		page_leave();ui_instrument_show();break;
 	case IT_TIME:
 		page_leave();
 		time_show();
@@ -395,6 +397,7 @@ static void menu_create(void) {
 	list_row(n++, IT_BAT, LV_SYMBOL_BATTERY_1, "Порог АКБ", bat_alarm_step);
 	list_row(n++, IT_THEME, LV_SYMBOL_TINT, "Тема", NULL);
 	list_row(n++, IT_HELP, "?", "Справка", NULL);
+	list_row(n++, IT_INSTRUMENT, LV_SYMBOL_LOOP, "Прибор и оси", NULL);
 	list_row(n++, IT_BACK, LV_SYMBOL_LEFT, "Назад", NULL);
 	lv_label_set_text_static(it_value[IT_ADDR], "Modbus");
 }
@@ -479,7 +482,8 @@ static void build_dev(page_t *pg) {
 	sub_row(pg, 0, IT_TIME, LV_SYMBOL_BELL, "Дата и время", NULL);
 	sub_row(pg, 1, IT_THEME, LV_SYMBOL_TINT, "Тема", NULL);
 	sub_row(pg, 2, IT_HELP, "?", "Справка", NULL);
-	sub_row(pg, 3, IT_BACK, LV_SYMBOL_LEFT, "Назад", NULL);
+	sub_row(pg, 3, IT_INSTRUMENT, LV_SYMBOL_LOOP, "Прибор и оси", NULL);
+	sub_row(pg, 4, IT_BACK, LV_SYMBOL_LEFT, "Назад", NULL);
 	lv_label_set_text_static(it_value[IT_HELP], "v" FW_VERSION);
 }
 

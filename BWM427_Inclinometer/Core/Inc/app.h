@@ -10,6 +10,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include "relative.h"
 
 // Датчики на одной шине RS485: Д2 и Д3 (Modbus-адреса 2 и 3; адрес 1 не
 // используется). Вернуть третий датчик: COUNT 3 и ADDR (i) + 1.
@@ -201,10 +202,26 @@ typedef struct {
 	svc_state_t svc_state;
 
 	app_diag_t diag;
+	uint8_t level_units; /* 0 degrees, 1 mm per metre; REL zero is never durable. */
 	app_bus_t bus;           // тайминги шины RS485 (диагностика)
 } app_state_t;
 
 extern app_state_t g_app;
+extern relative_t g_relative;
+void app_relative_init(uint16_t flags);
+uint16_t app_instrument_flags(void);
+uint64_t app_relative_now(void);
+bool app_transport_busy(void);
+bool app_instrument_busy(void);
+bool app_set_instrument(uint8_t mode);
+bool app_relative_roles(unsigned reference,unsigned object);
+bool app_relative_axes(bool confirmed);
+bool app_relative_zero(bool reset);
+void app_relative_read(relative_result_t *out);
+void app_relative_observe(unsigned index,bool success,uint32_t rx_ms);
+void app_relative_record_boundary(void);
+void app_relative_units(bool mm_per_m);
+
 
 // Действия интерфейса
 void app_set_log_freq(uint16_t hz);

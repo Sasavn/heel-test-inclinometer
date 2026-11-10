@@ -17,6 +17,7 @@ static uint32_t last_sec_ms;
 static uint32_t svc_done_ms;
 
 void sim_app_init(uint8_t theme) {
+	app_relative_init(0xffff);
 	memset(&g_app, 0, sizeof(g_app));
 	for (int i = 0; i < APP_SENSOR_COUNT; i++)
 		g_app.sensor[i].addr = APP_SENSOR_ADDR(i);

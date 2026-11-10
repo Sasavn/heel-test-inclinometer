@@ -165,6 +165,9 @@ void ui_fmt_fixed(char *buf, size_t n, float v, uint8_t decimals, const char *su
 // --- Экраны ---
 void ui_main_create(void);
 void ui_main_show(void);
+void ui_level_show(void);
+void ui_instrument_show(void);
+void ui_level_update(uint32_t now);
 void ui_main_update(uint32_t now);
 void ui_main_toast(const char *text, ui_col_t color);
 

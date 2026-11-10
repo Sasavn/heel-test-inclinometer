@@ -1810,11 +1810,59 @@ static void test_app_battery(void) {
 	CHECK(g_app.log_freq_hz == 25 && g_app.bat_alarm_v == 11.0f && in->seq == 8);
 }
 
+
+
+static void test_level_legacy_settings(void){
+    world(0);settings_rec_t old;memset(&old,0xff,sizeof(old));
+    old.magic=SETTINGS_MAGIC;old.seq=4;old.log_freq_hz=17;old.bus_gap_ms=20;old.theme=APP_THEME_LIGHT;
+    old.ema_alpha=.25f;old.bat_alarm_v=10.8f;
+    old.crc=settings_crc32(&old,28);memcpy(fake_flash,&old,sizeof(old));app_init();
+    CHECK(sizeof(old)==32&&g_app.log_freq_hz==17&&g_app.bus_gap_ms==20&&g_app.theme==APP_THEME_LIGHT);
+    CHECK(g_relative.mode==APP_DEFAULT_INSTRUMENT&&!g_relative.config.axes_confirmed&&!g_relative.offset_valid);
+    CHECK(g_relative.config.reference_index==0&&g_relative.config.object_index==1);
+    CHECK_NEAR(g_app.ema_alpha,.25,1e-6);CHECK_NEAR(g_app.bat_alarm_v,10.8,1e-5);
+    CHECK(g_app.sensor[0].off_x==0&&g_app.sensor[1].off_y==0);
+    CHECK(app_set_instrument(REL_MODE_LEVEL));run_ms(3500);settings_t loaded;
+    CHECK(settings_load(&loaded)&&(loaded.instrument_flags&0xfff0)==0xa600);
+    CHECK(loaded.log_freq_hz==17&&loaded.bus_gap_ms==20); /* ordinary settings survive extension */
+}
+
+static void test_app_level(void) {
+    world(APP_SENSOR_COUNT);app_init();app_set_time(&T0);run_ms(600);
+    CHECK(app_set_instrument(REL_MODE_LEVEL));CHECK(app_relative_axes(true));run_ms(500);
+    relative_result_t r;app_relative_read(&r);CHECK(r.ready);
+    float before=r.live[0];app_zero_all();app_relative_read(&r);CHECK_NEAR(r.live[0],before,1e-6);
+    CHECK(app_relative_zero(false));app_relative_read(&r);CHECK(!r.ready);run_ms(500);app_relative_read(&r);CHECK(r.ready&&r.offset_valid);
+    app_relative_units(true);run_ms(3500);uint16_t flags=app_instrument_flags();
+    settings_t saved;CHECK(settings_load(&saved)&&saved.instrument_flags==flags);
+    app_init();run_ms(600);CHECK(g_relative.mode==REL_MODE_LEVEL&&g_relative.config.axes_confirmed&&g_app.level_units);
+    CHECK(!g_relative.offset_valid&&g_app.sensor[0].off_x==0); /* REL/head zeros never durable */
+    fake_sw_rec=1;run_ms(1800);CHECK(g_app.sd_state==SD_RECORDING);
+    char recorded[SD_NAME_LEN];CHECK(sd_logger_file_name(0,recorded));
+    CHECK(!app_set_instrument(REL_MODE_HEEL)&&!app_relative_axes(false)&&!app_relative_roles(3,2)&&!app_relative_zero(true));
+    fake_sensor[1].present=false;run_ms(800);fake_sensor[1].present=true;run_ms(1600);
+    fake_sw_rec=0;run_ms(100);CHECK(g_app.sd_state==SD_READY);
+    CHECK(fake_fs_count()==1);uint32_t len;char name[SD_NAME_LEN];
+    CHECK(sd_logger_file_name(0,name)); /* next name */
+    const char *data=fake_fs_get(recorded,&len);
+    if(!data){printf("REL expected name mismatch, next=%s\n",name);}CHECK(data!=NULL);
+    if(data){CHECK(strncmp(data,RELATIVE_CSV_HEADER,strlen(RELATIVE_CSV_HEADER))==0);
+        CHECK(strstr(data,";GAP;")&&strstr(data,";RECOVERY;")&&strstr(data,";SAMPLE;"));
+        CHECK(!strstr(data,"RawX;RawY")&&!strstr(data,"nan")&&!strstr(data,"inf"));}
+    app_init();CHECK(g_app.file_number==2); /* REL-only sessions participate in numbering */
+    run_ms(500);CHECK(app_relative_roles(3,2));CHECK(!g_relative.config.axes_confirmed);app_relative_read(&r);CHECK(!r.ready);
+    CHECK(!app_relative_roles(2,2)&&!app_relative_roles(1,3));
+    CHECK(app_set_instrument(REL_MODE_HEEL));run_ms(500);fake_sw_rec=1;run_ms(1000);fake_sw_rec=0;run_ms(100);
+    CHECK(fake_fs_count()==3); /* returning to heel creates two ordinary files */
+}
+
 int main(void) {
 	struct {
 		const char *name;
 		void (*fn)(void);
 	} tests[] = {
+        { "runtime level + settings + REL logger", test_app_level },
+        { "old SET1 migration", test_level_legacy_settings },
 		{ "CRC16 и запрос", test_crc },
 		{ "углы", test_decode },
 		{ "медиана и EMA", test_filters },

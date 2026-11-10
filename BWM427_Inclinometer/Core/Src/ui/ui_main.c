@@ -339,6 +339,7 @@ void ui_main_create(void) {
 }
 
 void ui_main_show(void) {
+	if(g_relative.mode==REL_MODE_LEVEL){ui_level_show();return;}
 	ui_show(scr, grp);
 	ui_main_update(lv_tick_get());
 }
@@ -670,6 +671,7 @@ static void update_controls(void) {
 }
 
 void ui_main_update(uint32_t now) {
+	if(lv_screen_active()==scr && g_relative.mode==REL_MODE_LEVEL){ui_level_show();return;}
 	if (lv_screen_active() != scr)
 		return;
 	update_status_bar(now);

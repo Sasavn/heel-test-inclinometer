@@ -23,6 +23,7 @@
 #include "lvgl.h"
 #include "app.h"
 #include "ui.h"
+#include "ui_internal.h"
 #include "sim.h"
 
 #ifndef UI_MENU_STYLE
@@ -220,10 +221,10 @@ enum { T_SENS = 0, T_ROLL, T_POWER, T_SD, T_DEV, T_BACK };       // плитки
 enum { S_FREQ = 0, S_ALPHA, S_GAP, S_ADDR, S_ZERO, S_BACK };     // «Датчики»
 enum { R_WIN = 0, R_RATE, R_CALM, R_HYST, R_BACK };              // «Качка»
 enum { P_BAT = 0, P_BACK };                                      // «Питание»
-enum { D_TIME = 0, D_THEME, D_HELP, D_BACK };                    // «Прибор»
+enum { D_TIME = 0, D_THEME, D_HELP, D_INSTRUMENT, D_BACK };                    // «Прибор»
 #else
 enum { A_TIME = 0, A_SD, A_ALPHA, A_RWIN, A_RRATE, A_RCALM, A_RHYST, A_ADDR, A_ZERO, A_GAP,
-	A_BAT, A_THEME, A_HELP, A_BACK };
+	A_BAT, A_THEME, A_HELP, A_INSTRUMENT, A_BACK };
 #endif
 
 static void open_menu(void) {
@@ -718,6 +719,47 @@ static void scenario_menu_tiles(bool longest) {
 }
 #endif
 
+
+static void level_feed(void){
+    for(unsigned i=0;i<2;i++){
+        g_app.sensor[i].addr=i+2;g_app.sensor[i].raw_x=i?1.25f:.25f;g_app.sensor[i].raw_y=i?-2.f:-1.f;
+        g_app.sensor[i].off_x=80;g_app.sensor[i].off_y=-40;
+        app_relative_observe(i,true,lv_tick_get());sim_run(16);
+    }
+}
+static int scenario_level(void){
+    g_app.rec_switch_on=false;g_app.sd_state=SD_READY;g_app.svc_state=SVC_IDLE;
+    app_set_instrument(REL_MODE_LEVEL);app_relative_axes(true);level_feed();sim_run(120);
+    shot("level_degrees");
+    app_relative_units(true);sim_run(100);shot("level_mm_per_m");
+    check(app_relative_zero(false),"REL capture needs a fresh accepted pair");level_feed();sim_run(100);shot("level_REL_zero");
+    sim_run(600);shot("level_stale");
+    app_relative_axes(false);sim_run(120);shot("level_axes_unconfirmed");
+    ui_menu_show();sim_run(120);
+#if UI_MENU_STYLE == 1
+    focus_to(A_INSTRUMENT);sim_click();
+#else
+    focus_to(T_DEV);sim_click();focus_to(D_INSTRUMENT);sim_click();
+#endif
+    sim_run(120);shot("level_instrument_settings");
+    focus_to(0);sim_click();check(g_relative.mode==REL_MODE_HEEL,"mode button selects heel");
+    sim_click();check(g_relative.mode==REL_MODE_LEVEL,"mode button selects level");
+    focus_to(1);sim_click();check(g_relative.config.reference_index==1&&!g_relative.config.axes_confirmed,"roles button swaps heads and clears axes");
+    focus_to(2);sim_click();check(g_relative.config.axes_confirmed,"axes button confirms orientation");
+    focus_to(3);sim_click();check(!g_app.level_units,"unit button selects degrees");
+    focus_to(4);sim_click();
+    app_set_instrument(REL_MODE_LEVEL);ui_main_show();sim_run(100);
+    size_t cycle_before=heap_used("level before switches");
+    for(unsigned i=0;i<20;i++){
+        app_set_instrument(REL_MODE_HEEL);ui_main_show();sim_run(100);
+        app_set_instrument(REL_MODE_LEVEL);ui_main_show();sim_run(100);
+    }
+    ui_main_show();sim_run(100);shot("level_return");
+    size_t cycle_after=heap_used("level after switches");
+    check(cycle_after<=cycle_before+64,"level screens leak across mode switches");
+    printf("level scenario: %d errors\n",errors);return errors?1:0;
+}
+
 int main(int argc, char **argv) {
 	setvbuf(stdout, NULL, _IONBF, 0); // вывод сразу (если сценарий зависнет)
 	if (argc > 1)
@@ -730,6 +772,7 @@ int main(int argc, char **argv) {
 	sim_stats_t first = sim_stats;
 	printf("  первый кадр: %lu flush, %lu пикс\n", (unsigned long) first.flushes,
 			(unsigned long) first.pixels);
+	if(argc>2 && !strcmp(argv[2],"level"))return scenario_level();
 	size_t used0 = heap_used("после ui_init");
 	size_t used1 = 0, used2 = 0;
 

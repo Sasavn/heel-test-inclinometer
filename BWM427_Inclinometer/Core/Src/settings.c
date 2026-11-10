@@ -120,7 +120,8 @@ static bool same(const settings_t *a, const settings_t *b) {
 			&& memcmp(&a->bat_alarm_v, &b->bat_alarm_v, sizeof(a->bat_alarm_v)) == 0
 			&& a->roll_window_s == b->roll_window_s && a->roll_rate_hz == b->roll_rate_hz
 			&& a->roll_calm_cdeg == b->roll_calm_cdeg
-			&& a->roll_hyst_cdeg == b->roll_hyst_cdeg;
+			&& a->roll_hyst_cdeg == b->roll_hyst_cdeg
+			&& a->instrument_flags == b->instrument_flags;
 }
 
 bool settings_load(settings_t *out) {
@@ -156,6 +157,7 @@ bool settings_load(settings_t *out) {
 	s_last.roll_rate_hz = best.roll_rate_hz;
 	s_last.roll_calm_cdeg = best.roll_calm_cdeg;
 	s_last.roll_hyst_cdeg = best.roll_hyst_cdeg;
+	s_last.instrument_flags = best.reserved;
 	s_have_last = true;
 	s_info.loaded = true;
 	s_info.seq = best.seq;
@@ -181,6 +183,7 @@ bool settings_store(const settings_t *s) {
 	r.roll_rate_hz = s->roll_rate_hz;
 	r.roll_calm_cdeg = s->roll_calm_cdeg;
 	r.roll_hyst_cdeg = s->roll_hyst_cdeg;
+	r.reserved = s->instrument_flags;
 	r.crc = settings_crc32(&r, REC_CRC_LEN);
 	uint32_t words[SETTINGS_REC_WORDS];
 	memcpy(words, &r, sizeof(words));

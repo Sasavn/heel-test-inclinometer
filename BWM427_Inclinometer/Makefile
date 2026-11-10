@@ -112,7 +112,8 @@ LDSCRIPT := STM32F411CEUX_FLASH.ld
 ##############################################################################
 # Includes / defines
 ##############################################################################
-C_DEFS := -DUSE_HAL_DRIVER -DSTM32F411xE -DDEBUG
+DEFAULT_MODE ?= 0
+C_DEFS := -DUSE_HAL_DRIVER -DSTM32F411xE -DDEBUG -DAPP_DEFAULT_INSTRUMENT=$(DEFAULT_MODE)
 
 C_INCLUDES := \
   -ICore/Inc \

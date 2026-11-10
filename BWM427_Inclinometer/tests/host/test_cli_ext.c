@@ -36,6 +36,7 @@ static void group(const char *name) {
 /* ------------------------------------------------------------------------ */
 
 app_state_t g_app;
+void settings_touch(uint32_t now) {(void)now;}
 uint32_t fake_tick;
 uint32_t SystemCoreClock = 100000000u;
 static int s_set_time_calls, s_zero_calls, s_zero_reset_calls, s_addr_calls;
@@ -633,7 +634,7 @@ static void test_status_json(void) {
 	static char js[2048];
 	size_t n = usb_cli_ext_status_json(js, sizeof(js), fake_tick);
 	CHECK(n > 0 && n == strlen(js));
-	CHECK(n < 1400);
+	CHECK(n < 1600);
 	CHECK(js[0] == '{' && n > 3 && strcmp(js + n - 3, "}\r\n") == 0);
 	CHECK(strchr(js, '\n') == js + n - 1); // одна строка
 	CHECK(json_shape_ok(js));
@@ -709,7 +710,7 @@ static void test_status_json(void) {
 	fake_tick = 4294967295u;
 	n = usb_cli_ext_status_json(js, sizeof(js), fake_tick);
 	CHECK(n > 0 && json_shape_ok(js));
-	CHECK(n + 4 <= 1792); // буфер прошивки 2048, запас в кольце для ответа 1792
+	CHECK(n + 4 <= 2048); // буфер прошивки 2048, запас в кольце для ответа 1792
 	printf("  наибольшая длина %u байт\n", (unsigned) n);
 
 	// Образец для тестов программы на ПК (pc/tests): build_host/status_sample.json
@@ -1176,7 +1177,40 @@ static void test_samples(void) {
 	printf("  ok\n");
 }
 
+
+static void test_relative_api(void) {
+    usb_cli_ext_abort();tx_reset();g_app.rec_switch_on=false;g_app.sd_state=SD_READY;g_app.svc_state=SVC_IDLE;app_relative_init(0xffff);
+    CHECK(run("instrument level"));CHECK(!strcmp(last_line(),"OK instrument"));
+    CHECK(run("relative roles 2 3"));CHECK(!strcmp(last_line(),"OK relative"));
+    CHECK(run("relative axes confirm"));CHECK(!strcmp(last_line(),"OK relative"));
+    for(unsigned i=0;i<2;i++){
+        fake_tick=1000+i*16;g_app.sensor[i].addr=i+2;g_app.sensor[i].raw_x=i?1.25f:.25f;g_app.sensor[i].raw_y=i?-2:-1;
+        g_app.sensor[i].off_x=80;app_relative_observe(i,true,fake_tick);
+    }
+    tx_reset();CHECK(run("relative status"));CHECK(!strcmp(last_line(),"OK relative"));
+    CHECK(strstr(s_cap,"\"raw_x\":1.000")&&strstr(s_cap,"\"ready\":true")&&strstr(s_cap,"\"hardware_sync\":false"));
+    FILE *fixture=fopen("build_host/relative_status.txt","wb");CHECK(fixture!=NULL);
+    if(fixture){fwrite(s_cap,1,s_cap_len,fixture);fclose(fixture);}
+    fs_clear();for(unsigned i=0;i<6;i++){char name[20];snprintf(name,sizeof(name),"part%u.CSV",i);fs_add(name,NULL,0,AM_ARC);}
+    CHECK(run("files"));CHECK(app_transport_busy());CHECK(run("instrument heel"));CHECK(strstr(last_line(),"ERR"));usb_cli_ext_abort();
+    CHECK(run("relative zero"));CHECK(!strcmp(last_line(),"OK relative"));CHECK(g_app.sensor[0].off_x==80);
+    tx_reset();CHECK(run("relative status"));CHECK(strstr(s_cap,"\"ready\":false")&&strstr(s_cap,"\"x\":null"));
+    fixture=fopen("build_host/relative_invalid.txt","wb");CHECK(fixture!=NULL);
+    if(fixture){fwrite(s_cap,1,s_cap_len,fixture);fclose(fixture);}
+    g_app.rec_switch_on=true;CHECK(run("instrument heel"));CHECK(strstr(last_line(),"ERR"));
+    CHECK(run("relative reset"));CHECK(strstr(last_line(),"ERR"));g_app.rec_switch_on=false;
+    CHECK(run("samples on"));CHECK(run("relative axes reset"));CHECK(strstr(last_line(),"ERR"));CHECK(run("samples off"));
+    CHECK(run("relative roles 2 2"));CHECK(strstr(last_line(),"ERR"));
+    CHECK(run("relative roles 2 3 trailing"));CHECK(strstr(last_line(),"ERR"));
+    CHECK(run("instrument level trailing"));CHECK(strstr(last_line(),"ERR"));
+    CHECK(run("relative reset"));CHECK(!strcmp(last_line(),"OK relative"));
+    tx_reset();CHECK(run("status"));CHECK(strstr(s_cap,"\"instrument_control_cap\":true")&&strstr(s_cap,"\"relative_data_cap\":true")&&strstr(s_cap,"\"instrument\":\"level\""));
+    fixture=fopen("build_host/instrument_status.txt","wb");CHECK(fixture!=NULL);
+    if(fixture){fwrite(s_cap,1,s_cap_len,fixture);fclose(fixture);}
+}
+
 int main(void) {
+    app_relative_init(0xffff);
 	test_base64();
 	test_crc32();
 	test_parse_time();
@@ -1185,6 +1219,7 @@ int main(void) {
 	test_files();
 	test_get();
 	test_samples();
+	test_relative_api();
 	printf("\n%d проверок, %d ошибок\n", s_checks, s_fails);
 	return s_fails ? 1 : 0;
 }

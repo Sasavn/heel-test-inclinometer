@@ -676,8 +676,10 @@ static bool sensor_apply(uint8_t i, const bwm427_xfer_t *x) {
 		s->ok_count++;
 		stat_add(&s->lat_first, x->lat_first_us);
 		stat_add(&s->lat_done, x->lat_done_us);
+		app_relative_observe(i, true, x->t_ms);
 		return true;
 	}
+	app_relative_observe(i, false, x->t_ms);
 	s->last_err = (uint8_t) x->result;
 	if (x->result == BWM427_CRC) {
 		s->crc_count++;
@@ -1176,6 +1178,7 @@ static float clamp_roll_hyst(float d) {
 // Значения по умолчанию, поверх — последняя запись из флеша (если есть).
 // Записанное приводится в пределы: его могла оставить другая версия прошивки.
 static void settings_init(void) {
+	app_relative_init(0xffffu);
 	g_app.log_freq_hz = APP_DEF_FREQ_HZ;
 	g_app.ema_alpha = APP_DEF_ALPHA;
 	g_app.bus_gap_ms = APP_DEF_GAP_MS;
@@ -1187,6 +1190,7 @@ static void settings_init(void) {
 	g_app.roll_hyst_deg = APP_ROLL_HYST_DEF_DEG;
 	settings_t s;
 	if (settings_load(&s)) {
+		app_relative_init(s.instrument_flags);
 		g_app.log_freq_hz = clamp_freq(s.log_freq_hz);
 		g_app.ema_alpha = clamp_alpha(s.ema_alpha);
 		g_app.bus_gap_ms = clamp_gap(s.bus_gap_ms);
@@ -1217,6 +1221,7 @@ static void settings_save_task(uint32_t now) {
 		return;
 	}
 	settings_t s;
+	s.instrument_flags = app_instrument_flags();
 	s.log_freq_hz = g_app.log_freq_hz;
 	s.ema_alpha = g_app.ema_alpha;
 	s.bus_gap_ms = g_app.bus_gap_ms;
