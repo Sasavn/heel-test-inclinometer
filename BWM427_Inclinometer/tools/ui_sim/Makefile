@@ -19,7 +19,7 @@ rwildcard = $(foreach d,$(wildcard $(1:=/*)),$(call rwildcard,$(d),$(2)) $(filte
 
 LVGL_SRC := $(call rwildcard,$(LVGL_DIR)/src,*.c)
 UI_SRC   := $(filter-out $(UI_DIR)/lv_port_%.c,$(call rwildcard,$(UI_DIR),*.c))
-SIM_SRC  := sim_main.c sim_port.c sim_app.c
+SIM_SRC  := sim_main.c sim_port.c sim_app.c relative_sim.c
 
 INC  := -I. -I$(ROOT)/Core/Inc -I$(UI_DIR) -I$(LVGL_DIR) -I$(ROOT)/Middlewares/Third_Party
 DEFS := -DLV_CONF_INCLUDE_SIMPLE

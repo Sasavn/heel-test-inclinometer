@@ -482,7 +482,7 @@ static void cmd_help(void) {
 static void cmd_ver(void) {
 	const volatile uint32_t *uid = (const volatile uint32_t *) UID_BASE;
 	uint32_t hal = HAL_GetHalVersion();
-	cli_line("BWM427 inclinometer firmware v" FW_VERSION ", build " __DATE__ " " __TIME__);
+	cli_line("BWM427 fw=" FW_VERSION " board=stm32f411 chip=stm32f411 proto=2 default_instrument=" FW_DEFAULT_INSTRUMENT " image=BWM427 inclinometer firmware v" FW_VERSION);
 	cli_line("HAL %lu.%lu.%lu, SYSCLK %lu MHz, UID %08lX%08lX%08lX",
 			(unsigned long) (hal >> 24), (unsigned long) ((hal >> 16) & 0xFFu),
 			(unsigned long) ((hal >> 8) & 0xFFu),

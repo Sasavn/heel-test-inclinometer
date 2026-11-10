@@ -40,7 +40,7 @@
 #define CLI_EXT_D_LINE_MAX   (2u + 64u + 2u)   // "D," + base64 + "\r\n"
 #define CLI_EXT_END_MAX      48u     // "E,<байт>,<crc>\r\n" + "OK\r\n"
 #define CLI_EXT_F_LINE_MAX   (CLI_EXT_LINE_MAX + 2u)
-#define CLI_EXT_TX_RESERVE   1792u   // запас в кольце передачи: ответ status (до ~1,6 КБ) и поток
+#define CLI_EXT_TX_RESERVE   2048u   // запас в кольце передачи: ответ status (до ~1,6 КБ) и поток
 #define CLI_EXT_LIST_STEP    4u      // записей каталога за проход (~ одно чтение сектора)
 #define CLI_EXT_STALL_MS     5000u   // хост не забирает данные — прервать files/get
 #define CLI_EXT_ADDR_MAX     247u    // Modbus: адреса 1..247
@@ -391,6 +391,9 @@ size_t usb_cli_ext_status_json(char *out, size_t size, uint32_t now) {
 	const app_time_t *t = &g_app.time;
 
 	jb_add(j, "{\"v\":1,\"fw\":\"%s\"", FW_VERSION);
+    jb_add(j,",\"board\":\"stm32f411\",\"platform\":\"stm32f411\",\"proto\":2");
+    jb_bool(j,"dual_mode_cap",true);jb_bool(j,"instrument_control_cap",true);jb_bool(j,"relative_data_cap",true);
+    jb_add(j,",\"instrument\":\"%s\"",g_relative.mode==REL_MODE_LEVEL?"level":"heel");
 	jb_u32(j, "up", g_app.diag.uptime_s);
 	jb_u32(j, "ms", now);
 	jb_add(j, ",\"time\":\"20%02u-%02u-%02u %02u:%02u:%02u\"", (unsigned) t->year,
@@ -873,7 +876,52 @@ static void cmd_zero(const char *arg) {
  * Точки входа
  * ------------------------------------------------------------------------- */
 
+
+/* Explicit protocol-2 instrument API; main-loop owner rejects busy transitions. */
+bool app_transport_busy(void) {return s_xf_mode!=XF_IDLE || s_samples_on;}
+static void jb_u64(jbuf_t *j,const char *key,uint64_t value) {
+    char decimal[21];relative_u64(decimal,value);jb_add(j,",\"%s\":%s",key,decimal);
+}
+static void cmd_relative_status(void) {
+    relative_result_t r;app_relative_read(&r);
+    jbuf_t jb={.buf=s_scratch,.size=sizeof(s_scratch)};jbuf_t *j=&jb;
+    jb_add(j,"{\"mode\":\"%s\",\"reference\":%u,\"object\":%u",
+        g_relative.mode==REL_MODE_LEVEL?"level":"heel",g_relative.config.reference_index+2,g_relative.config.object_index+2);
+    jb_bool(j,"ready",r.ready);jb_u32(j,"quality",r.quality);jb_u64(j,"skew_us",r.skew_us);
+    jb_u64(j,"ref_us",r.timestamp_us[0]);jb_u64(j,"obj_us",r.timestamp_us[1]);
+    jb_u64(j,"ref_seq",r.sequence[0]);jb_u64(j,"obj_seq",r.sequence[1]);
+    jb_bool(j,"rel_offset",r.offset_valid);jb_u32(j,"generation",r.generation);
+    jb_bool(j,"hardware_sync",false);jb_u32(j,"heads_supported",2);
+    jb_bool(j,"axes_confirmed",g_relative.config.axes_confirmed);
+    jb_float(j,"raw_x",r.live[0],3);jb_float(j,"raw_y",r.live[1],3);
+    jb_float(j,"x",r.relative[0],3);jb_float(j,"y",r.relative[1],3);
+    jb_float(j,"offset_x",r.offset[0],3);jb_float(j,"offset_y",r.offset[1],3);
+    jb_float(j,"ref_x",r.source[0][0],3);jb_float(j,"ref_y",r.source[0][1],3);
+    jb_float(j,"obj_x",r.source[1][0],3);jb_float(j,"obj_y",r.source[1][1],3);
+    jb_u64(j,"ref_age_us",r.age_us[0]);jb_u64(j,"obj_age_us",r.age_us[1]);
+    jb_u32(j,"max_age_us",500000);jb_u32(j,"max_skew_us",50000);jb_add(j,"}\r\n");
+    if(jb.overflow||usb_cli_out_free()<jb.pos+16){ext_line("ERR tx busy, retry");return;}
+    usb_cli_out(s_scratch,(uint32_t)jb.pos);ext_line("OK relative");
+}
+static void cmd_relative(const char *arg) {
+    if(!strcmp(arg,"status")){cmd_relative_status();return;}
+    bool ok=false;unsigned ref,obj;char extra;
+    if(!strcmp(arg,"axes confirm"))ok=app_relative_axes(true);
+    else if(!strcmp(arg,"axes reset"))ok=app_relative_axes(false);
+    else if(!strcmp(arg,"zero"))ok=app_relative_zero(false);
+    else if(!strcmp(arg,"reset"))ok=app_relative_zero(true);
+    else if(sscanf(arg,"roles %u %u %c",&ref,&obj,&extra)==2 && !strncmp(arg,"roles ",6))ok=app_relative_roles(ref,obj);
+    else {ext_line("ERR relative syntax");return;}
+    ext_line(ok?"OK relative":"ERR relative busy/invalid/not ready");
+}
+
 bool usb_cli_ext_exec(const char *cmd, const char *arg) {
+	if (!strcmp(cmd,"instrument")) {
+		if (strcmp(arg,"heel") && strcmp(arg,"level")) ext_line("ERR instrument syntax");
+		else ext_line(app_set_instrument(!strcmp(arg,"level"))?"OK instrument":"ERR instrument busy");
+		return true;
+	}
+	if (!strcmp(cmd,"relative")) { cmd_relative(arg); return true; }
 	if (strcmp(cmd, "status") == 0) {
 		cmd_status(arg);
 	} else if (strcmp(cmd, "set") == 0 && word_is(arg, "time")) {

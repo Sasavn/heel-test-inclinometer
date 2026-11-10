@@ -634,6 +634,7 @@ void ui_task(void) {
 		ui_theme_sync(); // тему могли сменить не из меню (например, по USB)
 		ui_main_update(now);
 		ui_settings_update(now);
+		ui_level_update(now);
 	}
 	lv_timer_handler();
 }

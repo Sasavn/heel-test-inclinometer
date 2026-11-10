@@ -27,6 +27,7 @@
 #define SETTINGS_H_
 
 #include <stdint.h>
+#include <stddef.h>
 #include <stdbool.h>
 
 #define SETTINGS_FLASH_ADDR     0x08060000u  // сектор 7
@@ -49,6 +50,7 @@ typedef struct {
 	uint8_t roll_rate_hz;
 	uint16_t roll_calm_cdeg; // порог покоя, сотые градуса
 	uint16_t roll_hyst_cdeg; // гистерезис, сотые градуса
+	uint16_t instrument_flags; // optional 0xA60x payload in old reserved word, never REL zero
 } settings_t;
 
 // Запись журнала во флеше (32 байта, слова по 4 байта)
@@ -70,6 +72,8 @@ typedef struct {
 } settings_rec_t;
 
 _Static_assert(sizeof(settings_rec_t) == SETTINGS_REC_SIZE, "settings_rec_t: 32 байта");
+_Static_assert(offsetof(settings_rec_t, reserved)==26 && offsetof(settings_rec_t, crc)==28,
+    "SET1 on-flash offsets must remain compatible");
 
 typedef enum {
 	SETTINGS_ERR_NONE = 0,
