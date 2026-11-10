@@ -38,6 +38,16 @@
 #define FW_VERSION (esp_app_get_description()->version)
 typedef struct { unsigned index; tab5_measure_sensor_t value; uint64_t observed_us; } sample_event_t;
 typedef struct { char line[3072]; } tx_line_t;
+/* UI and protocol producers only enqueue. The main loop owns dual state.
+ * A protocol caller waits without app_mutex; its request remains alive until
+ * the owner signals completion. No borrowed transport callbacks cross tasks. */
+typedef struct {
+    tab5_ui_action_t action;
+    bool status;
+    SemaphoreHandle_t done;
+    char response[1200];
+} dual_request_t;
+typedef struct { tab5_ui_action_t ui; dual_request_t *protocol; } action_event_t;
 static QueueHandle_t samples, storage_samples, actions, usb_tx;
 static SemaphoreHandle_t app_mutex, route_mutex;
 static bool route_recording;
@@ -59,8 +69,8 @@ static bool physical_inputs_ready;
 static bool physical_detent(int delta,uint32_t ms){return tab5_native_port_post_input(TAB5_UI_INPUT_ROT,delta,ms);}
 static bool physical_press(bool down,uint32_t ms){return tab5_native_port_post_button(down,ms);}
 static bool physical_record(bool on,uint32_t ms){
-    (void)ms;tab5_ui_action_t a={.kind=on?TAB5_UI_START:TAB5_UI_STOP};
-    return actions&&xQueueSend(actions,&a,0)==pdTRUE;
+    (void)ms;action_event_t e={.ui={.kind=on?TAB5_UI_START:TAB5_UI_STOP}};
+    return actions&&xQueueSend(actions,&e,0)==pdTRUE;
 }
 #endif
 static uint32_t rejected_actions; /* atomic bitset, UI producer/main consumer */
@@ -246,8 +256,8 @@ static void sample_callback(unsigned i,const tab5_measure_sensor_t *s,void *unus
     if(xQueueSend(storage_samples,&e,0)!=pdTRUE)__atomic_add_fetch(&route_drops,1,__ATOMIC_RELAXED);
 }
 static void ui_callback(const tab5_ui_action_t *a,void *unused) {
-    (void)unused;
-    if(xQueueSend(actions,a,0)!=pdTRUE&&(unsigned)a->kind<32)
+    (void)unused;action_event_t e={.ui=*a};
+    if(xQueueSend(actions,&e,0)!=pdTRUE&&(unsigned)a->kind<32)
         __atomic_fetch_or(&rejected_actions,1u<<(unsigned)a->kind,__ATOMIC_RELEASE);
 }
 static void consume_rejected_actions(void){
@@ -357,19 +367,41 @@ static bool apply_dual_action_body(const tab5_ui_action_t *a){
         if(a->mode!=TAB5_MODE_HEEL&&a->mode!=TAB5_MODE_LEVEL)return false;
         if(relative_state.mode!=a->mode){relative_state.mode=a->mode;tab5_relative_boundary(&relative_state,&s);}
         snprintf(notice,sizeof(notice),"%s",a->mode==TAB5_MODE_HEEL?"Креномер":"Выравнивание: ждём свежую пару; запись выключена");
-    }else if(a->kind==TAB5_UI_REL_CONFIG){
-        if(!save_relative_config(&a->relative_config)){
+    }else if(a->kind==TAB5_UI_REL_CONFIG||a->kind==TAB5_UI_INSTRUMENT||
+             a->kind==TAB5_UI_REL_ROLES||a->kind==TAB5_UI_REL_AXES){
+        tab5_relative_config_t cfg=relative_state.config;
+        if(a->kind==TAB5_UI_REL_CONFIG)cfg=a->relative_config;
+        else if(a->kind==TAB5_UI_INSTRUMENT){
+            if(a->mode!=TAB5_MODE_HEEL&&a->mode!=TAB5_MODE_LEVEL)return false;
+            cfg.startup_mode=(uint8_t)a->mode;
+        }else if(a->kind==TAB5_UI_REL_ROLES){
+            cfg.reference_index=a->relative_config.reference_index;
+            cfg.object_index=a->relative_config.object_index;
+        }else cfg.axes_confirmed=a->relative_config.axes_confirmed;
+        if(!save_relative_config(&cfg)){
             snprintf(notice,sizeof(notice),"Роли/базовый режим не сохранены: параметры или NVS");return false;
         }
-        bool changed=relative_state.config.reference_index!=a->relative_config.reference_index||
-            relative_state.config.object_index!=a->relative_config.object_index||
-            relative_state.config.axes_confirmed!=a->relative_config.axes_confirmed;
-        relative_state.config=a->relative_config;
+        bool changed=relative_state.config.reference_index!=cfg.reference_index||
+            relative_state.config.object_index!=cfg.object_index||
+            relative_state.config.axes_confirmed!=cfg.axes_confirmed;
+        if(a->kind==TAB5_UI_INSTRUMENT){
+            changed=changed||relative_state.mode!=a->mode;relative_state.mode=a->mode;
+        }
+        relative_state.config=cfg;
         if(changed)tab5_relative_boundary(&relative_state,&s);
         snprintf(notice,sizeof(notice),"Базовый режим и роли сохранены; REL не восстанавливается после перезапуска");
-    }else if(a->kind==TAB5_UI_REL_CAPTURE){
-        if(relative_state.mode!=TAB5_MODE_LEVEL||!tab5_relative_capture(&relative_state,&s,esp_timer_get_time())){
+    }else if(a->kind==TAB5_UI_REL_CAPTURE||a->kind==TAB5_UI_REL_ZERO){
+        tab5_relative_t candidate=relative_state;
+        tab5_relative_t *target=a->kind==TAB5_UI_REL_ZERO?&candidate:&relative_state;
+        if(relative_state.mode!=TAB5_MODE_LEVEL||!tab5_relative_capture(target,&s,esp_timer_get_time())){
             snprintf(notice,sizeof(notice),"Отсчёт не сохранён: проверьте оси, свежесть и качество пары");return false;
+        }
+        if(a->kind==TAB5_UI_REL_ZERO){
+            relative_state=candidate;
+            /* The PC contract requires a fresh pair after changing REL zero.
+             * Keep the existing UI capture semantics; never touch head zeros. */
+            for(unsigned i=0;i<2;i++)relative_state.floor_good[i]=s.sensor[i].good;
+            tab5_relative_pair_reset(&relative_state);
         }
         snprintf(notice,sizeof(notice),"REL: сохранена текущая разность; живая опора продолжает измеряться");
     }else if(a->kind==TAB5_UI_REL_RESET){
@@ -485,6 +517,8 @@ static void status(tab5_service_reply_fn reply,void *ctx) {
     cJSON_AddNumberToObject(j,"file",measurement_number);cJSON_AddNumberToObject(j,"rec_mask",(sd.recording||usb.recording)?3:0);cJSON_AddBoolToObject(j,"rec_sw",recording);
     cJSON_AddBoolToObject(j,"rec_sync_cap",true);cJSON_AddBoolToObject(j,"rec_sync",record_sync);
     cJSON_AddBoolToObject(j,"dual_mode_cap",true);
+    cJSON_AddBoolToObject(j,"instrument_control_cap",true);
+    cJSON_AddBoolToObject(j,"relative_data_cap",true);
     cJSON_AddStringToObject(j,"instrument",relative_state.mode==TAB5_MODE_LEVEL?"level":"heel");
     cJSON_AddBoolToObject(j,"physical_inputs",physical_inputs_ready);
     cJSON_AddNumberToObject(j,"physical_input_retries",tab5_input_gpio_retries());
@@ -543,7 +577,70 @@ static void input_status(tab5_service_reply_fn reply,void *ctx){
     else reply(ctx,"ERR input status memory");
     cJSON_Delete(j);
 }
-static void command(void *unused,const char *line,tab5_service_reply_fn reply,void *ctx) {
+/* Run only in the main action consumer, under app_mutex. read() may expire a
+ * pair, but never accepts a new healthy pair from a status poll. */
+static void relative_status_json(char *out,size_t cap){
+    tab5_measure_snapshot_t s;tab5_measure_snapshot(&s);
+    tab5_relative_result_t r;tab5_relative_read(&relative_state,&s,esp_timer_get_time(),&r);
+    cJSON *j=cJSON_CreateObject();if(!j){snprintf(out,cap,"ERR memory");return;}
+    cJSON_AddStringToObject(j,"mode",relative_state.mode==TAB5_MODE_LEVEL?"level":"heel");
+    cJSON_AddNumberToObject(j,"reference",relative_state.config.reference_index+2);
+    cJSON_AddNumberToObject(j,"object",relative_state.config.object_index+2);
+    cJSON_AddBoolToObject(j,"ready",r.ready);cJSON_AddNumberToObject(j,"quality",r.quality);
+    cJSON_AddNumberToObject(j,"skew_us",r.skew_us);
+    cJSON_AddNumberToObject(j,"ref_us",r.timestamp_us[0]);cJSON_AddNumberToObject(j,"obj_us",r.timestamp_us[1]);
+    cJSON_AddNumberToObject(j,"ref_seq",r.sequence[0]);cJSON_AddNumberToObject(j,"obj_seq",r.sequence[1]);
+    cJSON_AddBoolToObject(j,"rel_offset",r.offset_valid);cJSON_AddNumberToObject(j,"generation",r.generation);
+    cJSON_AddBoolToObject(j,"hardware_sync",false);cJSON_AddNumberToObject(j,"heads_supported",2);
+    cJSON_AddBoolToObject(j,"axes_confirmed",relative_state.config.axes_confirmed);
+    add_num(j,"raw_x",r.ready?r.live[0]:NAN);add_num(j,"raw_y",r.ready?r.live[1]:NAN);
+    add_num(j,"x",r.ready?r.relative[0]:NAN);add_num(j,"y",r.ready?r.relative[1]:NAN);
+    add_num(j,"offset_x",r.offset[0]);add_num(j,"offset_y",r.offset[1]);
+    add_num(j,"ref_x",r.source[0][0]);add_num(j,"ref_y",r.source[0][1]);
+    add_num(j,"obj_x",r.source[1][0]);add_num(j,"obj_y",r.source[1][1]);
+    add_num(j,"ref_age_us",r.age_us[0]==UINT64_MAX?NAN:(double)r.age_us[0]);
+    add_num(j,"obj_age_us",r.age_us[1]==UINT64_MAX?NAN:(double)r.age_us[1]);
+    cJSON_AddNumberToObject(j,"max_age_us",TAB5_RELATIVE_MAX_AGE_US);
+    cJSON_AddNumberToObject(j,"max_skew_us",TAB5_RELATIVE_MAX_SKEW_US);
+    if(!cJSON_PrintPreallocated(j,out,(int)cap,false))snprintf(out,cap,"ERR relative JSON");
+    cJSON_Delete(j);
+}
+static void process_dual_request(dual_request_t *r){
+    if(r->status)relative_status_json(r->response,sizeof(r->response));
+    else snprintf(r->response,sizeof(r->response),"%s",apply_dual_action(&r->action)?
+        (r->action.kind==TAB5_UI_INSTRUMENT?"OK instrument":"OK relative"):
+        "ERR relative busy/parameters/NVS/pair not ready");
+    /* Last access to the borrowed request: the caller may now release it. */
+    xSemaphoreGive(r->done);
+}
+static bool dual_command(const char *line,tab5_service_reply_fn reply,void *ctx){
+    bool instrument=!strcmp(line,"instrument")||!strncmp(line,"instrument ",11);
+    bool relative=!strcmp(line,"relative")||!strncmp(line,"relative ",9);
+    if(!instrument&&!relative)return false;
+    dual_request_t r={0};
+    if(!strcmp(line,"instrument heel")||!strcmp(line,"instrument level")){
+        r.action.kind=TAB5_UI_INSTRUMENT;r.action.mode=!strcmp(line,"instrument level")?TAB5_MODE_LEVEL:TAB5_MODE_HEEL;
+    }else if(!strcmp(line,"relative roles 2 3")||!strcmp(line,"relative roles 3 2")){
+        r.action.kind=TAB5_UI_REL_ROLES;
+        r.action.relative_config.reference_index=(uint8_t)(line[15]-'2');
+        r.action.relative_config.object_index=(uint8_t)(line[17]-'2');
+    }else if(!strcmp(line,"relative axes confirm")||!strcmp(line,"relative axes reset")){
+        r.action.kind=TAB5_UI_REL_AXES;r.action.relative_config.axes_confirmed=!strcmp(line,"relative axes confirm");
+    }else if(!strcmp(line,"relative zero"))r.action.kind=TAB5_UI_REL_ZERO;
+    else if(!strcmp(line,"relative reset"))r.action.kind=TAB5_UI_REL_RESET;
+    else if(!strcmp(line,"relative status"))r.status=true;
+    else{reply(ctx,"ERR relative syntax/roles");return true;}
+    r.done=xSemaphoreCreateBinary();
+    if(!r.done){reply(ctx,"ERR relative memory");return true;}
+    action_event_t e={.protocol=&r};
+    if(!actions||xQueueSend(actions,&e,0)!=pdTRUE){vSemaphoreDelete(r.done);reply(ctx,"ERR relative queue busy");return true;}
+    /* No timeout: stack request lifetime extends through owner completion.
+     * The main consumer never waits on this transport and does no reply I/O. */
+    xSemaphoreTake(r.done,portMAX_DELAY);vSemaphoreDelete(r.done);
+    reply(ctx,r.response);if(r.status&&r.response[0]=='{')reply(ctx,"OK relative");
+    return true;
+}
+static void legacy_command(void *unused,const char *line,tab5_service_reply_fn reply,void *ctx) {
     (void)unused;xSemaphoreTake(app_mutex,portMAX_DELAY);
     tab5_measure_snapshot_t s;tab5_measure_snapshot(&s);
     if(strcmp(line,"ver")==0){char version[160];snprintf(version,sizeof(version),"BWM427 inclinometer firmware v%s, board=tab5 chip=esp32p4 proto=2",FW_VERSION);reply(ctx,version);reply(ctx,"OK");}
@@ -580,16 +677,6 @@ static void command(void *unused,const char *line,tab5_service_reply_fn reply,vo
             char *text=cJSON_PrintUnformatted(j);if(text){reply(ctx,text);cJSON_free(text);}else reply(ctx,"ERR task snapshot JSON");
             cJSON_Delete(j);free(tasks);reply(ctx,"OK ui tasks");}
     }
-    else if(strcmp(line,"relative status")==0){
-        tab5_relative_result_t r;tab5_relative_read(&relative_state,&s,esp_timer_get_time(),&r);
-        char out[640];
-        snprintf(out,sizeof(out),"{\"mode\":\"%s\",\"reference\":%u,\"object\":%u,\"ready\":%s,\"quality\":%lu,\"skew_us\":%llu,\"ref_us\":%llu,\"obj_us\":%llu,\"ref_seq\":%llu,\"obj_seq\":%llu,\"rel_offset\":%s,\"generation\":%lu,\"hardware_sync\":false,\"heads_supported\":2}",
-            relative_state.mode==TAB5_MODE_LEVEL?"level":"heel",relative_state.config.reference_index+2,relative_state.config.object_index+2,
-            r.ready?"true":"false",(unsigned long)r.quality,(unsigned long long)r.skew_us,
-            (unsigned long long)r.timestamp_us[0],(unsigned long long)r.timestamp_us[1],
-            (unsigned long long)r.sequence[0],(unsigned long long)r.sequence[1],r.offset_valid?"true":"false",(unsigned long)r.generation);
-        reply(ctx,out);reply(ctx,"OK relative");
-    }
     else if(strcmp(line,"zero")==0 || strcmp(line,"zero reset")==0){
         if(relative_state.mode==TAB5_MODE_LEVEL&&(recording||!tab5_services_mode_change_allowed()))reply(ctx,"ERR finish relative recording/transfer before zero");
         else{tab5_measure_zero(strcmp(line,"zero reset")==0);reply(ctx,"OK zero");}}
@@ -625,9 +712,13 @@ static void command(void *unused,const char *line,tab5_service_reply_fn reply,vo
             else if(strcmp(key,"rollhyst")==0 && value>=0 && value<=2)c.roll_hysteresis_deg=value;
             else ok=false;
             if(ok){tab5_measure_configure(&c);persist();reply(ctx,"OK set");}else reply(ctx,"ERR setting/range");}}
-    else if(strcmp(line,"help")==0){reply(ctx,"ver status stream N samples on|off zero [reset] rec on|off set recsync 0|1 set time YYYY-MM-DD HH:MM:SS [tz=minutes] set freq|alpha|gap|rollwin|rollhz|rollcalm|rollhyst N");reply(ctx,"OTA: ota info/begin/chunk/end/abort; network configured on touchscreen");reply(ctx,"OK");}
+    else if(strcmp(line,"help")==0){reply(ctx,"ver status stream N samples on|off zero [reset] rec on|off set recsync 0|1 set time YYYY-MM-DD HH:MM:SS [tz=minutes] set freq|alpha|gap|rollwin|rollhz|rollcalm|rollhyst N");reply(ctx,"instrument heel|level; relative roles 2 3; relative axes confirm|reset; relative zero|reset|status");reply(ctx,"OTA: ota info/begin/chunk/end/abort; network configured on touchscreen");reply(ctx,"OK");}
     else reply(ctx,"ERR unsupported command on esp32");
     xSemaphoreGive(app_mutex);
+}
+/* Both transports enter here after the authenticated service dispatcher. */
+static void command(void *unused,const char *line,tab5_service_reply_fn reply,void *ctx){
+    if(!dual_command(line,reply,ctx))legacy_command(unused,line,reply,ctx);
 }
 static void usb_task(void *unused) {
     (void)unused;char line[TAB5_SERVICE_LINE_MAX];size_t used=0;bool overflow=false,was=false;
@@ -749,7 +840,7 @@ void app_main(void) {
     if(nvs_flash_init()!=ESP_OK){boot_failed();return;}
     app_mutex=xSemaphoreCreateMutex();route_mutex=xSemaphoreCreateMutex();
     samples=xQueueCreate(64,sizeof(sample_event_t));storage_samples=xQueueCreate(64,sizeof(sample_event_t));
-    actions=xQueueCreate(8,sizeof(tab5_ui_action_t));usb_tx=xQueueCreate(16,sizeof(tx_line_t));
+    actions=xQueueCreate(8,sizeof(action_event_t));usb_tx=xQueueCreate(16,sizeof(tx_line_t));
     if(!app_mutex || !route_mutex || !samples || !storage_samples || !actions || !usb_tx){boot_failed();return;}
     tab5_time_set_offset(180); /* local-wall RTC compatibility before board_init */
     tab5_measure_config_t cfg;load_config(&cfg);load_relative_config();
@@ -784,8 +875,10 @@ void app_main(void) {
     uint64_t last_ui=0,last_battery=0,last_stream=0;
     for(;;){xSemaphoreTake(app_mutex,portMAX_DELAY);
         sample_event_t sample;while(xQueueReceive(samples,&sample,0)==pdTRUE)consume_sample(&sample);
-        tab5_ui_action_t a;
-        while(xQueueReceive(actions,&a,0)==pdTRUE){
+        static action_event_t event; /* Main-only queue envelope; keep boot stack bounded. */
+        while(xQueueReceive(actions,&event,0)==pdTRUE){
+            if(event.protocol){process_dual_request(event.protocol);continue;}
+            tab5_ui_action_t a=event.ui;
             if(a.kind==TAB5_UI_MODE||a.kind==TAB5_UI_REL_CONFIG||a.kind==TAB5_UI_REL_CAPTURE||a.kind==TAB5_UI_REL_RESET||
                a.kind==TAB5_UI_WORKSPACE_CONFIG||a.kind==TAB5_UI_WORKSPACE_HOLD||a.kind==TAB5_UI_WORKSPACE_CLEAR){
                 ui_result_success=apply_dual_action(&a);ui_result_kind=a.kind;ui_result_serial++;}

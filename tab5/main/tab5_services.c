@@ -556,6 +556,19 @@ static void transfer_close(void) {
  memset(&transfer,0,sizeof(transfer));lock();files_busy=false;unlock();
 }
 static bool file_line(uint32_t owner,const char *line,tab5_service_reply_fn reply,void *ctx) {
+ /* Optional medium selector is additive. Bare files/get retain SD-first
+  * fallback and exactly the same F/G/D/E replies and abort syntax. */
+ bool listing=!strcmp(line,"files")||!strncmp(line,"files ",6);
+ const char *name=listing?NULL:line+4;int selected=-1;
+ if(listing&&line[5]){
+  if(!strcmp(line+6,"sd"))selected=TAB5_SD;
+  else if(!strcmp(line+6,"usb"))selected=TAB5_USB;
+  else{reply(ctx,"ERR medium sd/usb");return true;}
+ }else if(!listing){
+  if(!strncmp(name,"sd ",3)){selected=TAB5_SD;name+=3;}
+  else if(!strncmp(name,"usb ",4)){selected=TAB5_USB;name+=4;}
+ }
+ if(!listing&&strcmp(line,"get abort")&&!basename_ok(name)){reply(ctx,"ERR filename");return true;}
  char response[512]="";if(!tl()){reply(ctx,"ERR busy");return true;}
  if(transfer_error_owner==owner)transfer_error_owner=0;
  if(!strcmp(line,"get abort")) {
@@ -565,7 +578,7 @@ static bool file_line(uint32_t owner,const char *line,tab5_service_reply_fn repl
  } else {
   lock();bool busy=recording || stopping || ota.active || files_busy || control_busy;
   if(!busy)files_busy=true;
-  unsigned i=media[0].status.mounted&&!media[0].status.failed&&!medium_busy[0]?0:1;
+  unsigned i=selected>=0?(unsigned)selected:(media[0].status.mounted&&!media[0].status.failed&&!medium_busy[0]?0:1);
   if(medium_busy[i]||!media[i].status.mounted||media[i].status.failed)busy=true;
   if(busy&&!transfer.owner)files_busy=false;
   unlock();
@@ -573,18 +586,18 @@ static bool file_line(uint32_t owner,const char *line,tab5_service_reply_fn repl
   else if(!ml(i)){lock();files_busy=false;unlock();strcpy(response,"ERR busy");}
   else {
    transfer.owner=owner;transfer.medium=i;transfer.progress=now_ms();
-   if(!strcmp(line,"files")) {
+   if(listing) {
     transfer.dir=opendir(media[i].root);
     if(!transfer.dir){transfer_close();strcpy(response,"ERR media");}
-   } else if(!basename_ok(line+4)){transfer_close();strcpy(response,"ERR filename");}
+   } else if(!basename_ok(name)){transfer_close();strcpy(response,"ERR filename");}
    else {
     char path[160];uint32_t size;
-    if(!file_wire_size(i,line+4,&size)){transfer_close();strcpy(response,"ERR file");}
+    if(!file_wire_size(i,name,&size)){transfer_close();strcpy(response,"ERR file");}
     else {
-     snprintf(path,sizeof(path),"%s/%s",media[i].root,line+4);
+     snprintf(path,sizeof(path),"%s/%s",media[i].root,name);
      transfer.file=fopen(path,"rb");struct stat st;
      if(!transfer.file||fstat(fileno(transfer.file),&st)||!S_ISREG(st.st_mode)||st.st_size<0||(uint64_t)st.st_size!=size){transfer_close();strcpy(response,"ERR file");}
-     else {transfer.size=size;snprintf(response,sizeof(response),"G,%s,%lu,0",line+4,(unsigned long)size);}
+     else {transfer.size=size;snprintf(response,sizeof(response),"G,%s,%lu,0",name,(unsigned long)size);}
     }
    }
    mu(i);
@@ -636,7 +649,7 @@ static bool transfer_cancel(uint32_t owner,int medium) {
 bool tab5_services_line(uint32_t owner,const char *line,bool auth,tab5_service_reply_fn reply,void *ctx) {
  if(!line || !reply)return false;
  bool isota=!strncmp(line,"ota",3) && (!line[3] || line[3]==' ');
- bool isfile=!strcmp(line,"files") || !strncmp(line,"get ",4);
+ bool isfile=!strcmp(line,"files") || !strncmp(line,"files ",6) || !strncmp(line,"get ",4);
  if(!isota && !isfile)return false;
  if(!initialized || !owner || !auth || strlen(line)>=TAB5_SERVICE_LINE_MAX){reply(ctx,"ERR auth/line");return true;}
  return isota?ota_line(owner,line,reply,ctx):file_line(owner,line,reply,ctx);

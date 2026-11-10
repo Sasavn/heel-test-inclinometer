@@ -143,3 +143,62 @@ Later successful network configuration starts TCP even if boot networking was
 disabled or initial radio/network setup failed. Repeated configuration reuses the
 single listener/task. All configure failures update network.last_error; a successful
 retry clears it. The initial optional-peripheral failure policy remains unchanged.
+
+## PC 1.9.0 controls (Tab5 1.8.5)
+
+Ordinary `status`/`diag` adds `instrument_control_cap:true` and
+`relative_data_cap:true` next to `dual_mode_cap:true`. `instrument` is the
+confirmed active `heel` or `level` mode. Merely opening a PC view must not
+change this mode. The existing `ver` identity and protocol version 2 remain.
+
+| Command | Successful response |
+| --- | --- |
+| `instrument heel` / `instrument level` | `OK instrument` |
+| `relative roles 2 3` / `relative roles 3 2` | `OK relative` |
+| `relative axes confirm` / `relative axes reset` | `OK relative` |
+| `relative zero` / `relative reset` | `OK relative` |
+| `relative status` | One JSON line, then `OK relative` |
+
+Commands use the exact spellings and argument counts above. Only distinct
+addresses 2 and 3 are supported. Axes confirmation is an operator assertion of
+compatible orientation, not a calibration. `relative zero` needs level mode and
+an accepted, ready pair; it never changes either head's zero. Mode, roles and
+axes are committed through the existing `dual_cfg` NVS payload before applying
+changes. A wire mode selection also updates the startup mode. REL offset is
+transient. Existing UI active-only mode selection and UI REL capture semantics
+are preserved.
+
+Both transports queue dual commands to the main action owner. The callback waits
+without holding app_mutex; transport replies are produced by the original caller
+only after completion. Queue/memory errors, invalid syntax, invalid roles, failed
+NVS writes and unavailable REL captures return `ERR ...` without changing dual
+configuration, offset or generation. All mutations fail closed during recording,
+STOP/draining, file transfer, active/committed OTA or control/lock contention.
+`relative status` remains available during those busy states.
+
+Relative JSON retains `mode`, `reference`, `object`, `ready`, numeric `quality`,
+`skew_us`, `ref_us`, `obj_us`, `ref_seq`, `obj_seq`, `rel_offset`, `generation`,
+`hardware_sync:false`, `heads_supported:2`. It adds `axes_confirmed`, `raw_x`,
+`raw_y`, `x`, `y`, `offset_x`, `offset_y`, `ref_x`, `ref_y`, `obj_x`, `obj_y`,
+`ref_age_us`, `obj_age_us`, `max_age_us:500000`, `max_skew_us:50000`.
+Source values and provenance come from the relative result's `source`, timestamps
+and sequences; raw difference is its `live`, post-zero difference is its
+`relative`. Differences are available only when `ready`. Non-finite measurements
+and unknown ages are JSON `null`. Raw source values can remain finite while
+quality is bad; callers must check `ready`/`quality`.
+
+Quality bits are missing=1, stale=2, skew=4, axes=8, warmup=16, range=32,
+error=64. Polls do not manufacture pairs. Healthy acceptance still needs a new
+valid response from BOTH heads. Changed mode/roles/axes or REL zero/reset
+increments generation and invalidates the old pair; subsequent acceptance needs
+both post-boundary replies. Receive timestamps are local provenance, not hardware
+synchronization. `TAB5_SERVICE_RELATIVE_HEADER` and legacy S/R/D2/D3/REL CSV
+formats are unchanged.
+
+### Optional explicit file medium
+
+`files sd`, `files usb`, `get sd <basename>` and `get usb <basename>` choose the
+medium explicitly. An unavailable selected medium returns an error and never
+falls back. Bare `files` and `get <basename>` retain SD-first fallback to USB.
+The F/G/D/E lines, ownership, transfer locks, filename rules, CRC and `get abort`
+are unchanged. This does not require a new PC parser for the old forms.

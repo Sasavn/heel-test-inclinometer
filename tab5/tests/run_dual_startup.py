@@ -12,6 +12,7 @@ text=(root/'tab5/main/main.c').read_text(encoding='utf-8');prefix=guard.function
 (a.out/'startup_entry_generated.h').write_text('static void run_actual_app_startup(void){\n'+prefix+'\n}\n',encoding='utf-8')
 shim=(root/'tab5/tests/test_services_entry_chain.c').read_text(encoding='utf-8')
 shim=shim.replace('#include "startup_entry_generated.h"',r'''
+typedef struct { tab5_ui_action_t ui; void *protocol; } action_event_t;
 static uint32_t backlight_timeout_s;
 static uint8_t brightness_pct=60;
 static const char *esp_err_to_name(int error){(void)error;return "injected display error";}
