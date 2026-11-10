@@ -1,6 +1,6 @@
 # Tab5 PC fork (tab5-esp32)
 
-Output is `krenomer-esp32.exe`; the PC application version is 1.8.5. Device
+Output is the universal `krenomer.exe`; the PC application version is 1.8.7. Device
 firmware is independently versioned, starting at 1.5.0-esp32.
 
 ## Подписи русской программы

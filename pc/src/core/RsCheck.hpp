@@ -253,7 +253,7 @@ struct Conditions
 {
     double theta0 = kNaN;          // начальный крен (абсолютный), °
     std::vector<double> dTheta;    // крен положений относительно начального, °
-    int instruments = 0;           // постов (датчиков) с данными
+    int instruments = 0;           // минимум пригодных постов на каждом учтённом переходе
     double spread = kNaN, spreadLimit = 0.1;  // наибольшее расхождение приращений Δθ приборов на замере, °
     double h = kNaN;               // h для проверки ≥ 0,20 м (основной расчёт)
     bool signedArms = true;        // плечи введены со знаком
@@ -308,9 +308,9 @@ inline std::vector<Check> Checks(const Result& r, const Conditions& c)
         zero >= 0 ? "положение " + (static_cast<std::size_t>(zero) < c.labels.size() ? c.labels[static_cast<std::size_t>(zero)]
                                                                                : std::to_string(zero + 1)) : std::string(r.ok661 ? "нет (прямая — можно не делать)" : "нет"),
         zero >= 0 || r.ok661 ? 1 : 0);
-    add("Не менее 2 приборов (весков / датчиков)", "разд. 3 прил. 3", std::to_string(c.instruments),
+    add("Не менее 2 постов с данными на каждом учтённом замере", "полнота данных постов", std::to_string(c.instruments),
         c.instruments >= 2 ? 1 : 0);
-    add("Сверка приборов: расхождение приращений Δθ на замере ≤ " + F("%.2f°", c.spreadLimit), "разд. 3 прил. 3",
+    add("Сверка приборов: расхождение приращений Δθ на замере ≤ " + F("%.2f°", c.spreadLimit), "заданный допуск сверки",
         std::isfinite(c.spread) ? F("%.3f°", c.spread) + (r.maxSpreadAt >= 0 ? ", замер " + std::to_string(r.maxSpreadAt + 1) : std::string())
                                 : std::string("один прибор"),
         std::isfinite(c.spread) ? (c.spread <= c.spreadLimit ? 1 : 0) : -1);

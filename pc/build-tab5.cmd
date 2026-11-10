@@ -42,4 +42,4 @@ cmake --build "%TAB5_OUTPUT%"
 if errorlevel 1 exit /b 1
 ctest --test-dir "%TAB5_OUTPUT%" --output-on-failure
 if errorlevel 1 exit /b 1
-echo Built and tested: %TAB5_OUTPUT%\krenomer-esp32.exe
+echo Built and tested: %TAB5_OUTPUT%\krenomer.exe

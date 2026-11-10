@@ -35,7 +35,7 @@ struct ImVec4;
 namespace ui
 {
 
-inline constexpr const char* kAppVersion = "1.8.6";
+inline constexpr const char* kAppVersion = "1.8.7";
 
 enum class Page
 {
