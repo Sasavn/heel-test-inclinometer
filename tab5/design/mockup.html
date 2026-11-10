@@ -1,0 +1,599 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Креномер Tab5 — макет интерфейса</title>
+<style>
+/* Палитра = программа для ПК (pc/src/ui/Theme.hpp, MakeLight / MakeDark). Не придумывать новых цветов. */
+:root{
+  --bg:#F3F5F9; --card:#FFFFFF; --cardAlt:#F6F8FB; --border:#D5DBE6;
+  --text:#1A1D24; --dim:#4A5468; --muted:#6B7489;
+  --nav:#103269; --navSel:#1D4E9E; --navText:#EDF2FC; --navMuted:#9EB5DB; --navLine:rgba(255,255,255,.12);
+  --hero1:#103269; --hero2:#1D4E9E;
+  --action:#1A4FA8; --actionText:#FFFFFF; --orange:#F87128; --lemon:#B8E039; --onAccent:#1A1D24;
+  --ok:#1E7B3A; --okBg:#DBF2E0; --warn:#8A5A00; --warnBg:#FFF0CC; --err:#C0262D; --errBg:#FCE0E0;
+  --info:#1F5FBF; --infoBg:#E0EBFC;
+  --s2:#1F6BCC; --s3:#E06B0D; --btnBorder:#7D879C; --frame:#F6F7FA;
+  --shadow:0 2px 6px rgba(26,41,77,.08);
+}
+.dark{
+  --bg:#121826; --card:#1B2233; --cardAlt:#18202F; --border:#2E3850;
+  --text:#E8ECF4; --dim:#B3BDD1; --muted:#8A95AD;
+  --nav:#0B2247; --navSel:#1D3F7A; --navText:#E6EDFA; --navMuted:#8CA1C7; --navLine:rgba(255,255,255,.10);
+  --hero1:#0B2247; --hero2:#1D3F7A;
+  --action:#7FA8F5; --actionText:#0B1733;
+  --ok:#5FD07F; --okBg:#21472E; --warn:#F2B84B; --warnBg:#524015; --err:#FF6B6B; --errBg:#592121;
+  --info:#7FB0FF; --infoBg:#213660;
+  --s2:#5C9EFF; --s3:#FF9E40; --btnBorder:#77829C; --frame:#2B3340;
+  --shadow:0 2px 6px rgba(0,0,0,.35);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"Segoe UI",Roboto,"Noto Sans",sans-serif;background:#d9dde5;color:#1A1D24}
+body.raw{background:#000}
+.page-head{max-width:1320px;margin:0 auto;padding:24px 16px 8px}
+.page-head h1{font-size:24px;font-weight:600}
+.page-head p{font-size:15px;color:#4A5468;margin-top:6px;max-width:900px;line-height:1.45}
+.toolbar{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+.toolbar button{font:inherit;font-size:14px;padding:6px 14px;border-radius:8px;border:1px solid #7D879C;background:#fff;cursor:pointer}
+.toolbar button.on{background:#103269;color:#fff;border-color:#103269}
+.shot{max-width:1320px;margin:16px auto;padding:0 16px}
+.shot h2{font-size:16px;font-weight:600;margin-bottom:8px;color:#1A1D24}
+.shot .frame{width:100%;aspect-ratio:16/9;position:relative;overflow:hidden;border-radius:14px;box-shadow:0 8px 24px rgba(0,0,0,.18);background:#000}
+.shot .frame>.screen{position:absolute;left:0;top:0;transform-origin:0 0}
+body.raw .page-head, body.raw .shot h2{display:none}
+body.raw .shot{margin:0;padding:0;max-width:none}
+body.raw .shot .frame{width:1280px;height:720px;border-radius:0;box-shadow:none}
+
+/* ===== экран 1280×720 ===== */
+.screen{width:1280px;height:720px;background:var(--bg);color:var(--text);position:relative;overflow:hidden;font-size:20px;line-height:1.25}
+.rail{position:absolute;left:0;top:0;width:104px;height:720px;background:var(--nav);color:var(--navText);display:flex;flex-direction:column;align-items:stretch}
+.rail .logo{height:88px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border-bottom:1px solid var(--navLine)}
+.rail .logo svg{width:34px;height:34px}
+.rail .logo span{font-size:13px;letter-spacing:.06em;color:var(--navMuted)}
+.rail .item{height:88px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;font-size:16px;color:var(--navMuted);position:relative}
+.rail .item svg{width:32px;height:32px}
+.rail .item.sel{background:var(--navSel);color:#fff}
+.rail .item.sel::before{content:"";position:absolute;left:0;top:14px;bottom:14px;width:5px;border-radius:0 4px 4px 0;background:var(--orange)}
+.rail .item .badge{position:absolute;top:14px;right:24px;width:12px;height:12px;border-radius:6px;background:var(--err);box-shadow:0 0 0 2px var(--nav)}
+.rail .spacer{flex:1}
+.rail .foot{padding:12px 0 16px;border-top:1px solid var(--navLine);text-align:center}
+.rail .foot .time{font-size:24px;font-weight:600;color:#fff;font-variant-numeric:tabular-nums}
+.rail .foot .pw{font-size:14px;color:var(--navMuted);margin-top:4px;display:flex;align-items:center;justify-content:center;gap:4px}
+.rail .foot .pw svg{width:16px;height:16px}
+
+.main{position:absolute;left:120px;top:16px;width:1144px;height:688px}
+.card{position:absolute;background:var(--card);border:1px solid var(--border);border-radius:16px;box-shadow:var(--shadow);padding:16px 20px}
+.card .head{display:flex;align-items:center;gap:10px;height:32px}
+.card .head svg{width:22px;height:22px;color:var(--muted);flex:none}
+.card .head .t{font-size:20px;font-weight:600}
+.card .head .r{margin-left:auto}
+.muted{color:var(--muted)} .dim{color:var(--dim)}
+.small{font-size:16px}
+.num{font-variant-numeric:tabular-nums}
+
+.chip{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:16px;font-size:16px;font-weight:600;white-space:nowrap}
+.chip.ok{background:var(--okBg);color:var(--ok)} .chip.warn{background:var(--warnBg);color:var(--warn)}
+.chip.err{background:var(--errBg);color:var(--err)} .chip.info{background:var(--infoBg);color:var(--info)}
+.chip.neutral{background:var(--cardAlt);color:var(--dim);border:1px solid var(--border)}
+
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;height:64px;border-radius:14px;font-size:24px;font-weight:600;border:2px solid transparent;white-space:nowrap}
+.btn svg{width:26px;height:26px}
+.btn.primary{background:var(--action);color:var(--actionText)}
+.btn.orange{background:var(--orange);color:var(--onAccent)}
+.btn.red{background:var(--err);color:#fff}
+.dark .btn.red{color:#2A0B0B}
+.btn.outline{background:var(--card);color:var(--text);border-color:var(--btnBorder)}
+.btn.ghost{background:transparent;color:var(--text);border-color:var(--border)}
+
+/* hero */
+.hero{position:absolute;left:0;top:0;width:1144px;height:128px;border-radius:18px;color:#fff;overflow:hidden;
+  background:linear-gradient(115deg,var(--hero1) 0%,var(--hero2) 100%)}
+.hero .grid{position:absolute;inset:0;opacity:.13}
+.hero .left{position:absolute;left:28px;top:16px;width:560px}
+.hero .date{font-size:16px;color:#C9D6EE;letter-spacing:.02em}
+.hero .big{font-size:40px;font-weight:700;margin-top:2px;display:flex;align-items:center;gap:14px;white-space:nowrap}
+.hero .sub{font-size:18px;color:#DCE5F5;margin-top:4px;white-space:nowrap}
+.hero .kpis{position:absolute;left:560px;top:24px;display:flex;gap:28px}
+.hero .kpi .k{font-size:15px;color:#C9D6EE}
+.hero .kpi .v{font-size:34px;font-weight:700;font-variant-numeric:tabular-nums;margin-top:2px}
+.hero .kpi .v small{font-size:18px;font-weight:600;color:#DCE5F5}
+.hero .act{position:absolute;right:20px;top:24px;width:244px;height:80px;font-size:26px}
+.hero .dot{flex:none;width:18px;height:18px;border-radius:9px;background:var(--lemon);box-shadow:0 0 0 6px rgba(184,224,57,.25)}
+.hero .dot.rec{background:#FF5A5F;box-shadow:0 0 0 6px rgba(255,90,95,.3)}
+.hero .dot.warn{background:#F2B84B;box-shadow:0 0 0 6px rgba(242,184,75,.3)}
+
+/* датчики */
+.sensor{width:564px;height:376px;top:144px}
+.sensor .name{font-size:26px;font-weight:700}
+.sensor .sw{width:14px;height:14px;border-radius:7px;flex:none}
+.sensor .vals{position:absolute;left:20px;top:66px;width:316px}
+.sensor .row{display:flex;align-items:baseline;gap:14px;height:92px}
+.sensor .ax{font-size:24px;font-weight:600;color:var(--muted);width:24px}
+.sensor .v{font-size:64px;font-weight:700;letter-spacing:-.5px;font-variant-numeric:tabular-nums;line-height:1}
+.sensor .v.lost{color:var(--muted)}
+.sensor .gauge{position:absolute;right:20px;top:58px;width:200px;height:200px}
+.sensor .roll{position:absolute;left:20px;right:20px;bottom:16px;height:88px;border-top:1px solid var(--border);padding-top:12px}
+.sensor .rollrow{display:flex;align-items:center;gap:12px;height:30px}
+.sensor .rollrow .lab{width:84px;font-size:16px;color:var(--muted)}
+.bar{position:relative;height:10px;border-radius:5px;background:var(--cardAlt);border:1px solid var(--border);flex:1}
+.bar i{position:absolute;left:0;top:0;bottom:0;border-radius:5px}
+.bar b{position:absolute;top:-6px;bottom:-6px;width:2px;background:var(--dim)}
+.sensor .rollrow .val{width:80px;text-align:right;font-size:18px;font-weight:600}
+.sensor .rollrow .st{width:118px;text-align:right}
+.lostbox{position:absolute;left:20px;right:236px;top:66px;height:184px;border-radius:12px;background:var(--errBg);color:var(--err);padding:14px 16px;font-size:16px;line-height:1.4}
+.lostbox b{display:block;font-size:24px;margin-bottom:6px}
+
+/* нижний ряд */
+.tile{top:536px;height:152px}
+.tile .body{margin-top:10px;font-size:18px;line-height:1.5}
+.tile .line{display:flex;align-items:center;gap:8px;white-space:nowrap}
+.tile .line .d{width:10px;height:10px;border-radius:5px;flex:none}
+.tile .line .rt{margin-left:auto;color:var(--muted);font-size:16px}
+
+/* настройки */
+.pagehead{position:absolute;left:0;top:0;width:1144px;height:72px;display:flex;align-items:center;gap:16px}
+.pagehead h1{font-size:32px;font-weight:700}
+.pagehead .r{margin-left:auto;display:flex;gap:12px;align-items:center}
+.setcard{top:88px}
+.setrow{display:flex;align-items:center;height:76px;border-top:1px solid var(--border)}
+.setrow:first-of-type{border-top:none}
+.setrow .lbl{flex:1}
+.setrow .lbl .a{font-size:20px;font-weight:600}
+.setrow .lbl .b{font-size:15px;color:var(--muted);margin-top:2px}
+.stepper{display:flex;align-items:center;gap:8px}
+.stepper .sb{width:56px;height:56px;border-radius:12px;border:2px solid var(--btnBorder);background:var(--card);display:flex;align-items:center;justify-content:center;font-size:30px;font-weight:600;color:var(--text)}
+.stepper .sv{width:128px;height:56px;border-radius:12px;background:var(--frame);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:700;font-variant-numeric:tabular-nums}
+.stepper .sv.chg{border:2px solid var(--action);background:var(--infoBg)}
+.seg{display:flex;background:var(--frame);border:1px solid var(--border);border-radius:12px;padding:4px;gap:4px}
+.seg span{height:48px;padding:0 18px;border-radius:9px;display:flex;align-items:center;font-size:18px;font-weight:600;color:var(--dim)}
+.seg span.on{background:var(--action);color:var(--actionText)}
+.toggle{width:72px;height:40px;border-radius:20px;background:var(--border);position:relative;flex:none}
+.toggle::after{content:"";position:absolute;left:4px;top:4px;width:32px;height:32px;border-radius:16px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3)}
+.toggle.on{background:var(--action)}
+.toggle.on::after{left:36px}
+.dark .toggle.on::after{background:#0B1733}
+.field{height:56px;border-radius:12px;background:var(--frame);border:1px solid var(--border);display:flex;align-items:center;padding:0 16px;font-size:20px;gap:10px}
+.field .k{color:var(--muted);font-size:16px;width:96px;flex:none}
+.field .eye{margin-left:auto;width:26px;height:26px;color:var(--muted)}
+.notice{position:absolute;display:flex;align-items:center;gap:10px;font-size:17px;padding:0 16px;height:48px;border-radius:12px}
+.notice.info{background:var(--infoBg);color:var(--info)} .notice.warn{background:var(--warnBg);color:var(--warn)}
+.notice svg{width:22px;height:22px;flex:none}
+
+/* график */
+.chartcard{top:88px;width:1144px;height:440px}
+.legend{display:flex;gap:10px}
+.lg{display:flex;align-items:center;gap:8px;height:40px;padding:0 14px;border-radius:20px;border:1px solid var(--border);font-size:16px;font-weight:600;background:var(--cardAlt)}
+.lg i{width:22px;height:4px;border-radius:2px}
+.lg.off{opacity:.45}
+.stat{top:544px;height:144px;width:274px}
+.stat .big{font-size:36px;font-weight:700;margin-top:6px;font-variant-numeric:tabular-nums}
+.stat .mm{font-size:16px;color:var(--muted);margin-top:4px;font-variant-numeric:tabular-nums}
+
+/* запись */
+.media{top:88px;width:564px;height:236px}
+.cap{height:12px;border-radius:6px;background:var(--cardAlt);border:1px solid var(--border);position:relative;overflow:hidden;margin-top:8px}
+.cap i{position:absolute;left:0;top:0;bottom:0;background:var(--action)}
+.list{top:340px;width:1144px;height:348px;padding:16px 0 0}
+.list .head{padding:0 20px}
+.tr{display:grid;grid-template-columns:260px 200px 150px 130px 150px 1fr;align-items:center;height:56px;padding:0 20px;border-top:1px solid var(--border);font-size:18px;font-variant-numeric:tabular-nums}
+.tr.th{font-size:15px;color:var(--muted);height:40px;border-top:none;margin-top:8px}
+
+/* модальное окно ввода числа */
+.veil{position:absolute;inset:0;background:rgba(8,14,30,.55)}
+.modal{position:absolute;left:340px;top:52px;width:600px;height:616px;background:var(--card);border-radius:20px;box-shadow:0 12px 40px rgba(0,0,0,.35);padding:24px 28px}
+.modal h3{font-size:28px;font-weight:700}
+.modal .rng{font-size:17px;color:var(--muted);margin-top:4px}
+.modal .disp{margin-top:14px;height:80px;border-radius:14px;border:2px solid var(--err);background:var(--frame);display:flex;align-items:center;justify-content:flex-end;padding:0 22px;font-size:48px;font-weight:700;font-variant-numeric:tabular-nums}
+.modal .disp span{font-size:24px;color:var(--muted);margin-left:10px;font-weight:600}
+.modal .errt{color:var(--err);font-size:17px;height:28px;margin-top:8px}
+.keys{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:4px}
+.keys div{height:64px;border-radius:12px;background:var(--cardAlt);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:30px;font-weight:600}
+.keys div.fn{font-size:20px;color:var(--dim)}
+.modal .acts{display:flex;gap:12px;margin-top:16px}
+.modal .acts .btn{flex:1}
+</style>
+</head>
+<body>
+<div class="page-head">
+  <h1>Креномер Tab5 — макет интерфейса, 1280 × 720</h1>
+  <p>Каждый экран нарисован в натуральном размере экрана Tab5 и уменьшен под ширину окна. Палитра, подписи и статусы взяты из программы для ПК, а компоновка следует присланным образцам: тёмная боковая панель со значками, сверху баннер, ниже карточки с заголовком. Числа синтетические. Размеры и привязка к данным описаны в SPEC.md рядом.</p>
+  <div class="toolbar" id="tb">
+    <button data-theme="light" class="on">Светлая тема</button>
+    <button data-theme="dark">Тёмная тема</button>
+  </div>
+</div>
+
+<!-- ============ ШАБЛОНЫ ============ -->
+<template id="rail">
+  <nav class="rail">
+    <div class="logo">
+      <svg viewBox="0 0 34 34" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 24h26"/><path d="M7 24c2-6 6-10 10-10s8 4 10 10" opacity=".55"/><path d="M17 24 26 9"/><circle cx="17" cy="24" r="2.2" fill="currentColor"/></svg>
+      <span>КРЕНОМЕР</span>
+    </div>
+    <div class="item" data-p="measure"><svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="16" cy="16" r="11"/><path d="M16 5v4M16 23v4M5 16h4M23 16h4"/><circle cx="19" cy="13" r="2.6" fill="currentColor"/></svg>Измерения</div>
+    <div class="item" data-p="chart"><svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 26h24"/><path d="M5 19c3-7 5-7 8 0s5 7 8 0 4-7 6-3"/></svg>График</div>
+    <div class="item" data-p="record"><svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="6" y="4" width="20" height="24" rx="3"/><path d="M10 4v6h12V4" /><circle cx="16" cy="19" r="4" fill="currentColor"/></svg>Запись</div>
+    <div class="item" data-p="settings"><svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 9h12M23 9h4M5 23h4M15 23h12"/><circle cx="20" cy="9" r="3"/><circle cx="12" cy="23" r="3"/></svg>Настройки</div>
+    <div class="item" data-p="network"><svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 12c7-6 17-6 24 0"/><path d="M8 17c5-4 11-4 16 0"/><path d="M12 22c2.5-2 5.5-2 8 0"/><circle cx="16" cy="26" r="1.8" fill="currentColor"/></svg>Сеть</div>
+    <div class="spacer"></div>
+    <div class="foot"><div class="time">--:--</div><div class="pw"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M9 1 3 9h4l-1 6 6-8H8z"/></svg>внешнее</div></div>
+  </nav>
+</template>
+
+<template id="heroGrid">
+  <svg class="grid" viewBox="0 0 1144 128" preserveAspectRatio="none"><g stroke="#fff" stroke-width="1" fill="none">
+    <path d="M820 128A300 300 0 0 1 1120 -172"/><path d="M880 128A240 240 0 0 1 1120 -112"/><path d="M940 128A180 180 0 0 1 1120 -52"/>
+    <path d="M0 96H1144" opacity=".5"/><path d="M0 64H1144" opacity=".3"/><path d="M0 32H1144" opacity=".3"/>
+  </g></svg>
+</template>
+
+<!-- ============ ЭКРАНЫ ============ -->
+<section class="shot"><h2>1. Измерения — оба датчика на связи, покой, запись выключена</h2><div class="frame"><div class="screen" data-page="measure">
+  <div class="main">
+    <div class="hero" data-grid>
+      <div class="left">
+        <div class="date">четверг, 22 октября 2026 · 14:32:05</div>
+        <div class="big"><span class="dot"></span>Покой</div>
+        <div class="sub">можно снимать отсчёт · размах 0.14° &lt; порога 0.50° · окно 20/20 с</div>
+      </div>
+      <div class="kpis">
+        <div class="kpi"><div class="k">Д2 − Д3 по X</div><div class="v">−0.03<small>°</small></div></div>
+        <div class="kpi"><div class="k">Д2 − Д3 по Y</div><div class="v">−0.04<small>°</small></div></div>
+      </div>
+      <div class="btn orange act"><svg viewBox="0 0 26 26"><circle cx="13" cy="13" r="9" fill="currentColor"/></svg>Старт записи</div>
+    </div>
+
+    <div class="card sensor" style="left:0">
+      <div class="head"><span class="sw" style="background:var(--s2)"></span><span class="name">Датчик 2</span><span class="muted small">адрес 2 · RS485</span><span class="r chip ok">✓ На связи</span></div>
+      <div class="vals">
+        <div class="row"><span class="ax">X</span><span class="v">−0.42°</span></div>
+        <div class="row"><span class="ax">Y</span><span class="v">+1.37°</span></div>
+      </div>
+      <svg class="gauge" data-x="-0.42" data-y="1.37" data-rx="0.14" data-ry="0.05" data-c="--s2"></svg>
+      <div class="roll">
+        <div class="rollrow"><span class="lab">Качка X</span><div class="bar" data-v="0.14" data-t="0.5"></div><span class="val num">0.14°</span><span class="st"><span class="chip ok">● покой</span></span></div>
+        <div class="rollrow" style="margin-top:8px"><span class="lab">Качка Y</span><div class="bar" data-v="0.05" data-t="0.5"></div><span class="val num">0.05°</span><span class="st"><span class="chip ok">● покой</span></span></div>
+      </div>
+    </div>
+
+    <div class="card sensor" style="left:580px">
+      <div class="head"><span class="sw" style="background:var(--s3)"></span><span class="name">Датчик 3</span><span class="muted small">адрес 3 · RS485</span><span class="r chip ok">✓ На связи</span></div>
+      <div class="vals">
+        <div class="row"><span class="ax">X</span><span class="v">−0.39°</span></div>
+        <div class="row"><span class="ax">Y</span><span class="v">+1.41°</span></div>
+      </div>
+      <svg class="gauge" data-x="-0.39" data-y="1.41" data-rx="0.12" data-ry="0.06" data-c="--s3"></svg>
+      <div class="roll">
+        <div class="rollrow"><span class="lab">Качка X</span><div class="bar" data-v="0.12" data-t="0.5"></div><span class="val num">0.12°</span><span class="st"><span class="chip ok">● покой</span></span></div>
+        <div class="rollrow" style="margin-top:8px"><span class="lab">Качка Y</span><div class="bar" data-v="0.06" data-t="0.5"></div><span class="val num">0.06°</span><span class="st"><span class="chip ok">● покой</span></span></div>
+      </div>
+    </div>
+
+    <div class="card tile" style="left:0;width:336px">
+      <div class="head"><svg viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M3 11h16"/></svg><span class="t">Ноль датчиков</span><span class="r chip neutral">не задан</span></div>
+      <div style="display:flex;gap:12px;margin-top:22px">
+        <div class="btn primary" style="flex:1.15;height:64px;font-size:22px">Обнулить</div>
+        <div class="btn outline" style="flex:1;height:64px;font-size:22px">Сбросить</div>
+      </div>
+    </div>
+    <div class="card tile" style="left:352px;width:272px">
+      <div class="head"><svg viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="2" width="14" height="18" rx="2"/><path d="M8 2v5M11 2v5M14 2v5"/></svg><span class="t">Носители</span></div>
+      <div class="body">
+        <div class="line"><span class="d" style="background:var(--ok)"></span>microSD<span class="rt">готов · 14.2 ГБ</span></div>
+        <div class="line"><span class="d" style="background:var(--muted)"></span>USB<span class="rt">не подключён</span></div>
+        <div class="line small muted">запись выключена</div>
+      </div>
+    </div>
+    <div class="card tile" style="left:640px;width:256px">
+      <div class="head"><svg viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 8c5-4 13-4 18 0M5 12c3.5-3 8.5-3 12 0M8 16c2-1.5 4-1.5 6 0"/></svg><span class="t">Сеть</span><span class="r chip ok" style="height:28px">ПК</span></div>
+      <div class="body">
+        <div class="line num">AP 192.168.4.1</div>
+        <div class="line"><span class="muted">STA</span>&nbsp;подключено</div>
+        <div class="line small muted num">TCP 5000 · клиент 1</div>
+      </div>
+    </div>
+    <div class="card tile" style="left:912px;width:232px">
+      <div class="head"><svg viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2 5 12h5l-1 8 7-10h-5z"/></svg><span class="t">Питание</span></div>
+      <div class="body">
+        <div class="line">внешнее 5 В</div>
+        <div class="line small muted">батарея не установлена</div>
+        <div class="line small muted">часы установлены</div>
+      </div>
+    </div>
+  </div>
+</div></div></section>
+
+<section class="shot"><h2>2. Измерения — идёт запись, качка на датчике 2, датчик 3 не отвечает</h2><div class="frame"><div class="screen" data-page="measure" data-badge="measure" data-time="14:41" data-power="батарея">
+  <div class="main">
+    <div class="hero" data-grid>
+      <div class="left">
+        <div class="date">четверг, 22 октября 2026 · 14:41:27</div>
+        <div class="big"><span class="dot rec"></span>Запись · 00:03:12</div>
+        <div class="sub">KR_20261022_143815.csv · 3 812 строк · SD и USB</div>
+      </div>
+      <div class="kpis">
+        <div class="kpi"><div class="k">Состояние</div><div class="v" style="color:#FFD27A">КАЧКА 0.86°</div></div>
+      </div>
+      <div class="btn red act"><svg viewBox="0 0 26 26"><rect x="5" y="5" width="16" height="16" rx="2" fill="currentColor"/></svg>Стоп записи</div>
+    </div>
+
+    <div class="card sensor" style="left:0">
+      <div class="head"><span class="sw" style="background:var(--s2)"></span><span class="name">Датчик 2</span><span class="muted small">адрес 2 · RS485</span><span class="r chip ok">✓ На связи</span></div>
+      <div class="vals">
+        <div class="row"><span class="ax">X</span><span class="v">+2.18°</span></div>
+        <div class="row"><span class="ax">Y</span><span class="v">−0.07°</span></div>
+      </div>
+      <svg class="gauge" data-x="2.18" data-y="-0.07" data-rx="0.86" data-ry="0.21" data-c="--s2"></svg>
+      <div class="roll">
+        <div class="rollrow"><span class="lab">Качка X</span><div class="bar" data-v="0.86" data-t="0.5"></div><span class="val num">0.86°</span><span class="st"><span class="chip warn">▲ качка</span></span></div>
+        <div class="rollrow" style="margin-top:8px"><span class="lab">Качка Y</span><div class="bar" data-v="0.21" data-t="0.5"></div><span class="val num">0.21°</span><span class="st"><span class="chip ok">● покой</span></span></div>
+      </div>
+    </div>
+
+    <div class="card sensor" style="left:580px">
+      <div class="head"><span class="sw" style="background:var(--s3)"></span><span class="name">Датчик 3</span><span class="muted small">адрес 3 · RS485</span><span class="r chip err">✗ Отключён</span></div>
+      <div class="lostbox"><b>Нет ответа</b>3 запроса подряд без ответа<br>последнее значение в 14:41:09<br>ошибок: 27 · последняя — таймаут<br>проверьте питание и RS485</div>
+      <svg class="gauge" data-x="0" data-y="0" data-lost="1" data-c="--s3"></svg>
+      <div class="roll">
+        <div class="rollrow"><span class="lab">Качка X</span><div class="bar" data-v="0" data-t="0.5"></div><span class="val num muted">—</span><span class="st"><span class="chip neutral">нет данных</span></span></div>
+        <div class="rollrow" style="margin-top:8px"><span class="lab">Качка Y</span><div class="bar" data-v="0" data-t="0.5"></div><span class="val num muted">—</span><span class="st"><span class="chip neutral">нет данных</span></span></div>
+      </div>
+    </div>
+
+    <div class="card tile" style="left:0;width:336px">
+      <div class="head"><svg viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M3 11h16"/></svg><span class="t">Ноль датчиков</span><span class="r chip info">задан 14:36</span></div>
+      <div style="display:flex;gap:12px;margin-top:22px">
+        <div class="btn primary" style="flex:1.15;height:64px;font-size:22px">Обнулить</div>
+        <div class="btn outline" style="flex:1;height:64px;font-size:22px">Сбросить</div>
+      </div>
+    </div>
+    <div class="card tile" style="left:352px;width:272px">
+      <div class="head"><svg viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="2" width="14" height="18" rx="2"/><path d="M8 2v5M11 2v5M14 2v5"/></svg><span class="t">Носители</span></div>
+      <div class="body">
+        <div class="line"><span class="d" style="background:#FF5A5F"></span>microSD<span class="rt num">3 812 строк</span></div>
+        <div class="line"><span class="d" style="background:#FF5A5F"></span>USB<span class="rt num">3 812 строк</span></div>
+        <div class="line small muted">пишутся оба носителя</div>
+      </div>
+    </div>
+    <div class="card tile" style="left:640px;width:256px">
+      <div class="head"><svg viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 8c5-4 13-4 18 0M5 12c3.5-3 8.5-3 12 0M8 16c2-1.5 4-1.5 6 0"/></svg><span class="t">Сеть</span></div>
+      <div class="body">
+        <div class="line num">AP 192.168.4.1</div>
+        <div class="line"><span class="muted">STA</span>&nbsp;отключено</div>
+        <div class="line small muted num">TCP 5000 · клиентов нет</div>
+      </div>
+    </div>
+    <div class="card tile" style="left:912px;width:232px">
+      <div class="head"><svg viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2 5 12h5l-1 8 7-10h-5z"/></svg><span class="t">Питание</span></div>
+      <div class="body">
+        <div class="line num">батарея 7.62 В</div>
+        <div class="line small muted">внешнего нет</div>
+        <div class="line small muted">часы установлены</div>
+      </div>
+    </div>
+  </div>
+</div></div></section>
+
+<section class="shot"><h2>3. График — последние 2 минуты (новая страница: нужен кольцевой буфер в UI)</h2><div class="frame"><div class="screen" data-page="chart">
+  <div class="main">
+    <div class="pagehead"><h1>График</h1>
+      <div class="legend" style="margin-left:24px">
+        <span class="lg"><i style="background:var(--s2)"></i>Д2 · X</span>
+        <span class="lg"><i style="background:var(--s2);opacity:.55;height:3px;border-top:2px dashed var(--s2);background:none"></i>Д2 · Y</span>
+        <span class="lg"><i style="background:var(--s3)"></i>Д3 · X</span>
+        <span class="lg off"><i style="background:var(--s3)"></i>Д3 · Y</span>
+      </div>
+      <div class="r"><div class="seg"><span>30 с</span><span class="on">2 мин</span><span>10 мин</span></div></div>
+    </div>
+    <div class="card chartcard" style="left:0">
+      <svg id="chart" width="1104" height="408" style="position:absolute;left:20px;top:16px"></svg>
+    </div>
+    <div class="card stat" style="left:0"><div class="head"><span class="sw" style="width:12px;height:12px;border-radius:6px;background:var(--s2)"></span><span class="t">Д2 · X</span></div><div class="big">+2.18°</div><div class="mm">−0.61 … +2.43 · размах 0.86</div></div>
+    <div class="card stat" style="left:290px"><div class="head"><span class="sw" style="width:12px;height:12px;border-radius:6px;background:var(--s2)"></span><span class="t">Д2 · Y</span></div><div class="big">−0.07°</div><div class="mm">−0.31 … +0.12 · размах 0.21</div></div>
+    <div class="card stat" style="left:580px"><div class="head"><span class="sw" style="width:12px;height:12px;border-radius:6px;background:var(--s3)"></span><span class="t">Д3 · X</span></div><div class="big">+2.11°</div><div class="mm">−0.66 … +2.39 · размах 0.82</div></div>
+    <div class="card stat" style="left:870px"><div class="head"><span class="sw" style="width:12px;height:12px;border-radius:6px;background:var(--s3)"></span><span class="t">Д3 · Y</span></div><div class="big muted">скрыт</div><div class="mm">включается касанием подписи</div></div>
+  </div>
+</div></div></section>
+
+<section class="shot"><h2>4. Запись — носители и последние файлы</h2><div class="frame"><div class="screen" data-page="record">
+  <div class="main">
+    <div class="pagehead"><h1>Запись</h1><span class="chip neutral">остановлена</span>
+      <div class="r"><div class="btn orange" style="width:260px"><svg viewBox="0 0 26 26"><circle cx="13" cy="13" r="9" fill="currentColor"/></svg>Старт записи</div></div>
+    </div>
+    <div class="card media" style="left:0">
+      <div class="head"><svg viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="2" width="14" height="18" rx="2"/><path d="M8 2v5M11 2v5M14 2v5"/></svg><span class="t">Карта microSD</span><span class="r chip ok">✓ Готов</span></div>
+      <div style="margin-top:18px;display:flex;justify-content:space-between;font-size:18px"><span>свободно <b class="num">14.2 ГБ</b> из 14.8 ГБ</span><span class="muted num">FAT32</span></div>
+      <div class="cap"><i style="width:4%"></i></div>
+      <div style="margin-top:18px;font-size:18px;line-height:1.6"><span class="muted">папка</span> /KRENOMER<br><span class="muted">хватит примерно на</span> 900 часов записи</div>
+    </div>
+    <div class="card media" style="left:580px">
+      <div class="head"><svg viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M11 2v14M7 6l4-4 4 4M5 12v4h12v-4"/></svg><span class="t">Флешка USB</span><span class="r chip warn">⚠ Не подключена</span></div>
+      <div style="margin-top:18px;font-size:18px;line-height:1.5" class="dim">Вставьте флешку FAT32 в разъём USB-A. Запись идёт на все подключённые носители одновременно; если один из них откажет, запись на второй продолжится.</div>
+      <div class="notice info" style="left:20px;right:20px;bottom:16px"><svg viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="9"/><path d="M11 10v6M11 6v1"/></svg>достаточно одного исправного носителя</div>
+    </div>
+    <div class="card list" style="left:0">
+      <div class="head"><svg viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5h14M4 11h14M4 17h9"/></svg><span class="t">Последние записи</span><span class="r muted small">файлы скачиваются в программе ПК: «Файлы прибора»</span></div>
+      <div class="tr th"><span>Файл</span><span>Начало</span><span>Длительность</span><span>Строк</span><span>Носители</span><span>Состояние</span></div>
+      <div class="tr"><span>KR_20261022_143815</span><span>22.10 14:38:15</span><span>00:06:02</span><span>7 214</span><span>SD · USB</span><span><span class="chip ok">✓ закрыт</span></span></div>
+      <div class="tr"><span>KR_20261022_112040</span><span>22.10 11:20:40</span><span>00:21:47</span><span>26 140</span><span>SD</span><span><span class="chip ok">✓ закрыт</span></span></div>
+      <div class="tr"><span>KR_20261021_173302</span><span>21.10 17:33:02</span><span>00:02:10</span><span>2 604</span><span>SD</span><span><span class="chip warn">⚠ обрыв питания</span></span></div>
+      <div class="tr"><span>KR_20261021_165511</span><span>21.10 16:55:11</span><span>00:12:31</span><span>15 020</span><span>SD · USB</span><span><span class="chip ok">✓ закрыт</span></span></div>
+    </div>
+  </div>
+</div></div></section>
+
+<section class="shot"><h2>5. Настройки — изменено одно значение, кнопка «Применить» активна</h2><div class="frame"><div class="screen" data-page="settings">
+  <div class="main">
+    <div class="pagehead"><h1>Настройки</h1><span class="chip info">изменено: 1</span>
+      <div class="r"><div class="btn ghost" style="width:180px;height:56px;font-size:20px">Отменить</div><div class="btn primary" style="width:220px;height:56px;font-size:20px">Применить</div></div>
+    </div>
+    <div class="card setcard" style="left:0;width:564px;height:600px">
+      <div class="head"><svg viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 11h4l3-7 4 14 3-7h4"/></svg><span class="t">Опрос датчиков</span></div>
+      <div style="margin-top:8px">
+        <div class="setrow"><div class="lbl"><div class="a">Частота опроса</div><div class="b">1–50 Гц · предел задаёт обмен RS485</div></div><div class="stepper"><span class="sb">−</span><span class="sv chg">20 Гц</span><span class="sb">+</span></div></div>
+        <div class="setrow"><div class="lbl"><div class="a">Пауза между запросами</div><div class="b">15–100 мс</div></div><div class="stepper"><span class="sb">−</span><span class="sv">20 мс</span><span class="sb">+</span></div></div>
+        <div class="setrow"><div class="lbl"><div class="a">Сглаживание EMA</div><div class="b">0.01–0.99 · меньше — плавнее</div></div><div class="stepper"><span class="sb">−</span><span class="sv">0.20</span><span class="sb">+</span></div></div>
+      </div>
+      <div class="head" style="margin-top:20px"><svg viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 13c3-6 5-6 9 0s6 6 9 0"/></svg><span class="t">Качка и покой</span></div>
+      <div style="margin-top:8px">
+        <div class="setrow"><div class="lbl"><div class="a">Окно качки</div><div class="b">10–60 с</div></div><div class="stepper"><span class="sb">−</span><span class="sv">20 с</span><span class="sb">+</span></div></div>
+        <div class="setrow"><div class="lbl"><div class="a">Порог покоя</div><div class="b">0.1–10° · размах в окне</div></div><div class="stepper"><span class="sb">−</span><span class="sv">0.50°</span><span class="sb">+</span></div></div>
+      </div>
+    </div>
+    <div class="card setcard" style="left:580px;width:564px;height:268px">
+      <div class="head"><svg viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 13c3-6 5-6 9 0s6 6 9 0"/></svg><span class="t">Качка — дополнительно</span></div>
+      <div style="margin-top:8px">
+        <div class="setrow"><div class="lbl"><div class="a">Частота выборки качки</div><div class="b">2–5 Гц</div></div><div class="stepper"><span class="sb">−</span><span class="sv">2 Гц</span><span class="sb">+</span></div></div>
+        <div class="setrow"><div class="lbl"><div class="a">Гистерезис</div><div class="b">0–2°</div></div><div class="stepper"><span class="sb">−</span><span class="sv">0.10°</span><span class="sb">+</span></div></div>
+      </div>
+    </div>
+    <div class="card setcard" style="left:580px;top:372px;width:564px;height:316px">
+      <div class="head"><svg viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="18" height="12" rx="2"/><path d="M8 20h6"/></svg><span class="t">Прибор</span></div>
+      <div style="margin-top:8px">
+        <div class="setrow"><div class="lbl"><div class="a">Тема</div></div><div class="seg"><span class="on">Светлая</span><span>Тёмная</span></div></div>
+        <div class="setrow"><div class="lbl"><div class="a">Дата и время</div><div class="b">22.10.2026 14:32 · ставится и с ПК</div></div><div class="btn outline" style="height:56px;font-size:18px;width:150px">Изменить</div></div>
+        <div class="setrow"><div class="lbl"><div class="a">Экран и прошивка</div><div class="b">ST7123 · определён автоматически · 1.5.0-esp32</div></div></div>
+      </div>
+    </div>
+  </div>
+</div></div></section>
+
+<section class="shot"><h2>6. Ввод числа — касание по значению открывает цифровую клавиатуру (значение вне диапазона)</h2><div class="frame"><div class="screen" data-page="settings" data-clone="settings">
+  <div class="veil"></div>
+  <div class="modal">
+    <h3>Частота опроса</h3>
+    <div class="rng">допустимо 1–50 Гц · сейчас 20 Гц</div>
+    <div class="disp">75<span>Гц</span></div>
+    <div class="errt">✗ больше 50 Гц — уменьшите значение</div>
+    <div class="keys">
+      <div>7</div><div>8</div><div>9</div><div class="fn">⌫</div>
+      <div>4</div><div>5</div><div>6</div><div class="fn">±</div>
+      <div>1</div><div>2</div><div>3</div><div class="fn">C</div>
+      <div style="grid-column:span 2">0</div><div>.</div><div class="fn">было</div>
+    </div>
+    <div class="acts"><div class="btn ghost">Отмена</div><div class="btn primary" style="opacity:.45">Готово</div></div>
+  </div>
+</div></div></section>
+
+<section class="shot"><h2>7. Сеть — точка доступа и подключение к Wi-Fi, подсказка для программы ПК</h2><div class="frame"><div class="screen" data-page="network">
+  <div class="main">
+    <div class="pagehead"><h1>Сеть</h1>
+      <div class="r"><div class="btn ghost" style="width:220px;height:56px;font-size:20px">Показать пароли</div><div class="btn primary" style="width:220px;height:56px;font-size:20px;opacity:.45">Применить</div></div>
+    </div>
+    <div class="card" style="left:0;top:88px;width:564px;height:380px">
+      <div class="head"><svg viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="15" r="2" fill="currentColor"/><path d="M6 11a7 7 0 0 1 10 0M3 8a11 11 0 0 1 16 0"/></svg><span class="t">Точка доступа прибора</span><span class="r toggle on"></span></div>
+      <div style="display:flex;flex-direction:column;gap:12px;margin-top:22px">
+        <div class="field"><span class="k">Имя сети</span>KRENOMER-7F3A</div>
+        <div class="field"><span class="k">Пароль</span>••••••••••<svg class="eye" viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 13s4-7 11-7 11 7 11 7-4 7-11 7S2 13 2 13z"/><circle cx="13" cy="13" r="3"/></svg></div>
+        <div class="field"><span class="k">Адрес</span><span class="num">192.168.4.1</span><span class="chip ok" style="margin-left:auto">✓ работает</span></div>
+      </div>
+      <div class="muted small" style="position:absolute;left:20px;right:20px;bottom:16px">пароль точки доступа служит ключом для программы ПК · 8–63 символа</div>
+    </div>
+    <div class="card" style="left:580px;top:88px;width:564px;height:380px">
+      <div class="head"><svg viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 8c5-4 13-4 18 0M5 12c3.5-3 8.5-3 12 0M8 16c2-1.5 4-1.5 6 0"/></svg><span class="t">Подключение к Wi-Fi</span><span class="r toggle on"></span></div>
+      <div style="display:flex;flex-direction:column;gap:12px;margin-top:22px">
+        <div class="field"><span class="k">Сеть</span>SAFU-Lab</div>
+        <div class="field"><span class="k">Пароль</span>••••••••<svg class="eye" viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 13s4-7 11-7 11 7 11 7-4 7-11 7S2 13 2 13z"/><circle cx="13" cy="13" r="3"/></svg></div>
+        <div class="field"><span class="k">Адрес</span><span class="num">10.20.4.117</span><span class="chip ok" style="margin-left:auto">✓ подключено</span></div>
+      </div>
+      <div class="muted small" style="position:absolute;left:20px;right:20px;bottom:16px">пароль пустой или 8–63 символа · без Wi-Fi прибор работает через точку доступа</div>
+    </div>
+    <div class="card" style="left:0;top:484px;width:1144px;height:204px">
+      <div class="head"><svg viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="18" height="12" rx="2"/><path d="M7 19h8M11 15v4"/></svg><span class="t">Подключение программы для ПК</span><span class="r chip ok">✓ клиент 10.20.4.31</span></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-top:20px">
+        <div><div class="muted small">в программе: порт →</div><div style="font-size:22px;font-weight:600;margin-top:4px">«Tab5 по сети (TCP)…»</div></div>
+        <div><div class="muted small">адрес и порт</div><div class="num" style="font-size:22px;font-weight:600;margin-top:4px">10.20.4.117 : 5000</div></div>
+        <div><div class="muted small">ключ доступа</div><div style="font-size:22px;font-weight:600;margin-top:4px">пароль точки доступа</div></div>
+      </div>
+      <div class="muted small" style="margin-top:16px">по кабелю USB-C прибор виден как COM-порт; ключ не нужен</div>
+    </div>
+  </div>
+</div></div></section>
+
+<script>
+(function(){
+  const raw = new URLSearchParams(location.search);
+  const railT = document.getElementById('rail');
+  const gridT = document.getElementById('heroGrid');
+
+  // клон экрана настроек под модальное окно
+  document.querySelectorAll('.screen[data-clone]').forEach(s=>{
+    const src=document.querySelector('.screen[data-page="'+s.dataset.clone+'"]:not([data-clone]) .main');
+    s.insertBefore(src.cloneNode(true), s.firstChild);
+  });
+  document.querySelectorAll('.screen').forEach(s=>{
+    const r=railT.content.cloneNode(true);
+    r.querySelectorAll('.item').forEach(i=>{ if(i.dataset.p===s.dataset.page) i.classList.add('sel');
+      if(i.dataset.p===s.dataset.badge){const b=document.createElement('span');b.className='badge';i.appendChild(b);} });
+    r.querySelector('.time').textContent=s.dataset.time||'14:32';
+    if(s.dataset.power)r.querySelector('.pw').lastChild.textContent=s.dataset.power;
+    s.insertBefore(r, s.firstChild);
+  });
+  document.querySelectorAll('[data-grid]').forEach(h=>h.insertBefore(gridT.content.cloneNode(true),h.firstChild));
+
+  const css=n=>getComputedStyle(document.body).getPropertyValue(n).trim();
+  const NS='http://www.w3.org/2000/svg';
+  const el=(t,a,p)=>{const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);p&&p.appendChild(e);return e;};
+
+  function draw(){
+    // круглый уровень: шкала ±5°, 18 px на градус; эллипс вокруг точки = размах качки X/Y
+    document.querySelectorAll('svg.gauge').forEach(g=>{
+      g.innerHTML='';g.setAttribute('viewBox','0 0 200 200');
+      const sc=getComputedStyle(g.closest('.screen'));
+      const v=n=>sc.getPropertyValue(n).trim();
+      el('circle',{cx:100,cy:100,r:96,fill:v('--cardAlt'),stroke:v('--border')},g);
+      [[90,'5°'],[36,'2°'],[18,'1°']].forEach(([r,t])=>{el('circle',{cx:100,cy:100,r,fill:'none',stroke:v('--border'),'stroke-width':1.5},g);
+        const tx=el('text',{x:100+r*0.71+3,y:100-r*0.71-3,'font-size':12,fill:v('--muted')},g);tx.textContent=t;});
+      el('path',{d:'M100 6V194M6 100H194',stroke:v('--border'),'stroke-width':1.5},g);
+      const lx=el('text',{x:182,y:94,'font-size':13,'font-weight':600,fill:v('--muted')},g);lx.textContent='X';
+      const ly=el('text',{x:106,y:18,'font-size':13,'font-weight':600,fill:v('--muted')},g);ly.textContent='Y';
+      const c=v(g.dataset.c);
+      if(g.dataset.lost){const t=el('text',{x:100,y:106,'font-size':18,'text-anchor':'middle',fill:v('--muted')},g);t.textContent='нет данных';return;}
+      let x=+g.dataset.x,y=+g.dataset.y;const k=18,lim=5;
+      const out=Math.hypot(x,y)>lim; if(out){const f=lim/Math.hypot(x,y);x*=f;y*=f;}
+      const cx=100+x*k,cy=100-y*k;
+      el('ellipse',{cx,cy,rx:Math.max(4,+g.dataset.rx*k),ry:Math.max(4,+g.dataset.ry*k),fill:c,'fill-opacity':.18,stroke:c,'stroke-opacity':.5},g);
+      el('line',{x1:100,y1:100,x2:cx,y2:cy,stroke:c,'stroke-width':2,'stroke-opacity':.5},g);
+      el('circle',{cx,cy,r:9,fill:out?v('--card'):c,stroke:c,'stroke-width':3},g);
+    });
+    // полосы качки: шкала 0..2·порог, риска = порог покоя
+    document.querySelectorAll('.bar').forEach(b=>{
+      const val=+b.dataset.v,t=+b.dataset.t,max=2*t;
+      const sc=getComputedStyle(b.closest('.screen'));
+      b.innerHTML='';const i=document.createElement('i');i.style.width=Math.min(100,val/max*100)+'%';
+      i.style.background=val>t?sc.getPropertyValue('--warn'):sc.getPropertyValue('--ok');
+      const m=document.createElement('b');m.style.left='50%';b.append(i,m);
+    });
+    // график
+    const svg=document.getElementById('chart');
+    if(svg){svg.innerHTML='';const sc=getComputedStyle(svg.closest('.screen'));const v=n=>sc.getPropertyValue(n).trim();
+      const W=1104,H=408,L=56,B=36,T=8,R=8,ymin=-1,ymax=3;
+      const X=t=>L+(W-L-R)*t/120,Y=a=>T+(H-T-B)*(ymax-a)/(ymax-ymin);
+      for(let a=ymin;a<=ymax;a+=0.5){el('line',{x1:L,x2:W-R,y1:Y(a),y2:Y(a),stroke:v('--border'),'stroke-width':a===0?2:1},svg);
+        if(Math.abs(a%1)<1e-6){const t=el('text',{x:L-10,y:Y(a)+5,'font-size':15,'text-anchor':'end',fill:v('--muted')},svg);t.textContent=(a>0?'+':a<0?'−':'')+Math.abs(a).toFixed(0)+'°';}}
+      for(let s=0;s<=120;s+=20){const t=el('text',{x:X(s),y:H-10,'font-size':15,'text-anchor':'middle',fill:v('--muted')},svg);t.textContent=s===120?'0 с':'−'+(120-s)+' с';}
+      const series=[[v('--s2'),t=>0.2+1.95/(1+Math.exp(-(t-62)/3))+0.38*Math.sin(t*0.9)*Math.min(1,Math.max(0,(t-55)/10))+0.03*Math.sin(t*5.1),''],
+        [v('--s2'),t=>-0.12+0.1*Math.sin(t*0.9+1)*Math.min(1,Math.max(0,(t-55)/10))+0.02*Math.sin(t*3.3),'6 5'],
+        [v('--s3'),t=>0.23+1.86/(1+Math.exp(-(t-62)/3))+0.36*Math.sin(t*0.9+0.1)*Math.min(1,Math.max(0,(t-55)/10))+0.03*Math.sin(t*4.7),'']];
+      series.forEach(([c,f,d])=>{let p='';for(let t=0;t<=120;t+=0.25){p+=(t?'L':'M')+X(t).toFixed(1)+' '+Y(f(t)).toFixed(1);}
+        el('path',{d:p,fill:'none',stroke:c,'stroke-width':2.5,'stroke-dasharray':d,'stroke-linejoin':'round'},svg);});
+      el('rect',{x:X(108),y:T,width:X(120)-X(108),height:H-T-B,fill:v('--info'),'fill-opacity':.06},svg);
+    }
+  }
+
+  function fit(){document.querySelectorAll('.shot .frame').forEach(f=>{const s=f.querySelector('.screen');
+    const k=document.body.classList.contains('raw')?1:f.clientWidth/1280;s.style.transform='scale('+k+')';});}
+  function theme(t){document.querySelectorAll('.screen').forEach(s=>s.classList.toggle('dark',t==='dark'));
+    document.querySelectorAll('#tb button').forEach(b=>b.classList.toggle('on',b.dataset.theme===t));draw();}
+  document.getElementById('tb').addEventListener('click',e=>{if(e.target.dataset.theme)theme(e.target.dataset.theme);});
+
+  // ?shot=N&theme=dark — один экран 1280×720 без полей (для снимков)
+  if(raw.has('shot')){document.body.classList.add('raw');
+    document.querySelectorAll('.shot').forEach((s,i)=>{if(i+1!==+raw.get('shot'))s.remove();});}
+  theme(raw.get('theme')||'light');
+  fit();addEventListener('resize',fit);
+})();
+</script>
+</body>
+</html>

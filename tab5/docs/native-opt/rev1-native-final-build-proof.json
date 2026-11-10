@@ -1,0 +1,74 @@
+{
+  "verified_utc": "2026-10-22T20:16:12.646401+00:00",
+  "build_exit_code": 0,
+  "source_sha256": {
+    "tab5/main/native/native_ui.c": "becf5ffae69200f60ade34133754674dcbd56b4014a070ba1b4f2263376dbd03",
+    "tab5/main/native/native_ui.h": "553f931bd23d0b115566e3bea5392a2ab9ff373f6f0fc3d62397f8538e18d7ae",
+    "tab5/main/tab5_ui.c": "5c66a685c05707159738c5ab57f1f703738440b90806e018866054a4a0732486"
+  },
+  "build_dir": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\build",
+  "sdkconfig": "C:/Projects/ClaudeExp/diplom_project_tab5/tab5/sdkconfig",
+  "artifacts": {
+    "krenomer-esp32.elf": {
+      "path": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\build\\krenomer-esp32.elf",
+      "sha256": "dedaaf6ce8968ad5b6858095ad12ed82c2db0e81c1c2919ef128128c7d0c5254",
+      "size": 16238980
+    },
+    "krenomer-esp32.bin": {
+      "path": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\build\\krenomer-esp32.bin",
+      "sha256": "ab5b648fe2a9939c076b2e7f4fcf07d786f5b32700dc06d3c4965ebcd25d9559",
+      "size": 1427072
+    },
+    "native-link-audit.json": {
+      "path": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\build\\native-link-audit.json",
+      "sha256": "6c43d572afce9b00a0f08874105b1268fc977f58a13e5c3886af7485b2aa4d2c",
+      "size": 200
+    },
+    "native-compile-flags-proof.json": {
+      "path": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\build\\native-compile-flags-proof.json",
+      "sha256": "22971b145dc58684c6aad5cae2e0e0fff247ba1c51e22cf16c64b020c8443280",
+      "size": 41354
+    }
+  },
+  "package": {
+    "format": 1,
+    "board": "tab5",
+    "chip": "esp32p4",
+    "protocol": 2,
+    "version": "1.6.13-esp32",
+    "kind": "ota-app",
+    "size": 1427072,
+    "sha256": "ab5b648fe2a9939c076b2e7f4fcf07d786f5b32700dc06d3c4965ebcd25d9559",
+    "factory_parts": {
+      "0x2000": "bootloader.bin",
+      "0x20000": "krenomer-esp32.bin",
+      "0x8000": "partition-table.bin",
+      "0xf000": "ota_data_initial.bin"
+    },
+    "warning": "Untested on hardware; never send factory image to OTA",
+    "revision_min": 100,
+    "revision_max": 199,
+    "parts_sha256": {
+      "bootloader.bin": "bbd608b895888e50044723bb2d2e8ff98a008512033ea585047ec63c1441457e",
+      "krenomer-esp32.bin": "ab5b648fe2a9939c076b2e7f4fcf07d786f5b32700dc06d3c4965ebcd25d9559",
+      "partition-table.bin": "f1572c83b8e4718acde1887b9238701bc7a53f03afd086330432a3148b8165a3",
+      "ota_data_initial.bin": "7d2c7ac4888bfd75cd5f56e8d61f69595121183afc81556c876732fd3782c62f"
+    }
+  },
+  "package_verified": true,
+  "logs": {
+    "stdout": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\build\\log\\idf_py_stdout_output_66212",
+    "stderr": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\build\\log\\idf_py_stderr_output_66212"
+  },
+  "provenance": {
+    "change": "PROJECT_VER 1.6.12-esp32 -> 1.6.13-esp32; parent-owned version-only change",
+    "cmake_sha256": "737ca0f36d30b9ae10a37cdc259b2f7733b6790340bbc63baed21295f41465ea",
+    "renderer_ui_hashes_unchanged_from_previous_delivery": true,
+    "superseded_proof": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\build\\native-1.6.12-superseded-proof.json",
+    "host_fixture_firmware": "1.6.1-esp32",
+    "host_fixture_sha256": {
+      "native_baseline_native.c": "84998edec4b07b34b609c1130002398ff12ea6ac8325698cba824b6fcd0fdf90",
+      "native_baseline_bench.c": "ca177452f4c6c7bda87baaab60c831065bedf6a9701cb7b9b484c7d5c44ec4bf"
+    }
+  }
+}

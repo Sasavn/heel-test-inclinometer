@@ -1,0 +1,95 @@
+{
+  "status": "PASS",
+  "source_manifest": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\storage-1.6.16\\final-hostgates-psram\\services\\SOURCE_MANIFEST.json",
+  "results": [
+    {
+      "scenario": "sd-timeout",
+      "status": "PASS",
+      "returncode": 0,
+      "log": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\storage-1.6.16\\final-hostgates-psram\\services\\sd-timeout\\test.log"
+    },
+    {
+      "scenario": "optional-usb-failure",
+      "status": "PASS",
+      "returncode": 0,
+      "log": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\storage-1.6.16\\final-hostgates-psram\\services\\optional-usb-failure\\test.log"
+    },
+    {
+      "scenario": "paused-sd",
+      "status": "PASS",
+      "returncode": 0,
+      "log": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\storage-1.6.16\\final-hostgates-psram\\services\\paused-sd\\test.log"
+    },
+    {
+      "scenario": "snapshot-contention",
+      "status": "PASS",
+      "returncode": 0,
+      "log": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\storage-1.6.16\\final-hostgates-psram\\services\\snapshot-contention\\test.log"
+    },
+    {
+      "scenario": "sd-bin-ignored",
+      "status": "PASS",
+      "returncode": 0,
+      "log": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\storage-1.6.16\\final-hostgates-psram\\services\\sd-bin-ignored\\test.log"
+    },
+    {
+      "scenario": "explicit-usb",
+      "status": "PASS",
+      "returncode": 0,
+      "log": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\storage-1.6.16\\final-hostgates-psram\\services\\explicit-usb\\test.log"
+    },
+    {
+      "scenario": "explicit-tcp",
+      "status": "PASS",
+      "returncode": 0,
+      "log": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\storage-1.6.16\\final-hostgates-psram\\services\\explicit-tcp\\test.log"
+    },
+    {
+      "scenario": "auth-guard",
+      "status": "PASS",
+      "returncode": 0,
+      "log": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\storage-1.6.16\\final-hostgates-psram\\services\\auth-guard\\test.log"
+    },
+    {
+      "scenario": "fs-fat32",
+      "status": "PASS",
+      "returncode": 0,
+      "log": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\storage-1.6.16\\final-hostgates-psram\\services\\fs-fat32\\test.log"
+    },
+    {
+      "scenario": "fs-exfat",
+      "status": "PASS",
+      "returncode": 0,
+      "log": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\storage-1.6.16\\final-hostgates-psram\\services\\fs-exfat\\test.log"
+    },
+    {
+      "scenario": "fs-mixed",
+      "status": "PASS",
+      "returncode": 0,
+      "log": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\storage-1.6.16\\final-hostgates-psram\\services\\fs-mixed\\test.log"
+    },
+    {
+      "scenario": "fs-refused",
+      "status": "PASS",
+      "returncode": 0,
+      "log": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\storage-1.6.16\\final-hostgates-psram\\services\\fs-refused\\test.log"
+    },
+    {
+      "scenario": "input-limits",
+      "status": "PASS",
+      "returncode": 0,
+      "log": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\storage-1.6.16\\final-hostgates-psram\\services\\input-limits\\test.log"
+    },
+    {
+      "scenario": "wire-file-limits",
+      "status": "PASS",
+      "returncode": 0,
+      "log": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\storage-1.6.16\\final-hostgates-psram\\services\\wire-file-limits\\test.log"
+    },
+    {
+      "scenario": "actual-entry-chain",
+      "status": "PASS",
+      "log": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\storage-1.6.16\\final-hostgates-psram\\services\\entry-console.log"
+    }
+  ]
+}

@@ -1,0 +1,192 @@
+{
+  "status": "PASS",
+  "cpu_tests_complete": true,
+  "cpu_stopped": true,
+  "artifact_directory": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-opt\\final-pack\\20261022-231053-becf5ffae692",
+  "final98_png_dir": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-opt\\final-pack\\20261022-231053-becf5ffae692\\equivalence\\release",
+  "final98_diagnostic_png_dir": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-opt\\final-pack\\20261022-231053-becf5ffae692\\equivalence\\diagnostic",
+  "frames_per_mode": 98,
+  "renderer_source_sha256": "becf5ffae69200f60ade34133754674dcbd56b4014a070ba1b4f2263376dbd03",
+  "renderer_header_sha256": "553f931bd23d0b115566e3bea5392a2ab9ff373f6f0fc3d62397f8538e18d7ae",
+  "ui_source_sha256": "5c66a685c05707159738c5ab57f1f703738440b90806e018866054a4a0732486",
+  "source_manifest": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-opt\\final-pack\\20261022-231053-becf5ffae692\\SOURCE_MANIFEST.json",
+  "source_manifest_sha256": "f4c396f23eb103ad7fe17152448cf75244de4ed50f1afe55e352a3db5dfca5e3",
+  "parity": {
+    "status": "PASS",
+    "rgb_exact_immutable_parent": true,
+    "rgb_exact_between_modes": true,
+    "geometry_semantic_differences": 0,
+    "inputs": "PASS",
+    "report": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-opt\\final-pack\\20261022-231053-becf5ffae692\\equivalence\\counter_mode_equivalence.json",
+    "release_report": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-opt\\final-pack\\20261022-231053-becf5ffae692\\equivalence\\release\\native_v1_pixel_diff.json",
+    "diagnostic_report": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-opt\\final-pack\\20261022-231053-becf5ffae692\\equivalence\\diagnostic\\native_v1_pixel_diff.json"
+  },
+  "strict_checker": {
+    "status": "PASS",
+    "path": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-opt\\final-pack\\20261022-231053-becf5ffae692\\verify_final_pack.py",
+    "log": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-opt\\final-pack\\20261022-231053-becf5ffae692\\strict-check.log"
+  },
+  "helpers": [
+    {
+      "name": "run_native_gradient",
+      "command": [
+        "C:\\ProgramData\\anaconda3\\python.exe",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-opt\\final-pack\\20261022-231053-becf5ffae692\\source\\tab5\\tests\\run_native_gradient.py"
+      ],
+      "returncode": 0,
+      "status": "PASS"
+    },
+    {
+      "name": "run_native_profile_flags",
+      "command": [
+        "C:\\ProgramData\\anaconda3\\python.exe",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-opt\\final-pack\\20261022-231053-becf5ffae692\\source\\tab5\\tests\\run_native_profile_flags.py"
+      ],
+      "returncode": 0,
+      "status": "PASS"
+    },
+    {
+      "name": "run_draw_profile_mode",
+      "command": [
+        "C:\\ProgramData\\anaconda3\\python.exe",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-opt\\final-pack\\20261022-231053-becf5ffae692\\source\\tab5\\tests\\run_draw_profile_mode.py"
+      ],
+      "returncode": 0,
+      "status": "PASS"
+    },
+    {
+      "name": "run_native_lifetime",
+      "command": [
+        "C:\\ProgramData\\anaconda3\\python.exe",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-opt\\final-pack\\20261022-231053-becf5ffae692\\source\\tab5\\tests\\run_native_lifetime.py"
+      ],
+      "returncode": 0,
+      "status": "PASS"
+    },
+    {
+      "name": "final_regressions_build",
+      "command": [
+        "C:\\Users\\aaaor\\gcc\\bin\\gcc.EXE",
+        "-std=c11",
+        "-O2",
+        "-DNUI_PROFILE_FINE_COUNTERS=1",
+        "-DNUI_PROFILE_PRIMITIVE_TIMING=0",
+        "-IC:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-opt\\final-pack\\20261022-231053-becf5ffae692\\source\\tab5\\main",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-opt\\final-pack\\20261022-231053-becf5ffae692\\source\\tab5\\tests\\test_native_final_regressions.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-opt\\final-pack\\20261022-231053-becf5ffae692\\source\\tab5\\main\\native\\font_native_fallback14.c",
+        "-lm",
+        "-o",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-opt\\final-pack\\20261022-231053-becf5ffae692\\helpers\\final-regressions.exe"
+      ],
+      "returncode": 0,
+      "status": "PASS"
+    },
+    {
+      "name": "final_regressions",
+      "command": [
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-opt\\final-pack\\20261022-231053-becf5ffae692\\helpers\\final-regressions.exe"
+      ],
+      "returncode": 0,
+      "status": "PASS"
+    },
+    {
+      "name": "asan",
+      "status": "UNAVAILABLE",
+      "reason": "Compiler/runtime capability probe failed; see capability logs"
+    }
+  ],
+  "helper_logs": {
+    "asan-capability-build": {
+      "path": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-opt\\final-pack\\20261022-231053-becf5ffae692\\helpers\\asan-capability-build.log",
+      "sha256": "72112d189487dd63e42c3d0e9bf1cf9af7a48cc843c2a89e7263df822bd129c0"
+    },
+    "final_regressions": {
+      "path": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-opt\\final-pack\\20261022-231053-becf5ffae692\\helpers\\final_regressions.log",
+      "sha256": "429483beefd8a3972ea5d6d27f879f82c00bda51d6b6bc45333849df4b6d5221"
+    },
+    "final_regressions_build": {
+      "path": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-opt\\final-pack\\20261022-231053-becf5ffae692\\helpers\\final_regressions_build.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "run_draw_profile_mode": {
+      "path": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-opt\\final-pack\\20261022-231053-becf5ffae692\\helpers\\run_draw_profile_mode.log",
+      "sha256": "7b93d14a4a732d3c77f9c31b9beca8ae077b1a608248b0fef785a2ea2cc50930"
+    },
+    "run_native_gradient": {
+      "path": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-opt\\final-pack\\20261022-231053-becf5ffae692\\helpers\\run_native_gradient.log",
+      "sha256": "d1a4e34ead82f8ce262a41f59471f8b49287a41efa98e646d00e9769b64173df"
+    },
+    "run_native_lifetime": {
+      "path": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-opt\\final-pack\\20261022-231053-becf5ffae692\\helpers\\run_native_lifetime.log",
+      "sha256": "c0043754a71b2a6e8e657758df8f4e7fe2b6d8ffcfe54a12d5e9d032b5f351eb"
+    },
+    "run_native_profile_flags": {
+      "path": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-opt\\final-pack\\20261022-231053-becf5ffae692\\helpers\\run_native_profile_flags.log",
+      "sha256": "3eeac3a4875e720e73955453aa8aeef4219068e969bb4a83f5bba67b06f64dcd"
+    }
+  },
+  "regressions": {
+    "gradient": {
+      "status": "PASS",
+      "exact_samples": 235328,
+      "log": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-opt\\final-pack\\20261022-231053-becf5ffae692\\helpers\\run_native_gradient.log"
+    },
+    "profile_flags": {
+      "status": "PASS",
+      "modes": 4,
+      "log": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-opt\\final-pack\\20261022-231053-becf5ffae692\\helpers\\run_native_profile_flags.log"
+    },
+    "cli_nulls": {
+      "status": "PASS",
+      "modes": 4,
+      "log": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-opt\\final-pack\\20261022-231053-becf5ffae692\\helpers\\run_draw_profile_mode.log"
+    },
+    "lifetime": {
+      "status": "PASS",
+      "production_ui_cycles": 64,
+      "masks_bounded": true,
+      "log": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-opt\\final-pack\\20261022-231053-becf5ffae692\\helpers\\run_native_lifetime.log"
+    },
+    "callback_occlusion": {
+      "status": "PASS",
+      "log": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-opt\\final-pack\\20261022-231053-becf5ffae692\\helpers\\final_regressions.log"
+    },
+    "clipped_4bpp_glyph": {
+      "status": "PASS",
+      "framebuffer_unchanged": true,
+      "log": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-opt\\final-pack\\20261022-231053-becf5ffae692\\helpers\\final_regressions.log"
+    },
+    "span_rectangle": {
+      "status": "PASS",
+      "exact_cases": 576,
+      "width84": true,
+      "offsets": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "colors": [
+        "0000",
+        "FFFF",
+        "1234"
+      ],
+      "log": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-opt\\final-pack\\20261022-231053-becf5ffae692\\helpers\\final_regressions.log"
+    },
+    "asan": {
+      "status": "UNAVAILABLE",
+      "reason": "gcc cannot link libasan/libubsan",
+      "log": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-opt\\final-pack\\20261022-231053-becf5ffae692\\helpers\\asan-capability-build.log"
+    }
+  },
+  "build_metadata_delta": {
+    "file": "tab5/CMakeLists.txt",
+    "field": "PROJECT_VER",
+    "before": "1.6.12",
+    "after": "1.6.13",
+    "source": "parent report",
+    "renderer_ui_fixtures_changed": false,
+    "invalidates_renderer_gate": false,
+    "original_source_manifest_preserved": true
+  }
+}

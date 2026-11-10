@@ -1,0 +1,4 @@
+PAGE_DIRTY_COVERAGE 40 transitions both themes incremental == full redraw; mean flushed pixels=772541 PASS
+page dirty40 fine=0 timing=0 PASS
+PAGE_DIRTY_COVERAGE 40 transitions both themes incremental == full redraw; mean flushed pixels=772541 PASS
+page dirty40 fine=1 timing=0 PASS

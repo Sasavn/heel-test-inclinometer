@@ -1,0 +1,10 @@
+{
+  "status": "equal",
+  "expected_states": 30,
+  "actual_states": 30,
+  "differences": [],
+  "baseline_sha256": {
+    "keyboard": "45ce0ff902bad0fa5f0392bcddae7990185957a52ba2e86b7cb4918d6c208f77",
+    "textarea": "e19afea5d8670517ca327ed265f0c5a4fa85f13badee4f402d1bae99bf5bbf40"
+  }
+}

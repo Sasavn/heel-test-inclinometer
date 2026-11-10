@@ -1,0 +1,52 @@
+HOST_MODE fine_counters=0 release_capture=1
+NATIVE_DISPLAY format=RGB565 NUI_COLOR_DEPTH=16 framebuffer=1280x720
+RESOURCES theme=0 unknown/zero/100/clamp/geometry/change/idle: PASS
+INVALIDATION theme=0 timestamp_only=0 updates=20 flushes=0 pixels=0 refreshes=0
+INVALIDATION theme=0 timestamp_only=1 updates=20 flushes=0 pixels=0 refreshes=0
+Five native pages ready: dark
+RESOURCES theme=1 unknown/zero/100/clamp/geometry/change/idle: PASS
+INVALIDATION theme=1 timestamp_only=0 updates=20 flushes=0 pixels=0 refreshes=0
+INVALIDATION theme=1 timestamp_only=1 updates=20 flushes=0 pixels=0 refreshes=0
+Five native pages ready: light
+GRAPH_IDLE theme=0 missing_timestamp=0 flushes=0 pixels=0 refreshes=0
+GRAPH_IDLE theme=0 missing_timestamp=1 flushes=0 pixels=0 refreshes=0
+GRAPH_CHANGE theme=0 range/legend/theme/fresh samples: PASS
+GRAPH_IDLE theme=1 missing_timestamp=0 flushes=0 pixels=0 refreshes=0
+GRAPH_IDLE theme=1 missing_timestamp=1 flushes=0 pixels=0 refreshes=0
+GRAPH_CHANGE theme=1 range/legend/theme/fresh samples: PASS
+RASTER_OVERLAY opaque RGB5651040x364 actual flush samples=551 curve_pixels=2074/2074/2074/2074 PASS
+GRAPH_5HZ_OFFLINE theme=0 unchanged empty tail clears numeric cards PASS
+GRAPH_5HZ theme=0 synthetic: continuous 30s / unchanged raw 2min / pending numerics / raw errors++ gap / 600ms silence PASS
+RASTER_OVERLAY opaque RGB5651040x364 actual flush samples=551 curve_pixels=2074/2074/2074/2074 PASS
+GRAPH_5HZ_OFFLINE theme=1 unchanged empty tail clears numeric cards PASS
+GRAPH_5HZ theme=1 synthetic: continuous 30s / unchanged raw 2min / pending numerics / raw errors++ gap / 600ms silence PASS
+GRAPH_RAW_CAPTION theme=0 existing glyphs and bounds PASS
+LIVE_UNFILTERED theme=0 decoded-zero step / level raster / current graph / no synthetic tail / input and recording preserved PASS
+GRAPH_RAW_CAPTION theme=1 existing glyphs and bounds PASS
+LIVE_UNFILTERED theme=1 decoded-zero step / level raster / current graph / no synthetic tail / input and recording preserved PASS
+RASTER_OVERLAY opaque RGB5651040x364 actual flush samples=551 curve_pixels=2174/2080/2147/2080 PASS
+DRAW_COST format=RGB565 theme=0 update_ms=10.561 render_pump_ms=92.705 mock_flush_ms=84.911 max_render_ms=1.444
+GRAPH_BENCH theme=0 updates=120 elapsed_ms=103.4 per_update_ms=0.862 plot_draw_events=60 pixels=28035280 refreshes=120
+RASTER_OVERLAY opaque RGB5651040x364 actual flush samples=551 curve_pixels=2174/2080/2147/2080 PASS
+DRAW_COST format=RGB565 theme=1 update_ms=10.595 render_pump_ms=92.660 mock_flush_ms=84.899 max_render_ms=1.414
+GRAPH_BENCH theme=1 updates=120 elapsed_ms=103.5 per_update_ms=0.862 plot_draw_events=60 pixels=28035280 refreshes=120
+DRAW_COST format=RGB565 theme=0 update_ms=7.481 render_pump_ms=120.438 mock_flush_ms=81.344 max_render_ms=1.602
+MEASURE_BENCH theme=0 updates=100 elapsed_ms=128.0 per_update_ms=1.280 pixels=26460032 refreshes=100
+DRAW_COST format=RGB565 theme=1 update_ms=7.631 render_pump_ms=121.168 mock_flush_ms=81.577 max_render_ms=1.608
+MEASURE_BENCH theme=1 updates=100 elapsed_ms=128.8 per_update_ms=1.288 pixels=26460032 refreshes=100
+RELEASE_CAPTURE primitive notifications not asserted; diagnostic fine1 is mandatory separately
+LEVEL_OVERLAY theme=0 RGB565 first-child / marker-color / flush pixels / input immutable: image_primitives=40 vector_ring_primitives=0 masks=0 PASS
+LEVEL_QUANTIZED theme=0 fresh subpixel movement image_primitives=0 buffer unchanged PASS
+RELEASE_CAPTURE primitive notifications not asserted; diagnostic fine1 is mandatory separately
+LEVEL_OVERLAY theme=1 RGB565 first-child / marker-color / flush pixels / input immutable: image_primitives=40 vector_ring_primitives=0 masks=0 PASS
+LEVEL_QUANTIZED theme=1 fresh subpixel movement image_primitives=0 buffer unchanged PASS
+KEYBOARD_INPUT theme=0 uppercase/symbols/space/cursor/UTF8-backspace/ready/cancel/all-six-date-fields PASS
+KEYBOARD_INPUT theme=1 uppercase/symbols/space/cursor/UTF8-backspace/ready/cancel/all-six-date-fields PASS
+NETWORK_SWITCH_INPUT theme=0 real-AP/STA-touch/no-premature-callback/STA-short-reject/open-STA/AP-short-reject/exact-apply-flags PASS
+NETWORK_SWITCH_INPUT theme=1 real-AP/STA-touch/no-premature-callback/STA-short-reject/open-STA/AP-short-reject/exact-apply-flags PASS
+KEYBOARD_TIMING theme=0 press-only-letter/no-repeat-release-modifier/UTF8-held-backspace/repeated-arrows/one-ready-one-cancel PASS
+KEYBOARD_TIMING theme=1 press-only-letter/no-repeat-release-modifier/UTF8-held-backspace/repeated-arrows/one-ready-one-cancel PASS
+CARET_EPOCH theme=0 real-framebuffer/edit-reset/visible-399/hidden-401/visible-801 PASS
+CARET_EPOCH theme=1 real-framebuffer/edit-reset/visible-399/hidden-401/visible-801 PASS
+role property lifecycle: 32 reinitializations, no registry growth
+headless native UI: 98 cases, 0 layout guardrail failures; exact fidelity pending comparator

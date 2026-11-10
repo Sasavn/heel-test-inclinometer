@@ -1,0 +1,57 @@
+{
+  "build": "build-rev3",
+  "version": "1.6.16-esp32",
+  "source_sha256": {
+    "tab5/main/tab5_services.c": "a5aeb62ab77a1dddbcf3d02f474dfc51989da7f4e11f401a7ce0ce7724d6dc3d",
+    "tab5/main/main.c": "344d7b729256c7f848b5beca044e8cc352df9b2ca5168975dacd62fe6680f3a7",
+    "tab5/CMakeLists.txt": "ed118a43f3609c3cf258c190164452163c9304c65422c1bf428edb57d1b4f80c"
+  },
+  "build_exit_code": 0,
+  "artifacts": {
+    "krenomer-esp32.elf": {
+      "path": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\build-rev3\\krenomer-esp32.elf",
+      "sha256": "aecd3d242ce1bd1fca5373d868ba20c61c3531213d63d5ed526ed7783add6aff",
+      "size": 16534008
+    },
+    "krenomer-esp32.bin": {
+      "path": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\build-rev3\\krenomer-esp32.bin",
+      "sha256": "d68aeece59cf315c560bad22d0643c27eddf67b7d33a180c6ece9122a1dcb969",
+      "size": 1443728
+    }
+  },
+  "package": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\build-rev3\\package",
+  "package_manifest": {
+    "format": 1,
+    "board": "tab5",
+    "chip": "esp32p4",
+    "protocol": 2,
+    "version": "1.6.16-esp32",
+    "kind": "ota-app",
+    "size": 1443728,
+    "sha256": "d68aeece59cf315c560bad22d0643c27eddf67b7d33a180c6ece9122a1dcb969",
+    "factory_parts": {
+      "0x2000": "bootloader.bin",
+      "0x20000": "krenomer-esp32.bin",
+      "0x8000": "partition-table.bin",
+      "0xf000": "ota_data_initial.bin"
+    },
+    "warning": "Untested on hardware; never send factory image to OTA",
+    "revision_min": 300,
+    "revision_max": 399,
+    "parts_sha256": {
+      "bootloader.bin": "e7955123d3f565b24e0fc0817b502902f462a24da648551bf065b2e8d497c0dd",
+      "krenomer-esp32.bin": "d68aeece59cf315c560bad22d0643c27eddf67b7d33a180c6ece9122a1dcb969",
+      "partition-table.bin": "f1572c83b8e4718acde1887b9238701bc7a53f03afd086330432a3148b8165a3",
+      "ota_data_initial.bin": "7d2c7ac4888bfd75cd5f56e8d61f69595121183afc81556c876732fd3782c62f"
+    }
+  },
+  "no_lvgl_audit": true,
+  "fine0_timing0_all_three_units": true,
+  "logs": {
+    "stdout": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\build-rev3\\log\\idf_py_stdout_output_51124",
+    "stderr": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\build-rev3\\log\\idf_py_stderr_output_51124"
+  },
+  "verified_utc": "2026-10-23T10:44:48.133034+00:00",
+  "hardware_status": "Not tested; candidate only",
+  "lock_owner_restore_required": true
+}

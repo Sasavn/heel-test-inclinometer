@@ -1,0 +1,54 @@
+{
+  "source_design_commit": "f085c29d87fe4508948320bbdc657b7c3ee95d22",
+  "ui_delta": "two newline splits only, no token/design changes",
+  "version": "1.6.1-esp32",
+  "source_sha256": {
+    "tab5/main/tab5_ui.c": "6bc9067808a4ce4b09b1b8c004917765114a04b0861ccb431e071c27433d3180",
+    "tab5/main/tab5_ui.h": "631adac0d96ee79b55702ae8ad6557f76d4364672549a863042bbc885dd86374",
+    "tab5/main/CMakeLists.txt": "f943806ba667c9c583ac79cda14771497f4037db6890c46eb253e4dafcce5d35",
+    "tab5/CMakeLists.txt": "ae2478ca4237ea8f057d610ce6ffd370de07ec9575f3899526c28ab8312a5085",
+    "tab5/tools/gen_fonts.py": "c260edd6bbe44a72f6145a3043157f0e57622a1d453546aa81574617fb58f4c4",
+    "tab5/main/font_tab5_16.c": "bdc160b3fa59630f5589dcb437a53b442ecd6ebba2fb745c4db2f0998f3ec150",
+    "tab5/main/font_tab5_16m.c": "cb4b151fd6f3ef471448d167df4807b2f0f3c5a7b1ef66b46d0fb1ab25c4b252",
+    "tab5/main/font_tab5_20.c": "22a316ffd881c4f2c50f3c95424ab46c6e8a8870ef176078b391d713b38a8bbf",
+    "tab5/main/font_tab5_20m.c": "8d11f9e6dd97e6b0c7149974ea948498ed0486e115f14eecc3894a063e2345fe",
+    "tab5/main/font_tab5_24.c": "05d37bf68c56ba32b63e5bba9878787810adac71a1782a7ce7cf5ff80aa0f71d",
+    "tab5/main/font_tab5_32.c": "47565a3f155c0feea5b6a09cc4f435e455e7a5d2aff6c29abd95b735389ccbe3",
+    "tab5/main/font_tab5_40.c": "63738846e99ce8a890e2aeb969dea32f54b8bad497ccb95625674b8a6eec72ee",
+    "tab5/main/font_tab5_64.c": "aa3f02712555b0eb8f7aa570e1f9aa971caced32a9b0bd4752ff704d5834455c"
+  },
+  "native_ui": "76 scenarios,30 callbacks,0 geometry failures",
+  "artifact_regressions": 28,
+  "packages": [
+    {
+      "folder": "tab5/build/package",
+      "version": "1.6.1-esp32",
+      "revision_min": 100,
+      "revision_max": 199,
+      "size": 1474224,
+      "sha256": "3737bc29cebbb36232510f828ceeab2bd1d384abe62623967a8a521da5f182a6",
+      "parts_sha256": {
+        "bootloader.bin": "3d17f8d5d4c819e45f5edb36043d5b70e6e43c5983370a208ddd3480f2b3625d",
+        "krenomer-esp32.bin": "3737bc29cebbb36232510f828ceeab2bd1d384abe62623967a8a521da5f182a6",
+        "partition-table.bin": "f1572c83b8e4718acde1887b9238701bc7a53f03afd086330432a3148b8165a3",
+        "ota_data_initial.bin": "7d2c7ac4888bfd75cd5f56e8d61f69595121183afc81556c876732fd3782c62f"
+      },
+      "new_roboto_fonts_in_elf": true
+    },
+    {
+      "folder": "tab5/build-rev3/package",
+      "version": "1.6.1-esp32",
+      "revision_min": 300,
+      "revision_max": 399,
+      "size": 1475648,
+      "sha256": "a9360d940f85e94059f28086086d7858077925acb6d43328cb4ebb87d538b3df",
+      "parts_sha256": {
+        "bootloader.bin": "d2e305ca520b8b66894552de0ceffc7d7e39b35da8418c230d5ba915b65cf083",
+        "krenomer-esp32.bin": "a9360d940f85e94059f28086086d7858077925acb6d43328cb4ebb87d538b3df",
+        "partition-table.bin": "f1572c83b8e4718acde1887b9238701bc7a53f03afd086330432a3148b8165a3",
+        "ota_data_initial.bin": "7d2c7ac4888bfd75cd5f56e8d61f69595121183afc81556c876732fd3782c62f"
+      },
+      "new_roboto_fonts_in_elf": true
+    }
+  ]
+}

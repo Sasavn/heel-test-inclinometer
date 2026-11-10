@@ -1,0 +1,1 @@
+native lifetime: 64 production UI cycles, dialogs/keyboards/held repeat; all retained bytes accounted, masks bounded; actions=0

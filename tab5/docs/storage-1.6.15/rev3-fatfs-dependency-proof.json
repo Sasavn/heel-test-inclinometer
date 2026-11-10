@@ -1,0 +1,201 @@
+{
+  "consumer_count": 23,
+  "sdk_header_leaks": [],
+  "records": [
+    {
+      "object": "esp-idf/main/CMakeFiles/__idf_main.dir/tab5_board.c.obj",
+      "source": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\main\\tab5_board.c",
+      "headers": [
+        "C:/Projects/ClaudeExp/diplom_project_tab5/tab5/build-rev3/tab5-fatfs-generated/ff.h",
+        "C:/Projects/ClaudeExp/diplom_project_tab5/tab5/build-rev3/tab5-fatfs-generated/ffconf.h"
+      ]
+    },
+    {
+      "object": "esp-idf/main/CMakeFiles/__idf_main.dir/main.c.obj",
+      "source": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\main\\main.c",
+      "headers": [
+        "C:/Projects/ClaudeExp/diplom_project_tab5/tab5/build-rev3/tab5-fatfs-generated/ff.h",
+        "C:/Projects/ClaudeExp/diplom_project_tab5/tab5/build-rev3/tab5-fatfs-generated/ffconf.h"
+      ]
+    },
+    {
+      "object": "esp-idf/main/CMakeFiles/__idf_main.dir/tab5_services.c.obj",
+      "source": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\main\\tab5_services.c",
+      "headers": [
+        "C:/Projects/ClaudeExp/diplom_project_tab5/tab5/build-rev3/tab5-fatfs-generated/ff.h",
+        "C:/Projects/ClaudeExp/diplom_project_tab5/tab5/build-rev3/tab5-fatfs-generated/ffconf.h",
+        "C:/Projects/ClaudeExp/diplom_project_tab5/tab5/build-rev3/tab5-fatfs-generated/diskio.h"
+      ]
+    },
+    {
+      "object": "esp-idf/tab5_board_support/CMakeFiles/__idf_tab5_board_support.dir/src/bsp_i2c.c.obj",
+      "source": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\components\\tab5_board_support\\src\\bsp_i2c.c",
+      "headers": [
+        "C:/Projects/ClaudeExp/diplom_project_tab5/tab5/build-rev3/tab5-fatfs-generated/ff.h",
+        "C:/Projects/ClaudeExp/diplom_project_tab5/tab5/build-rev3/tab5-fatfs-generated/ffconf.h"
+      ]
+    },
+    {
+      "object": "esp-idf/tab5_board_support/CMakeFiles/__idf_tab5_board_support.dir/src/bsp_io_expander.c.obj",
+      "source": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\components\\tab5_board_support\\src\\bsp_io_expander.c",
+      "headers": [
+        "C:/Projects/ClaudeExp/diplom_project_tab5/tab5/build-rev3/tab5-fatfs-generated/ff.h",
+        "C:/Projects/ClaudeExp/diplom_project_tab5/tab5/build-rev3/tab5-fatfs-generated/ffconf.h"
+      ]
+    },
+    {
+      "object": "esp-idf/tab5_board_support/CMakeFiles/__idf_tab5_board_support.dir/src/bsp_usb.c.obj",
+      "source": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\components\\tab5_board_support\\src\\bsp_usb.c",
+      "headers": [
+        "C:/Projects/ClaudeExp/diplom_project_tab5/tab5/build-rev3/tab5-fatfs-generated/ff.h",
+        "C:/Projects/ClaudeExp/diplom_project_tab5/tab5/build-rev3/tab5-fatfs-generated/ffconf.h"
+      ]
+    },
+    {
+      "object": "esp-idf/tab5_board_support/CMakeFiles/__idf_tab5_board_support.dir/src/bsp_storage.c.obj",
+      "source": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\components\\tab5_board_support\\src\\bsp_storage.c",
+      "headers": [
+        "C:/Projects/ClaudeExp/diplom_project_tab5/tab5/build-rev3/tab5-fatfs-generated/ff.h",
+        "C:/Projects/ClaudeExp/diplom_project_tab5/tab5/build-rev3/tab5-fatfs-generated/ffconf.h"
+      ]
+    },
+    {
+      "object": "esp-idf/tab5_board_support/CMakeFiles/__idf_tab5_board_support.dir/src/bsp_feature_en.c.obj",
+      "source": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\components\\tab5_board_support\\src\\bsp_feature_en.c",
+      "headers": [
+        "C:/Projects/ClaudeExp/diplom_project_tab5/tab5/build-rev3/tab5-fatfs-generated/ff.h",
+        "C:/Projects/ClaudeExp/diplom_project_tab5/tab5/build-rev3/tab5-fatfs-generated/ffconf.h"
+      ]
+    },
+    {
+      "object": "esp-idf/main/CMakeFiles/__idf_main.dir/tab5_native_port.c.obj",
+      "source": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\main\\tab5_native_port.c",
+      "headers": [
+        "C:/Projects/ClaudeExp/diplom_project_tab5/tab5/build-rev3/tab5-fatfs-generated/ff.h",
+        "C:/Projects/ClaudeExp/diplom_project_tab5/tab5/build-rev3/tab5-fatfs-generated/ffconf.h"
+      ]
+    },
+    {
+      "object": "esp-idf/tab5_board_support/CMakeFiles/__idf_tab5_board_support.dir/src/bsp_display.c.obj",
+      "source": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\components\\tab5_board_support\\src\\bsp_display.c",
+      "headers": [
+        "C:/Projects/ClaudeExp/diplom_project_tab5/tab5/build-rev3/tab5-fatfs-generated/ff.h",
+        "C:/Projects/ClaudeExp/diplom_project_tab5/tab5/build-rev3/tab5-fatfs-generated/ffconf.h"
+      ]
+    },
+    {
+      "object": "esp-idf/fatfs/CMakeFiles/__idf_fatfs.dir/C_/Projects/ClaudeExp/diplom_project_tab5/.tools/esp-idf/components/fatfs/diskio/diskio.c.obj",
+      "source": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\esp-idf\\components\\fatfs\\diskio\\diskio.c",
+      "headers": [
+        "C:/Projects/ClaudeExp/diplom_project_tab5/tab5/build-rev3/tab5-fatfs-generated/diskio.h",
+        "C:/Projects/ClaudeExp/diplom_project_tab5/tab5/build-rev3/tab5-fatfs-generated/ff.h",
+        "C:/Projects/ClaudeExp/diplom_project_tab5/tab5/build-rev3/tab5-fatfs-generated/ffconf.h"
+      ]
+    },
+    {
+      "object": "esp-idf/fatfs/CMakeFiles/__idf_fatfs.dir/config_guard.c.obj",
+      "source": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\components\\fatfs\\config_guard.c",
+      "headers": [
+        "C:/Projects/ClaudeExp/diplom_project_tab5/tab5/build-rev3/tab5-fatfs-generated/ff.h",
+        "C:/Projects/ClaudeExp/diplom_project_tab5/tab5/build-rev3/tab5-fatfs-generated/ffconf.h"
+      ]
+    },
+    {
+      "object": "esp-idf/fatfs/CMakeFiles/__idf_fatfs.dir/C_/Projects/ClaudeExp/diplom_project_tab5/.tools/esp-idf/components/fatfs/diskio/diskio_rawflash.c.obj",
+      "source": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\esp-idf\\components\\fatfs\\diskio\\diskio_rawflash.c",
+      "headers": [
+        "C:/Projects/ClaudeExp/diplom_project_tab5/tab5/build-rev3/tab5-fatfs-generated/diskio.h",
+        "C:/Projects/ClaudeExp/diplom_project_tab5/tab5/build-rev3/tab5-fatfs-generated/ff.h",
+        "C:/Projects/ClaudeExp/diplom_project_tab5/tab5/build-rev3/tab5-fatfs-generated/ffconf.h"
+      ]
+    },
+    {
+      "object": "esp-idf/fatfs/CMakeFiles/__idf_fatfs.dir/C_/Projects/ClaudeExp/diplom_project_tab5/.tools/esp-idf/components/fatfs/diskio/diskio_wl.c.obj",
+      "source": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\esp-idf\\components\\fatfs\\diskio\\diskio_wl.c",
+      "headers": [
+        "C:/Projects/ClaudeExp/diplom_project_tab5/tab5/build-rev3/tab5-fatfs-generated/diskio.h",
+        "C:/Projects/ClaudeExp/diplom_project_tab5/tab5/build-rev3/tab5-fatfs-generated/ff.h",
+        "C:/Projects/ClaudeExp/diplom_project_tab5/tab5/build-rev3/tab5-fatfs-generated/ffconf.h"
+      ]
+    },
+    {
+      "object": "esp-idf/fatfs/CMakeFiles/__idf_fatfs.dir/__/__/tab5-fatfs-generated/ffunicode.c.obj",
+      "source": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\build-rev3\\tab5-fatfs-generated\\ffunicode.c",
+      "headers": [
+        "C:/Projects/ClaudeExp/diplom_project_tab5/tab5/build-rev3/tab5-fatfs-generated/ff.h",
+        "C:/Projects/ClaudeExp/diplom_project_tab5/tab5/build-rev3/tab5-fatfs-generated/ffconf.h"
+      ]
+    },
+    {
+      "object": "esp-idf/fatfs/CMakeFiles/__idf_fatfs.dir/C_/Projects/ClaudeExp/diplom_project_tab5/.tools/esp-idf/components/fatfs/port/freertos/ffsystem.c.obj",
+      "source": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\esp-idf\\components\\fatfs\\port\\freertos\\ffsystem.c",
+      "headers": [
+        "C:/Projects/ClaudeExp/diplom_project_tab5/tab5/build-rev3/tab5-fatfs-generated/ff.h",
+        "C:/Projects/ClaudeExp/diplom_project_tab5/tab5/build-rev3/tab5-fatfs-generated/ffconf.h"
+      ]
+    },
+    {
+      "object": "esp-idf/fatfs/CMakeFiles/__idf_fatfs.dir/C_/Projects/ClaudeExp/diplom_project_tab5/.tools/esp-idf/components/fatfs/diskio/diskio_sdmmc.c.obj",
+      "source": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\esp-idf\\components\\fatfs\\diskio\\diskio_sdmmc.c",
+      "headers": [
+        "C:/Projects/ClaudeExp/diplom_project_tab5/tab5/build-rev3/tab5-fatfs-generated/diskio.h",
+        "C:/Projects/ClaudeExp/diplom_project_tab5/tab5/build-rev3/tab5-fatfs-generated/ff.h",
+        "C:/Projects/ClaudeExp/diplom_project_tab5/tab5/build-rev3/tab5-fatfs-generated/ffconf.h"
+      ]
+    },
+    {
+      "object": "esp-idf/fatfs/CMakeFiles/__idf_fatfs.dir/C_/Projects/ClaudeExp/diplom_project_tab5/.tools/esp-idf/components/fatfs/vfs/vfs_fat_spiflash.c.obj",
+      "source": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\esp-idf\\components\\fatfs\\vfs\\vfs_fat_spiflash.c",
+      "headers": [
+        "C:/Projects/ClaudeExp/diplom_project_tab5/tab5/build-rev3/tab5-fatfs-generated/ff.h",
+        "C:/Projects/ClaudeExp/diplom_project_tab5/tab5/build-rev3/tab5-fatfs-generated/ffconf.h",
+        "C:/Projects/ClaudeExp/diplom_project_tab5/tab5/build-rev3/tab5-fatfs-generated/diskio.h"
+      ]
+    },
+    {
+      "object": "esp-idf/fatfs/CMakeFiles/__idf_fatfs.dir/C_/Projects/ClaudeExp/diplom_project_tab5/.tools/esp-idf/components/fatfs/vfs/vfs_fat_sdmmc.c.obj",
+      "source": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\esp-idf\\components\\fatfs\\vfs\\vfs_fat_sdmmc.c",
+      "headers": [
+        "C:/Projects/ClaudeExp/diplom_project_tab5/tab5/build-rev3/tab5-fatfs-generated/ff.h",
+        "C:/Projects/ClaudeExp/diplom_project_tab5/tab5/build-rev3/tab5-fatfs-generated/ffconf.h",
+        "C:/Projects/ClaudeExp/diplom_project_tab5/tab5/build-rev3/tab5-fatfs-generated/diskio.h"
+      ]
+    },
+    {
+      "object": "esp-idf/fatfs/CMakeFiles/__idf_fatfs.dir/C_/Projects/ClaudeExp/diplom_project_tab5/.tools/esp-idf/components/fatfs/vfs/vfs_fat.c.obj",
+      "source": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\esp-idf\\components\\fatfs\\vfs\\vfs_fat.c",
+      "headers": [
+        "C:/Projects/ClaudeExp/diplom_project_tab5/tab5/build-rev3/tab5-fatfs-generated/ff.h",
+        "C:/Projects/ClaudeExp/diplom_project_tab5/tab5/build-rev3/tab5-fatfs-generated/ffconf.h",
+        "C:/Projects/ClaudeExp/diplom_project_tab5/tab5/build-rev3/tab5-fatfs-generated/diskio.h"
+      ]
+    },
+    {
+      "object": "esp-idf/fatfs/CMakeFiles/__idf_fatfs.dir/__/__/tab5-fatfs-generated/ff.c.obj",
+      "source": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\build-rev3\\tab5-fatfs-generated\\ff.c",
+      "headers": [
+        "C:/Projects/ClaudeExp/diplom_project_tab5/tab5/build-rev3/tab5-fatfs-generated/ff.h",
+        "C:/Projects/ClaudeExp/diplom_project_tab5/tab5/build-rev3/tab5-fatfs-generated/ffconf.h",
+        "C:/Projects/ClaudeExp/diplom_project_tab5/tab5/build-rev3/tab5-fatfs-generated/diskio.h"
+      ]
+    },
+    {
+      "object": "esp-idf/usb_host_msc/CMakeFiles/__idf_usb_host_msc.dir/upstream/src/diskio_usb.c.obj",
+      "source": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\components\\usb_host_msc\\upstream\\src\\diskio_usb.c",
+      "headers": [
+        "C:/Projects/ClaudeExp/diplom_project_tab5/tab5/build-rev3/tab5-fatfs-generated/diskio.h",
+        "C:/Projects/ClaudeExp/diplom_project_tab5/tab5/build-rev3/tab5-fatfs-generated/ff.h",
+        "C:/Projects/ClaudeExp/diplom_project_tab5/tab5/build-rev3/tab5-fatfs-generated/ffconf.h"
+      ]
+    },
+    {
+      "object": "esp-idf/usb_host_msc/CMakeFiles/__idf_usb_host_msc.dir/msc_vfs_owned.c.obj",
+      "source": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\components\\usb_host_msc\\msc_vfs_owned.c",
+      "headers": [
+        "C:/Projects/ClaudeExp/diplom_project_tab5/tab5/build-rev3/tab5-fatfs-generated/ff.h",
+        "C:/Projects/ClaudeExp/diplom_project_tab5/tab5/build-rev3/tab5-fatfs-generated/ffconf.h",
+        "C:/Projects/ClaudeExp/diplom_project_tab5/tab5/build-rev3/tab5-fatfs-generated/diskio.h"
+      ]
+    }
+  ]
+}

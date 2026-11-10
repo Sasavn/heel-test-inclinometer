@@ -1,0 +1,69 @@
+[
+  {
+    "name": "run_native_gradient",
+    "command": [
+      "C:\\ProgramData\\anaconda3\\python.exe",
+      "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-opt\\final-pack\\20261022-231053-becf5ffae692\\source\\tab5\\tests\\run_native_gradient.py"
+    ],
+    "returncode": 0,
+    "status": "PASS"
+  },
+  {
+    "name": "run_native_profile_flags",
+    "command": [
+      "C:\\ProgramData\\anaconda3\\python.exe",
+      "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-opt\\final-pack\\20261022-231053-becf5ffae692\\source\\tab5\\tests\\run_native_profile_flags.py"
+    ],
+    "returncode": 0,
+    "status": "PASS"
+  },
+  {
+    "name": "run_draw_profile_mode",
+    "command": [
+      "C:\\ProgramData\\anaconda3\\python.exe",
+      "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-opt\\final-pack\\20261022-231053-becf5ffae692\\source\\tab5\\tests\\run_draw_profile_mode.py"
+    ],
+    "returncode": 0,
+    "status": "PASS"
+  },
+  {
+    "name": "run_native_lifetime",
+    "command": [
+      "C:\\ProgramData\\anaconda3\\python.exe",
+      "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-opt\\final-pack\\20261022-231053-becf5ffae692\\source\\tab5\\tests\\run_native_lifetime.py"
+    ],
+    "returncode": 0,
+    "status": "PASS"
+  },
+  {
+    "name": "final_regressions_build",
+    "command": [
+      "C:\\Users\\aaaor\\gcc\\bin\\gcc.EXE",
+      "-std=c11",
+      "-O2",
+      "-DNUI_PROFILE_FINE_COUNTERS=1",
+      "-DNUI_PROFILE_PRIMITIVE_TIMING=0",
+      "-IC:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-opt\\final-pack\\20261022-231053-becf5ffae692\\source\\tab5\\main",
+      "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-opt\\final-pack\\20261022-231053-becf5ffae692\\source\\tab5\\tests\\test_native_final_regressions.c",
+      "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-opt\\final-pack\\20261022-231053-becf5ffae692\\source\\tab5\\main\\native\\font_native_fallback14.c",
+      "-lm",
+      "-o",
+      "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-opt\\final-pack\\20261022-231053-becf5ffae692\\helpers\\final-regressions.exe"
+    ],
+    "returncode": 0,
+    "status": "PASS"
+  },
+  {
+    "name": "final_regressions",
+    "command": [
+      "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-opt\\final-pack\\20261022-231053-becf5ffae692\\helpers\\final-regressions.exe"
+    ],
+    "returncode": 0,
+    "status": "PASS"
+  },
+  {
+    "name": "asan",
+    "status": "UNAVAILABLE",
+    "reason": "Compiler/runtime capability probe failed; see capability logs"
+  }
+]

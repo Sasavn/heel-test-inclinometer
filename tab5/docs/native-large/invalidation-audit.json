@@ -1,0 +1,207 @@
+{
+  "status": "PASS",
+  "command": "python tab5/tests/run_native_invalidation_audit.py",
+  "generated_at_utc": "2026-10-26T05:08:13.134569+00:00",
+  "head": "5f9b33b94790a40fd110a0a60b7b54a07759e2f6",
+  "baseline_ref": "6660d0e",
+  "scope": "Host CPU framebuffer invalidation only; production sources unchanged; no device/network/GUI",
+  "comparison_method": "Baseline UI source from git; both use the current superset API header and current linked support/font sources. Renderer baseline equality is checked separately.",
+  "renderer_matches_baseline_ignoring_crlf": true,
+  "fine_counters": 1,
+  "theme": "light",
+  "results": {
+    "baseline": {
+      "main_static_100updates": {
+        "frames": 0,
+        "dirty_pixels": 0,
+        "rects": 0,
+        "layout_evict": 0,
+        "style_evict": 0
+      },
+      "main_to_settings": {
+        "frames": 1,
+        "dirty_pixels": 813552,
+        "rects": 3,
+        "layout_evict": 93,
+        "style_evict": 95
+      },
+      "settings_hidden_measure_changes_100updates": {
+        "frames": 0,
+        "dirty_pixels": 0,
+        "rects": 0,
+        "layout_evict": 0,
+        "style_evict": 0
+      },
+      "settings_to_network": {
+        "frames": 1,
+        "dirty_pixels": 813136,
+        "rects": 2,
+        "layout_evict": 50,
+        "style_evict": 54
+      },
+      "network_to_graph": {
+        "frames": 1,
+        "dirty_pixels": 813552,
+        "rects": 3,
+        "layout_evict": 61,
+        "style_evict": 64
+      },
+      "graph_to_main": {
+        "frames": 1,
+        "dirty_pixels": 813136,
+        "rects": 2,
+        "layout_evict": 0,
+        "style_evict": 10
+      },
+      "keyboard_style_100_same_theme": {
+        "frames": 0,
+        "dirty_pixels": 0,
+        "rects": 0,
+        "layout_evict": 0,
+        "style_evict": 0
+      },
+      "time_modal_real_action_static_100updates": {
+        "frames": 0,
+        "dirty_pixels": 0,
+        "rects": 0,
+        "layout_evict": 0,
+        "style_evict": 0
+      },
+      "time_modal_live_angles_20updates": {
+        "frames": 20,
+        "dirty_pixels": 2697920,
+        "rects": 95,
+        "layout_evict": 0,
+        "style_evict": 134
+      }
+    },
+    "current": {
+      "main_static_100updates": {
+        "frames": 0,
+        "dirty_pixels": 0,
+        "rects": 0,
+        "layout_evict": 0,
+        "style_evict": 0
+      },
+      "main_to_settings": {
+        "frames": 1,
+        "dirty_pixels": 741392,
+        "rects": 3,
+        "layout_evict": 61,
+        "style_evict": 62
+      },
+      "settings_hidden_measure_changes_100updates": {
+        "frames": 0,
+        "dirty_pixels": 0,
+        "rects": 0,
+        "layout_evict": 0,
+        "style_evict": 0
+      },
+      "settings_to_network": {
+        "frames": 1,
+        "dirty_pixels": 740784,
+        "rects": 2,
+        "layout_evict": 39,
+        "style_evict": 42
+      },
+      "network_to_graph": {
+        "frames": 1,
+        "dirty_pixels": 741392,
+        "rects": 3,
+        "layout_evict": 41,
+        "style_evict": 44
+      },
+      "graph_to_main": {
+        "frames": 1,
+        "dirty_pixels": 741392,
+        "rects": 3,
+        "layout_evict": 0,
+        "style_evict": 2
+      },
+      "focus_idle_100_real_tick_queue_polls": {
+        "frames": 0,
+        "dirty_pixels": 0,
+        "rects": 0,
+        "layout_evict": 0,
+        "style_evict": 0
+      },
+      "keyboard_style_100_same_theme": {
+        "frames": 0,
+        "dirty_pixels": 0,
+        "rects": 0,
+        "layout_evict": 0,
+        "style_evict": 0
+      },
+      "time_modal_real_action_static_100updates": {
+        "frames": 0,
+        "dirty_pixels": 0,
+        "rects": 0,
+        "layout_evict": 0,
+        "style_evict": 2
+      },
+      "time_modal_live_angles_20updates": {
+        "frames": 20,
+        "dirty_pixels": 4362240,
+        "rects": 80,
+        "layout_evict": 0,
+        "style_evict": 180
+      }
+    }
+  },
+  "dirty_comparisons": {
+    "main_to_settings": {
+      "baseline_dirty_pixels": 813552,
+      "current_dirty_pixels": 741392,
+      "reduction_pct": 8.87
+    },
+    "settings_to_network": {
+      "baseline_dirty_pixels": 813136,
+      "current_dirty_pixels": 740784,
+      "reduction_pct": 8.898
+    },
+    "network_to_graph": {
+      "baseline_dirty_pixels": 813552,
+      "current_dirty_pixels": 741392,
+      "reduction_pct": 8.87
+    },
+    "graph_to_main": {
+      "baseline_dirty_pixels": 813136,
+      "current_dirty_pixels": 741392,
+      "reduction_pct": 8.823
+    }
+  },
+  "source_sha256": {
+    "tab5/main/tab5_ui.c": "cd01cd92c65dc822721c50b49e8d2168507f9ea53d9875c7a55127ac57a77cba",
+    "tab5/main/tab5_ui.h": "f32504216d5d7d58fb5053ea245dd7116e2c79b4a6176a303a2db8a4c3b7a56c",
+    "tab5/main/tab5_native_port.c": "ca6a589fccc0598ab06a5a995ebeab30587ee5753b7cbdec1a1bb764cc3a3052",
+    "tab5/main/tab5_native_port.h": "e234a878f71662697846e22979318bac3ec232f7ea7a2f88603439e31eb5a7f3",
+    "tab5/main/tab5_ui_graph.c": "d598ce2e0b98ed1087d45680e4bd39c718ffaf54273d8572aa7209a7fa18977e",
+    "tab5/main/tab5_measure.c": "ed8c7d1a7c7185d8ada762a7c81c3464757ffc6588c835ab6e32e84d9b59bc9c",
+    "tab5/main/tab5_time.c": "16ac287e5bd5bd5286e9fa8f2050b1c16ec757a31d12557a7202d3fdacd33563",
+    "tab5/main/tab5_plot.c": "800bb30dc1710f49c0febd3ed689088c591fda706a01d73d8403c7406f8d2a1a",
+    "tab5/main/tab5_level.c": "fe633422cb7183348212165aa9051305150a48abaf273ab0f89f28d552f15bb3",
+    "tab5/main/native/native_ui.c": "0dee13b5fd02652656d6315830813445fe339676145f2bf34c4994308e642992",
+    "tab5/main/native/font_native_fallback14.c": "673ac2c4f7da55e63379a3153838291db35c39aa0a70efed3ebcafe101580bcc",
+    "tab5/main/font_tab5_108.c": "b7d1ba1770e86079bec8b0896991c0f2323eb564136cadb722e2cadda231c473",
+    "tab5/main/font_tab5_16.c": "04b40893246e902b783df884c9c56843c73c13df28ee652334a820f455c9c31c",
+    "tab5/main/font_tab5_16m.c": "9d17ba4a5f654ecf0bae07116c66017e9b7500f73b84fa7e524cdec58a056205",
+    "tab5/main/font_tab5_20.c": "6ccfb9e61afcd0a314f028e5414d23517979130d7496785fd398147990f0e7bf",
+    "tab5/main/font_tab5_20m.c": "871fa01f2ea8105c726c51e3de6a0764ebc87d0d33a720ea8d477cdd0538435c",
+    "tab5/main/font_tab5_24.c": "95262932de22282ceedc5802dd739f3158075d9dbb8508a0961431943703fd83",
+    "tab5/main/font_tab5_28.c": "ff504c873fba2c84ffdc9244874864581d3f3119816211bcdcab5f6224e61b0a",
+    "tab5/main/font_tab5_32.c": "512db05fb4651c1592c92e3de9c9dce716f35a09d3e4c6da50e42517ec44f27f",
+    "tab5/main/font_tab5_36.c": "457e4b643c0c2c197c534c42d51dac251c81f26d022a5ecacbf0ef796aa7d1b3",
+    "tab5/main/font_tab5_40.c": "8960d644c9c294ada550f9cef342b5da996a7ce4551494b6f39ba942d6499e6f",
+    "tab5/main/font_tab5_48.c": "811278a538d84dbbeb4f0e5c13aed79fede0de70422927a9bbd399adb3e94df8",
+    "tab5/main/font_tab5_56.c": "a75c37133561017abfb384d06816b0000de281652740238802ebcd31d5c4bc5c",
+    "tab5/main/font_tab5_64.c": "5bcfa4442db7a49469c9cbe939693598c010417e9ddcbdefb7b471d2b23f1c92"
+  },
+  "reproducer_sha256": "1584664a74e0d5b1486aa1151e7907a94505f18cbf38ac1804707490138bc299",
+  "limits": [
+    "Host does not measure PPA rotation, LCD transfer, input-driver latency or ESP32 CPU time.",
+    "Static loops hold visible text and clock seconds fixed; expected carets/marquees are not disabled.",
+    "Current focus-idle case advances real native ticks; other static loops exercise update without advancing native ticks.",
+    "Live-angle changes behind a translucent modal are measured, not classified as a new regression.",
+    "This is not the full encoder or partial-vs-full pixel equivalence suite; run tab5/tests/run_native_encoder.py for that."
+  ]
+}

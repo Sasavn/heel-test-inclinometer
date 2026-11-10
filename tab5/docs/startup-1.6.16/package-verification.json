@@ -1,0 +1,144 @@
+[
+  {
+    "folder": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\build\\package",
+    "version": "1.6.16-esp32",
+    "product": "krenomer-esp32",
+    "chip_id": 18,
+    "revision_min": 100,
+    "revision_max": 199,
+    "app_bytes": 1441520,
+    "app_sha256": "bc55ada5b9d296330c32bec70b5c4c030890995229fc5a5085a639521087b892",
+    "bootloader_sha256": "bbd608b895888e50044723bb2d2e8ff98a008512033ea585047ec63c1441457e",
+    "factory_writes": [
+      [
+        8192,
+        31504,
+        "bootloader.bin"
+      ],
+      [
+        32768,
+        35840,
+        "partition-table.bin"
+      ],
+      [
+        61440,
+        69632,
+        "ota_data_initial.bin"
+      ],
+      [
+        131072,
+        1572592,
+        "krenomer-esp32.bin"
+      ]
+    ],
+    "partitions": [
+      {
+        "type": 1,
+        "subtype": 2,
+        "offset": 36864,
+        "size": 24576,
+        "label": "nvs"
+      },
+      {
+        "type": 1,
+        "subtype": 0,
+        "offset": 61440,
+        "size": 8192,
+        "label": "otadata"
+      },
+      {
+        "type": 1,
+        "subtype": 1,
+        "offset": 69632,
+        "size": 4096,
+        "label": "phy_init"
+      },
+      {
+        "type": 0,
+        "subtype": 16,
+        "offset": 131072,
+        "size": 6291456,
+        "label": "ota_0"
+      },
+      {
+        "type": 0,
+        "subtype": 17,
+        "offset": 6422528,
+        "size": 6291456,
+        "label": "ota_1"
+      }
+    ],
+    "result": "PASS"
+  },
+  {
+    "folder": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\build-rev3\\package",
+    "version": "1.6.16-esp32",
+    "product": "krenomer-esp32",
+    "chip_id": 18,
+    "revision_min": 300,
+    "revision_max": 399,
+    "app_bytes": 1443728,
+    "app_sha256": "d68aeece59cf315c560bad22d0643c27eddf67b7d33a180c6ece9122a1dcb969",
+    "bootloader_sha256": "e7955123d3f565b24e0fc0817b502902f462a24da648551bf065b2e8d497c0dd",
+    "factory_writes": [
+      [
+        8192,
+        31568,
+        "bootloader.bin"
+      ],
+      [
+        32768,
+        35840,
+        "partition-table.bin"
+      ],
+      [
+        61440,
+        69632,
+        "ota_data_initial.bin"
+      ],
+      [
+        131072,
+        1574800,
+        "krenomer-esp32.bin"
+      ]
+    ],
+    "partitions": [
+      {
+        "type": 1,
+        "subtype": 2,
+        "offset": 36864,
+        "size": 24576,
+        "label": "nvs"
+      },
+      {
+        "type": 1,
+        "subtype": 0,
+        "offset": 61440,
+        "size": 8192,
+        "label": "otadata"
+      },
+      {
+        "type": 1,
+        "subtype": 1,
+        "offset": 69632,
+        "size": 4096,
+        "label": "phy_init"
+      },
+      {
+        "type": 0,
+        "subtype": 16,
+        "offset": 131072,
+        "size": 6291456,
+        "label": "ota_0"
+      },
+      {
+        "type": 0,
+        "subtype": 17,
+        "offset": 6422528,
+        "size": 6291456,
+        "label": "ota_1"
+      }
+    ],
+    "result": "PASS"
+  }
+]

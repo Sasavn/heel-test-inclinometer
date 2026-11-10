@@ -1,0 +1,15 @@
+{
+  "status": "READY builds only; no timings executed",
+  "source_sha256": {
+    "native/native_ui.c": "0dee13b5fd02652656d6315830813445fe339676145f2bf34c4994308e642992",
+    "native/native_ui.h": "1dd8d7d3b216033490db7db9ac872404c53003490c444ea2a89b82c04134a590",
+    "tab5_ui.c": "b9d1434572c66b7e25de6c326224f62f8af2490b6f84402811aaa01d3d821c25"
+  },
+  "baseline_commit": "c49eacfc5a48119afc7f158a8637e9d8ebe00457",
+  "awaiting": "TIMINGREADY after independent Hooke/IDF gates",
+  "release": "O2 timing0 fine0",
+  "diagnostic": "O2 timing1 fine1",
+  "host_port_scheduling_included": false,
+  "cold": "One fresh process per theme; diagnostic only, no warmup, not median/p95",
+  "prior_pilot2_manifest": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-optimization-1.6.14\\pilot-iconleaf-9789878b\\preserved-manifest.json"
+}

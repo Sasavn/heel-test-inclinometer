@@ -1,0 +1,5 @@
+UNKNOWN_CALLBACK_COUNTS unknown custom press incremental_regions=1 MAIN/POST/ALL exact; full RGB exact PASS
+UNKNOWN_CALLBACK_COUNTS unknown custom release incremental_regions=1 MAIN/POST/ALL exact; full RGB exact PASS
+UNKNOWN_CALLBACK_COUNTS unknown sibling under opaque cover incremental_regions=1 MAIN/POST/ALL exact; full RGB exact PASS
+UNKNOWN_CUSTOM PASS press invalidation and covered sibling MAIN/POST/ALL preserved
+TARGETED_GROUP custom fine=0 checks=3 PASS

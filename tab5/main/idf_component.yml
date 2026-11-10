@@ -1,0 +1,5 @@
+dependencies:
+  idf: "5.5.2"
+  espressif/usb_host_msc: "1.3.0"
+  espressif/esp_wifi_remote: "0.14.5"
+  espressif/esp_hosted: "2.13.0"

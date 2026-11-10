@@ -1,0 +1,10 @@
+{
+  "status": "BUILT awaiting TIMINGREADY; no UI timings executed",
+  "expected_source_sha256": {
+    "native/native_ui.c": "becf5ffae69200f60ade34133754674dcbd56b4014a070ba1b4f2263376dbd03",
+    "native/native_ui.h": "553f931bd23d0b115566e3bea5392a2ab9ff373f6f0fc3d62397f8538e18d7ae",
+    "tab5_ui.c": "5c66a685c05707159738c5ab57f1f703738440b90806e018866054a4a0732486"
+  },
+  "gate": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-optimization\\timing-hold.json",
+  "shared_gate": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-opt\\BENCHMARK_GATE"
+}

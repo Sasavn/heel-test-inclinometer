@@ -1,0 +1,110 @@
+[
+  {
+    "name": "targeted",
+    "status": "PASS",
+    "returncode": 0,
+    "log": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-1.6.14\\final-20261023-005512-0dee13b5\\logs\\targeted.log",
+    "command": [
+      "C:\\ProgramData\\anaconda3\\python.exe",
+      "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-1.6.14\\final-20261023-005512-0dee13b5\\source\\tab5\\tests\\run_native_cache_keyboard.py",
+      "--group",
+      "all",
+      "--out",
+      "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-1.6.14\\final-20261023-005512-0dee13b5\\targeted",
+      "--benchmark-gate",
+      "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-opt\\BENCHMARK_GATE"
+    ]
+  },
+  {
+    "name": "atomic-role",
+    "status": "PASS",
+    "returncode": 0,
+    "log": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-1.6.14\\final-20261023-005512-0dee13b5\\logs\\atomic-role.log",
+    "command": [
+      "C:\\ProgramData\\anaconda3\\python.exe",
+      "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-1.6.14\\final-20261023-005512-0dee13b5\\source\\tab5\\tests\\run_native_atomic_role.py",
+      "--out",
+      "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-1.6.14\\final-20261023-005512-0dee13b5\\atomic-role",
+      "--benchmark-gate",
+      "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-opt\\BENCHMARK_GATE"
+    ]
+  },
+  {
+    "name": "run_native_gradient",
+    "status": "PASS",
+    "returncode": 0,
+    "log": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-1.6.14\\final-20261023-005512-0dee13b5\\logs\\run_native_gradient.log",
+    "command": [
+      "C:\\ProgramData\\anaconda3\\python.exe",
+      "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-1.6.14\\final-20261023-005512-0dee13b5\\source\\tab5\\tests\\run_native_gradient.py"
+    ]
+  },
+  {
+    "name": "run_native_profile_flags",
+    "status": "PASS",
+    "returncode": 0,
+    "log": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-1.6.14\\final-20261023-005512-0dee13b5\\logs\\run_native_profile_flags.log",
+    "command": [
+      "C:\\ProgramData\\anaconda3\\python.exe",
+      "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-1.6.14\\final-20261023-005512-0dee13b5\\source\\tab5\\tests\\run_native_profile_flags.py"
+    ]
+  },
+  {
+    "name": "run_draw_profile_mode",
+    "status": "PASS",
+    "returncode": 0,
+    "log": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-1.6.14\\final-20261023-005512-0dee13b5\\logs\\run_draw_profile_mode.log",
+    "command": [
+      "C:\\ProgramData\\anaconda3\\python.exe",
+      "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-1.6.14\\final-20261023-005512-0dee13b5\\source\\tab5\\tests\\run_draw_profile_mode.py"
+    ]
+  },
+  {
+    "name": "run_native_lifetime",
+    "status": "PASS",
+    "returncode": 0,
+    "log": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-1.6.14\\final-20261023-005512-0dee13b5\\logs\\run_native_lifetime.log",
+    "command": [
+      "C:\\ProgramData\\anaconda3\\python.exe",
+      "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-1.6.14\\final-20261023-005512-0dee13b5\\source\\tab5\\tests\\run_native_lifetime.py"
+    ]
+  },
+  {
+    "name": "run_native_page_dirty",
+    "status": "PASS",
+    "returncode": 0,
+    "log": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-1.6.14\\final-20261023-005512-0dee13b5\\logs\\run_native_page_dirty.log",
+    "command": [
+      "C:\\ProgramData\\anaconda3\\python.exe",
+      "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-1.6.14\\final-20261023-005512-0dee13b5\\source\\tab5\\tests\\run_native_page_dirty.py"
+    ]
+  },
+  {
+    "name": "final-regressions-build",
+    "status": "PASS",
+    "returncode": 0,
+    "log": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-1.6.14\\final-20261023-005512-0dee13b5\\logs\\final-regressions-build.log",
+    "command": [
+      "C:\\Users\\aaaor\\gcc\\bin\\gcc.EXE",
+      "-std=c11",
+      "-O2",
+      "-DNUI_PROFILE_FINE_COUNTERS=1",
+      "-DNUI_PROFILE_PRIMITIVE_TIMING=0",
+      "-IC:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-1.6.14\\final-20261023-005512-0dee13b5\\source\\tab5\\main",
+      "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-1.6.14\\final-20261023-005512-0dee13b5\\source\\tab5\\tests\\test_native_final_regressions.c",
+      "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-1.6.14\\final-20261023-005512-0dee13b5\\source\\tab5\\main\\native\\font_native_fallback14.c",
+      "-lm",
+      "-o",
+      "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-1.6.14\\final-20261023-005512-0dee13b5\\logs\\final-regressions.exe"
+    ]
+  },
+  {
+    "name": "final-regressions",
+    "status": "PASS",
+    "returncode": 0,
+    "log": "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-1.6.14\\final-20261023-005512-0dee13b5\\logs\\final-regressions.log",
+    "command": [
+      "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\.tools\\native-1.6.14\\final-20261023-005512-0dee13b5\\logs\\final-regressions.exe"
+    ]
+  }
+]

@@ -1,0 +1,19 @@
+{
+  "scope": "Static DWARF type sizes; no inferior or hardware connection",
+  "elf_sha256": "f380d9532c56054e0a777a3c4cee91059fc6df96f9bc71b82f95b8c57597ad73",
+  "bytes": {
+    "object_bytes": 392,
+    "style_entry_bytes": 16,
+    "style_reference_bytes": 12,
+    "event_handler_bytes": 16,
+    "timer_bytes": 24,
+    "profile_stats_bytes": 424,
+    "renderer_context_static_bytes": 2048,
+    "object_style_cache_bytes": 136,
+    "object_coordinate_cache_bytes": 16,
+    "shadow_cache_table_static_bytes": 448,
+    "gradient_cache_static_bytes": 2600
+  },
+  "optional_fields_unavailable": [],
+  "accounting": "Cache fields are included in object_bytes; stats are included in renderer_context_static_bytes. External buffers, heap allocator overhead and allocated cache data are not counted here."
+}

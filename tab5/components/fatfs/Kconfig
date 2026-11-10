@@ -1,0 +1,12 @@
+source "$IDF_PATH/components/fatfs/Kconfig"
+
+menu "Tab5 extended filesystem support"
+config FATFS_EXFAT
+    bool "Enable exFAT in the pinned FatFS component"
+    default y
+    depends on !FATFS_LFN_NONE
+    help
+        Project-generated ffconf.h enables the upstream exFAT implementation.
+        All FatFS/VFS/MSC/application consumers share this same header ABI.
+        Existing media is never formatted or converted by this option.
+endmenu

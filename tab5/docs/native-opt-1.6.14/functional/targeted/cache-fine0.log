@@ -1,0 +1,10 @@
+PARTIAL_FULL warm state/inherited/font/layout PASS
+PARTIAL_FULL warm state/inherited/font/layout PASS
+PARTIAL_FULL warm state/inherited/font/layout PASS
+PARTIAL_FULL warm state/inherited/font/layout PASS
+PARTIAL_FULL warm state/inherited/font/layout PASS
+PARTIAL_FULL warm state/inherited/font/layout PASS
+PARTIAL_FULL warm state/inherited/font/layout PASS
+PARTIAL_FULL warm state/inherited/font/layout PASS
+CACHE_STATE PASS 8 warm/cold exact state/inherited-color/font/layout/border variants
+TARGETED_GROUP cache fine=0 checks=8 PASS

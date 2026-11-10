@@ -1,0 +1,14 @@
+{
+  "version": "ESP-IDF v5.5.2",
+  "source": "https://github.com/espressif/esp-idf/tree/v5.5.2/components/fatfs",
+  "normalization": "CRLF to LF only",
+  "sha256": {
+    "src/diskio.h": "60beaaca712a9d5126f41362fa68ce7f30e26e115b310a20d79e5639b6fcc3b5",
+    "src/ff.c": "b6511bc0102f42b941897cd9f96f75206b6851fedbebc6dcb17c220cb1d4bede",
+    "src/ff.h": "7bae240d9934c35599b1e49431b6bec65a7269d09284aca40191c8c5fd3be475",
+    "src/ffconf.h": "9d3a18bd5f23b9bfc6b38668d1da59274c280d22b86d281c58d441da60942fd5",
+    "src/ffunicode.c": "f2e03e97fccd9d7b0614b48ee02b7e49fb21c5196d3ff77ba5d8e4558a064d5d",
+    "CMakeLists.txt": "007c88dab43adaf0a23a83b898276ac4d046ba748dedbc4ac0f0048ab914a5e0",
+    "Kconfig": "6340a411ad698eb5e3165c9730a15b98b685df3c519a1b2b62e13ef2578fa6a2"
+  }
+}

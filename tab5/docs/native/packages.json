@@ -1,0 +1,18 @@
+[
+  {
+    "build": "build",
+    "bytes": 1423632,
+    "sha256": "08dcc0b90cb4bd4bd7bac8d8b95c8a3bbac3059046bb4a6aeb6088b2e6f955c8",
+    "revision_min": 100,
+    "revision_max": 199,
+    "parts_verified": 4
+  },
+  {
+    "build": "build-rev3",
+    "bytes": 1425856,
+    "sha256": "3feee021d82dc57e992ba1f5d549accc7dd75b1022e155d0779bd0e4cdc24b64",
+    "revision_min": 300,
+    "revision_max": 399,
+    "parts_verified": 4
+  }
+]

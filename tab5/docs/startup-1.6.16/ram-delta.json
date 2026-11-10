@@ -1,0 +1,106 @@
+[
+  {
+    "build": "build",
+    "clients_before": 103264,
+    "clients_after": 4,
+    "sections": {
+      ".tcm.data": {
+        "before": 60,
+        "after": 60,
+        "delta": 0
+      },
+      ".iram0.data": {
+        "before": 0,
+        "after": 0,
+        "delta": 0
+      },
+      ".iram0.bss": {
+        "before": 0,
+        "after": 0,
+        "delta": 0
+      },
+      ".dram0.data": {
+        "before": 15680,
+        "after": 15680,
+        "delta": 0
+      },
+      ".dram1.data": {
+        "before": 0,
+        "after": 0,
+        "delta": 0
+      },
+      ".flash_rodata_dummy": {
+        "before": 786432,
+        "after": 786432,
+        "delta": 0
+      },
+      ".flash.rodata": {
+        "before": 540912,
+        "after": 540912,
+        "delta": 0
+      },
+      ".flash.tdata": {
+        "before": 0,
+        "after": 0,
+        "delta": 0
+      },
+      ".dram0.bss": {
+        "before": 59728,
+        "after": 60808,
+        "delta": 1080
+      },
+      ".dram1.bss": {
+        "before": 125300,
+        "after": 20960,
+        "delta": -104340
+      }
+    }
+  },
+  {
+    "build": "build-rev3",
+    "clients_before": 103264,
+    "clients_after": 4,
+    "sections": {
+      ".tcm.data": {
+        "before": 72,
+        "after": 72,
+        "delta": 0
+      },
+      ".iram0.data": {
+        "before": 0,
+        "after": 0,
+        "delta": 0
+      },
+      ".iram0.bss": {
+        "before": 0,
+        "after": 0,
+        "delta": 0
+      },
+      ".dram0.data": {
+        "before": 15680,
+        "after": 15680,
+        "delta": 0
+      },
+      ".dram0.bss": {
+        "before": 185028,
+        "after": 81768,
+        "delta": -103260
+      },
+      ".flash_rodata_dummy": {
+        "before": 851968,
+        "after": 851968,
+        "delta": 0
+      },
+      ".flash.rodata": {
+        "before": 540968,
+        "after": 541040,
+        "delta": 72
+      },
+      ".flash.tdata": {
+        "before": 0,
+        "after": 0,
+        "delta": 0
+      }
+    }
+  }
+]

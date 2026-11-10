@@ -1,0 +1,4 @@
+PASS fine=0 timing=0: actual adapter modes/null versus measured values
+PASS fine=1 timing=0: actual adapter modes/null versus measured values
+PASS fine=1 timing=1: actual adapter modes/null versus measured values
+PASS fine=0 timing=1: actual adapter modes/null versus measured values

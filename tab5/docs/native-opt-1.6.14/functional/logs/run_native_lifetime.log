@@ -1,0 +1,4 @@
+native lifetime: 64 production UI cycles, dialogs/keyboards/held repeat; all retained bytes accounted, masks bounded; actions=0
+production lifetime64 fine=0 timing=0 PASS
+native lifetime: 64 production UI cycles, dialogs/keyboards/held repeat; all retained bytes accounted, masks bounded; actions=0
+production lifetime64 fine=1 timing=0 PASS

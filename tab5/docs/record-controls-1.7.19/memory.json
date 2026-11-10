@@ -1,0 +1,86 @@
+{
+  "build-native": {
+    "sections": {
+      ".tcm.text": 44,
+      ".tcm.data": 60,
+      ".iram0.text": 99700,
+      ".iram0.text_end": 12,
+      ".iram0.data": 0,
+      ".iram0.bss": 0,
+      ".dram0.data": 16064,
+      ".dram1.data": 0,
+      ".flash.rodata": 864912,
+      ".dram0.bss": 59944,
+      ".dram1.bss": 47128,
+      ".dram0.heap_start_low": 8,
+      ".dram1.heap_start_high": 8
+    },
+    "app_bytes": 1827504,
+    "version": "1.7.19-esp32",
+    "sha256": "2af16993156d3ecef06ee13d8d0f5e4a80a0268bca5df083f91e39f45e303389",
+    "tcp_pointer_bytes": 4,
+    "fonts_flash": true
+  },
+  "build-native-rev3": {
+    "sections": {
+      ".tcm.text": 322,
+      ".tcm.data": 72,
+      ".iram0.text": 100088,
+      ".iram0.text_end": 8,
+      ".iram0.data": 0,
+      ".iram0.bss": 0,
+      ".dram0.dummy": 0,
+      ".dram0.data": 16064,
+      ".dram0.bss": 107072,
+      ".dram0.heap_start": 0,
+      ".flash.rodata": 864968
+    },
+    "app_bytes": 1829664,
+    "version": "1.7.19-esp32",
+    "sha256": "cb9e7e70bc7460d8af2b02f83f96429e4dccfbbf369a53c4e4850b1fc9b72649",
+    "tcp_pointer_bytes": 4,
+    "fonts_flash": true
+  },
+  "build-native-controls": {
+    "sections": {
+      ".tcm.text": 44,
+      ".tcm.data": 60,
+      ".iram0.text": 99700,
+      ".iram0.text_end": 12,
+      ".iram0.data": 0,
+      ".iram0.bss": 0,
+      ".dram0.data": 16064,
+      ".dram1.data": 0,
+      ".flash.rodata": 865024,
+      ".dram0.bss": 59944,
+      ".dram1.bss": 47176,
+      ".dram0.heap_start_low": 8,
+      ".dram1.heap_start_high": 8
+    },
+    "app_bytes": 1829184,
+    "version": "1.7.19-esp32",
+    "sha256": "c7bafa361b0f4ea35c50db60d845e72d8b180779ca4dbb74b5af6e4b801d7763",
+    "tcp_pointer_bytes": 4,
+    "fonts_flash": true
+  },
+  "build-native-controls-rev3": {
+    "sections": {
+      ".tcm.text": 322,
+      ".tcm.data": 72,
+      ".iram0.text": 100088,
+      ".iram0.text_end": 8,
+      ".iram0.data": 0,
+      ".iram0.bss": 0,
+      ".dram0.dummy": 0,
+      ".dram0.data": 16064,
+      ".dram0.bss": 107120,
+      ".dram0.heap_start": 0,
+      ".flash.rodata": 865080
+    },
+    "app_bytes": 1831344,
+    "version": "1.7.19-esp32",
+    "sha256": "e62d4c40cfcb480b82b6634d7f3a8afe6da005713e724b3cedf06c0e1ba510aa",
+    "tcp_pointer_bytes": 4,
+    "fonts_flash": true
+  }
+}

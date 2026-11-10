@@ -1,0 +1,11 @@
+{
+  "status": "DONE",
+  "quiet_timings_complete": true,
+  "raw_samples": 54000,
+  "standard_profile_rgb_work_equal": true,
+  "cache_profile_rgb_work_equal": true,
+  "cold_first_paint": "unavailable/not run; warmup excludes cache build cost",
+  "independent_hooke_gate": ".tools\\native-opt\\final-pack\\20261022-231053-becf5ffae692\\FINAL_GATE.json",
+  "independent_hooke_status": "PASS",
+  "extra_cache_adapter_is_separate": true
+}

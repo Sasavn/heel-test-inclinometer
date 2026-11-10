@@ -1,0 +1,100 @@
+[
+  {
+    "component": "espressif/esp_hosted",
+    "version": "2.13.0",
+    "actual_tree_hash_validated": "dc331a292b11aa24e788921dab3d4c6624704f0257c6c42ef984ab7537577f05",
+    "matches_baseline_d4b34e6": true,
+    "compile_sources": {
+      "build": [
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_hosted\\host\\api\\src\\esp_wifi_weak.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_hosted\\host\\api\\src\\esp_hosted_api.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_hosted\\host\\api\\src\\esp_hosted_transport_config.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_hosted\\host\\api\\src\\esp_hosted_ota_api.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_hosted\\host\\drivers\\transport\\transport_drv.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_hosted\\host\\drivers\\transport\\transport_util.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_hosted\\host\\drivers\\serial\\serial_ll_if.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_hosted\\host\\utils\\stats.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_hosted\\host\\drivers\\serial\\serial_drv.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_hosted\\host\\drivers\\rpc\\core\\rpc_core.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_hosted\\host\\drivers\\rpc\\core\\rpc_req.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_hosted\\host\\drivers\\rpc\\core\\rpc_rsp.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_hosted\\host\\drivers\\rpc\\core\\rpc_evt.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_hosted\\host\\drivers\\rpc\\core\\rpc_utils.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_hosted\\host\\drivers\\rpc\\slaveif\\rpc_slave_if.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_hosted\\host\\drivers\\rpc\\wrap\\rpc_wrap.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_hosted\\host\\drivers\\virtual_serial_if\\serial_if.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_hosted\\common\\protobuf-c\\protobuf-c\\protobuf-c.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_hosted\\common\\proto\\esp_hosted_rpc.pb-c.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_hosted\\common\\mempool\\mempool_ll.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_hosted\\common\\mempool\\mempool.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_hosted\\common\\utils\\esp_hosted_cli.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_hosted\\host\\drivers\\bt\\hci_stub_drv.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_hosted\\host\\drivers\\power_save\\power_save_drv.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_hosted\\host\\drivers\\transport\\sdio\\sdio_drv.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_hosted\\host\\port\\esp\\freertos\\src\\port_esp_hosted_host_init.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_hosted\\host\\port\\esp\\freertos\\src\\port_esp_hosted_host_os.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_hosted\\host\\port\\esp\\freertos\\src\\port_esp_hosted_host_transport_defaults.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_hosted\\host\\port\\esp\\freertos\\src\\port_esp_hosted_host_sdio.c"
+      ],
+      "build-rev3": [
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_hosted\\host\\api\\src\\esp_wifi_weak.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_hosted\\host\\api\\src\\esp_hosted_api.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_hosted\\host\\api\\src\\esp_hosted_transport_config.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_hosted\\host\\api\\src\\esp_hosted_ota_api.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_hosted\\host\\drivers\\transport\\transport_drv.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_hosted\\host\\drivers\\transport\\transport_util.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_hosted\\host\\drivers\\serial\\serial_ll_if.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_hosted\\host\\utils\\stats.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_hosted\\host\\drivers\\serial\\serial_drv.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_hosted\\host\\drivers\\rpc\\core\\rpc_core.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_hosted\\host\\drivers\\rpc\\core\\rpc_req.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_hosted\\host\\drivers\\rpc\\core\\rpc_rsp.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_hosted\\host\\drivers\\rpc\\core\\rpc_evt.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_hosted\\host\\drivers\\rpc\\core\\rpc_utils.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_hosted\\host\\drivers\\rpc\\slaveif\\rpc_slave_if.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_hosted\\host\\drivers\\rpc\\wrap\\rpc_wrap.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_hosted\\host\\drivers\\virtual_serial_if\\serial_if.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_hosted\\common\\protobuf-c\\protobuf-c\\protobuf-c.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_hosted\\common\\proto\\esp_hosted_rpc.pb-c.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_hosted\\common\\mempool\\mempool_ll.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_hosted\\common\\mempool\\mempool.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_hosted\\common\\utils\\esp_hosted_cli.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_hosted\\host\\drivers\\bt\\hci_stub_drv.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_hosted\\host\\drivers\\power_save\\power_save_drv.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_hosted\\host\\drivers\\transport\\sdio\\sdio_drv.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_hosted\\host\\port\\esp\\freertos\\src\\port_esp_hosted_host_init.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_hosted\\host\\port\\esp\\freertos\\src\\port_esp_hosted_host_os.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_hosted\\host\\port\\esp\\freertos\\src\\port_esp_hosted_host_transport_defaults.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_hosted\\host\\port\\esp\\freertos\\src\\port_esp_hosted_host_sdio.c"
+      ]
+    }
+  },
+  {
+    "component": "espressif/esp_wifi_remote",
+    "version": "0.14.5",
+    "actual_tree_hash_validated": "96d9c79c120e6fb2bb6d430448e1c9edfb753711163d7c9c3afd2b26907ca7b3",
+    "matches_baseline_d4b34e6": true,
+    "compile_sources": {
+      "build": [
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_wifi_remote\\dummy_src.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_wifi_remote\\esp_wifi_remote.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_wifi_remote\\esp_wifi_remote_net.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_wifi_remote\\dummy_src.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_wifi_remote\\idf_v5.5\\esp_wifi_remote_weak.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_wifi_remote\\idf_v5.5\\esp_eap_client_remote_weak.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_wifi_remote\\idf_v5.5\\esp_wifi_with_remote.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_wifi_remote\\idf_v5.5\\esp_eap_client_with_remote.c"
+      ],
+      "build-rev3": [
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_wifi_remote\\dummy_src.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_wifi_remote\\esp_wifi_remote.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_wifi_remote\\esp_wifi_remote_net.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_wifi_remote\\dummy_src.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_wifi_remote\\idf_v5.5\\esp_wifi_remote_weak.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_wifi_remote\\idf_v5.5\\esp_eap_client_remote_weak.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_wifi_remote\\idf_v5.5\\esp_wifi_with_remote.c",
+        "C:\\Projects\\ClaudeExp\\diplom_project_tab5\\tab5\\managed_components\\espressif__esp_wifi_remote\\idf_v5.5\\esp_eap_client_with_remote.c"
+      ]
+    }
+  }
+]

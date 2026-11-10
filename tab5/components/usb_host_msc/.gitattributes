@@ -1,0 +1,2 @@
+# These unchanged third-party files are pinned byte-for-byte by CMake.
+upstream/** -text

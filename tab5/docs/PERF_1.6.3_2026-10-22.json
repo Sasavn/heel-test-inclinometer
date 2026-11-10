@@ -1,0 +1,115 @@
+{
+  "version": "1.6.3-esp32",
+  "date": "2026-10-22",
+  "hardware": {
+    "chip_revision": 103,
+    "panel": "ST7121",
+    "before": {
+      "elapsed_ms": 20962,
+      "updates": 144,
+      "update_us": 2609107,
+      "renders": 144,
+      "render_us": 15545471,
+      "flushes": 4486,
+      "flush_us": 2869943,
+      "refreshes": 144,
+      "refresh_us": 16728868,
+      "refresh_max_us": 123602,
+      "lock_misses": 0,
+      "ppa": false
+    },
+    "after": {
+      "elapsed_ms": 20858,
+      "updates": 196,
+      "update_us": 534552,
+      "renders": 196,
+      "render_us": 2995414,
+      "flushes": 413,
+      "flush_us": 1110950,
+      "refreshes": 196,
+      "refresh_us": 3007059,
+      "refresh_max_us": 21020,
+      "lock_misses": 0,
+      "ppa": true,
+      "reset_reason": 11
+    },
+    "final": {
+      "version": "1.6.3-esp32",
+      "chip_revision": 103,
+      "uptime_s": 167,
+      "boot_confirmed": true,
+      "theme": "dark",
+      "ap": true,
+      "rtc": true,
+      "recording": false,
+      "metrics": [
+        {
+          "elapsed_ms": 4196,
+          "updates": 34,
+          "update_us": 316822,
+          "renders": 34,
+          "render_us": 797032,
+          "flushes": 80,
+          "flush_us": 247607,
+          "refreshes": 34,
+          "refresh_us": 841004,
+          "refresh_max_us": 334766,
+          "lock_misses": 2,
+          "ppa": true,
+          "reset_reason": 11
+        },
+        {
+          "elapsed_ms": 4196,
+          "updates": 35,
+          "update_us": 323646,
+          "renders": 35,
+          "render_us": 811177,
+          "flushes": 82,
+          "flush_us": 251385,
+          "refreshes": 35,
+          "refresh_us": 855260,
+          "refresh_max_us": 335003,
+          "lock_misses": 2,
+          "ppa": true,
+          "reset_reason": 11
+        }
+      ],
+      "verified_parts": 4,
+      "temporary_tasks_removed": true
+    }
+  },
+  "packages": [
+    {
+      "profile": "build",
+      "version": "1.6.3-esp32",
+      "revision_min": 100,
+      "revision_max": 199,
+      "size": 1701072,
+      "sha256": "04f7802bef596d217a07b8b998576b3f4cdac9ed215281e5be9592fb1827cbaa"
+    },
+    {
+      "profile": "build-rev3",
+      "version": "1.6.3-esp32",
+      "revision_min": 300,
+      "revision_max": 399,
+      "size": 1703264,
+      "sha256": "0f9e8308569e9d72a27723d4a804b4c6b2e8601c967c307ccf6f1f0850b9d1a1"
+    }
+  ],
+  "native": {
+    "captures": 76,
+    "different": 0,
+    "unchanged_dashboard_flushes_before": 20,
+    "unchanged_dashboard_flushes_after": 0,
+    "timestamp_dashboard_flushes_before": 460,
+    "timestamp_dashboard_flushes_after": 0,
+    "unchanged_chart_flushes_after": 0
+  },
+  "actual_image_mock_runs": 28,
+  "source_sha256": {
+    "tab5/main/main.c": "1f42a19ce433bd3ecc1be1ba718c09b6ae75ee8eda8fe4eecf5bd36ffebe02c6",
+    "tab5/main/tab5_ui.c": "3a273515f603569e583f893a0ba5cafa379d31595ebf55f4cc5e0c19353f0780",
+    "tab5/sdkconfig.defaults": "7d60476cce737152e1e56d4c3c05d9e2bc9454cad1bbe60cfaee8a53442ca7cb",
+    "tab5/tests/test_ui.c": "4ad078f516f6392b727b6d45a3becc7392c0bb573b8540111880fbb2f43c03a3"
+  }
+}

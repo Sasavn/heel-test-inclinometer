@@ -1,4 +1,26 @@
-# Регистратор крена для опыта кренования (STM32F411 + BWM427)
+# Регистратор крена для опыта кренования (Tab5 / ESP32 и STM32F411)
+
+Оба прибора разрабатываются в **одном репозитории**
+[Sasavn/heel-test-inclinometer](https://github.com/Sasavn/heel-test-inclinometer):
+
+| Ветка | Прибор и программа |
+|---|---|
+| [main](https://github.com/Sasavn/heel-test-inclinometer/tree/main) | STM32F411, экран 320×240, `krenomer.exe` |
+| [tab5-esp32](https://github.com/Sasavn/heel-test-inclinometer/tree/tab5-esp32) — текущая | M5Stack Tab5 / ESP32-P4, экран 1280×720, `krenomer-esp32.exe` |
+
+**Прошивки несовместимы:** `bwm427-fw.bin` предназначен для STM32;
+`krenomer-esp32.bin` — для Tab5 с подходящей ревизией ESP32-P4.
+Tab5-пакеты публикуются отдельно как предварительные релизы; ссылка
+`releases/latest` ниже относится к стабильной STM32/PC-версии.
+[Скачать ПК Tab5 1.8.6 с явным Wi-Fi](https://github.com/Sasavn/heel-test-inclinometer/releases/tag/pc-tab5-v1.8.6)
+— предварительный выпуск ПК; для синхронизации записи нужна [прошивка Tab5 1.7.19](https://github.com/Sasavn/heel-test-inclinometer/releases/tag/tab5-v1.7.19).
+Пакеты прошивки и их ограничения описаны в [tab5/README.md](tab5/README.md).
+
+Ветка **`tab5-esp32`** добавляет локальный тестовый порт для **M5Stack Tab5**:
+[прошивка ESP32-P4, сборка и ограничения](tab5/README.md),
+[план работ](tab5/STATUS.md). Программа ПК этой ветки собирается как
+`krenomer-esp32.exe` и поддерживает отдельные USB-ROM/OTA-пути Tab5.
+Сведения ниже описывают исходный STM32-прибор.
 
 ## Версии прибора в этом репозитории
 
@@ -19,7 +41,21 @@
 и новее): углы и качка обоих датчиков с графиками, диагностика шины, настройки,
 скачивание замеров с карты и обновление прошивки — без запоминания команд.
 
-## Скачать
+## Скачать Tab5
+
+Для этой ветки используйте **krenomer-tab5**, а не стабильную STM32-программу из releases/latest:
+
+- [ПК Tab5 1.8.6 для Windows x64](https://github.com/Sasavn/heel-test-inclinometer/releases/download/pc-tab5-v1.8.6/krenomer-tab5-1.8.6-x64.exe).
+- [ПК Tab5 1.8.6 для Windows x86](https://github.com/Sasavn/heel-test-inclinometer/releases/download/pc-tab5-v1.8.6/krenomer-tab5-1.8.6-x86.exe).
+- [Обе разрядности и русская инструкция](https://github.com/Sasavn/heel-test-inclinometer/releases/download/pc-tab5-v1.8.6/Krenomer-Tab5-PC-1.8.6.zip).
+
+Подключитесь к Wi-Fi прибора и нажмите **«Wi-Fi»** в верхней панели программы.
+Кнопка доступна без COM-портов и прямо из демо. Для штатной точки доступа:
+IP 192.168.4.1, порт 5000, ключ — пароль AP с экрана Tab5.
+Для общего роутера выберите соответствующий режим и введите фактический STA-IP
+прибора. Адрес задаётся вручную: автоматического обнаружения нет.
+
+## Скачать для старого STM32
 
 **Программа для ПК** (один файл, без установки, Windows 7 SP1 и новее):
 

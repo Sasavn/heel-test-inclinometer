@@ -1,0 +1,2 @@
+COLD_MEMORY PASS 16 cold init/style/font/layout/delete/deinit zero retained allocations
+TARGETED_GROUP cold-memory fine=1 checks=0 PASS

@@ -1,0 +1,833 @@
+{
+  "baseline_version": "1.6.16-esp32",
+  "candidate_version": "1.7.0-esp32",
+  "hardware_tested": false,
+  "profiles": [
+    {
+      "profile": "build-native",
+      "sections": {},
+      "fonts": [
+        {
+          "symbol": "font_tab5_48",
+          "bytes": 28,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "symbol": "font_tab5_28",
+          "bytes": 28,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "symbol": "font_tab5_56",
+          "bytes": 28,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "symbol": "font_tab5_36",
+          "bytes": 28,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "symbol": "font_tab5_108",
+          "bytes": 28,
+          "section": ".flash.rodata",
+          "writable": false
+        }
+      ],
+      "baseline": {
+        "elf_sha256": "9b3e62c280662705a15b407a7e874b387a28919427cabec64e72ce8d767b6b65",
+        "bin_sha256": "bc55ada5b9d296330c32bec70b5c4c030890995229fc5a5085a639521087b892",
+        "sections": {
+          ".tcm.text": 44,
+          ".tcm.data": 60,
+          ".iram0.text": 99360,
+          ".iram0.text_end": 96,
+          ".iram0.data": 0,
+          ".iram0.bss": 0,
+          ".dram0.data": 15680,
+          ".dram1.data": 0,
+          ".flash.rodata": 540912,
+          ".dram0.bss": 60808,
+          ".dram1.bss": 20960,
+          ".dram0.heap_start_low": 8,
+          ".dram1.heap_start_high": 0
+        },
+        "internal_data_bss": 97508
+      },
+      "candidate": {
+        "elf_sha256": "a48844f971994ac2eb4d8bb5618af0be9edb7779631430c9f8dc3c07ca46d2ea",
+        "bin_sha256": "241f2e7b5d0020882997152e5eaf045a3c12d1ecfb73e994723fca4131a19d92",
+        "sections": {
+          ".tcm.text": 44,
+          ".tcm.data": 60,
+          ".iram0.text": 99360,
+          ".iram0.text_end": 96,
+          ".iram0.data": 0,
+          ".iram0.bss": 0,
+          ".dram0.data": 15808,
+          ".dram1.data": 0,
+          ".flash.rodata": 861232,
+          ".dram0.bss": 60376,
+          ".dram1.bss": 26996,
+          ".dram0.heap_start_low": 8,
+          ".dram1.heap_start_high": 12
+        },
+        "internal_data_bss": 103240
+      },
+      "font_payloads": [
+        {
+          "file": "font_tab5_28.c",
+          "symbol": "font_dsc",
+          "bytes": 24,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_28.c",
+          "symbol": "glyph_bitmap",
+          "bytes": 29357,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_28.c",
+          "symbol": "glyph_dsc",
+          "bytes": 3376,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_28.c",
+          "symbol": "cmaps",
+          "bytes": 96,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_28.c",
+          "symbol": "kern_classes",
+          "bytes": 16,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_28.c",
+          "symbol": "kern_class_values",
+          "bytes": 4071,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_28.c",
+          "symbol": "kern_left_class_mapping",
+          "bytes": 211,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_28.c",
+          "symbol": "kern_right_class_mapping",
+          "bytes": 211,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_28.c",
+          "symbol": "unicode_list_1",
+          "bytes": 10,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_28.c",
+          "symbol": "unicode_list_3",
+          "bytes": 28,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_36.c",
+          "symbol": "font_dsc",
+          "bytes": 24,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_36.c",
+          "symbol": "glyph_bitmap",
+          "bytes": 50589,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_36.c",
+          "symbol": "glyph_dsc",
+          "bytes": 3376,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_36.c",
+          "symbol": "cmaps",
+          "bytes": 96,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_36.c",
+          "symbol": "kern_classes",
+          "bytes": 16,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_36.c",
+          "symbol": "kern_class_values",
+          "bytes": 4071,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_36.c",
+          "symbol": "kern_left_class_mapping",
+          "bytes": 211,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_36.c",
+          "symbol": "kern_right_class_mapping",
+          "bytes": 211,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_36.c",
+          "symbol": "unicode_list_1",
+          "bytes": 10,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_36.c",
+          "symbol": "unicode_list_3",
+          "bytes": 28,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_48.c",
+          "symbol": "font_dsc",
+          "bytes": 24,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_48.c",
+          "symbol": "glyph_bitmap",
+          "bytes": 86718,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_48.c",
+          "symbol": "glyph_dsc",
+          "bytes": 3376,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_48.c",
+          "symbol": "cmaps",
+          "bytes": 96,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_48.c",
+          "symbol": "kern_classes",
+          "bytes": 16,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_48.c",
+          "symbol": "kern_class_values",
+          "bytes": 4071,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_48.c",
+          "symbol": "kern_left_class_mapping",
+          "bytes": 211,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_48.c",
+          "symbol": "kern_right_class_mapping",
+          "bytes": 211,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_48.c",
+          "symbol": "unicode_list_1",
+          "bytes": 10,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_48.c",
+          "symbol": "unicode_list_3",
+          "bytes": 28,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_56.c",
+          "symbol": "font_dsc",
+          "bytes": 24,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_56.c",
+          "symbol": "glyph_bitmap",
+          "bytes": 117829,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_56.c",
+          "symbol": "glyph_dsc",
+          "bytes": 3376,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_56.c",
+          "symbol": "cmaps",
+          "bytes": 96,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_56.c",
+          "symbol": "kern_classes",
+          "bytes": 16,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_56.c",
+          "symbol": "kern_class_values",
+          "bytes": 4071,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_56.c",
+          "symbol": "kern_left_class_mapping",
+          "bytes": 211,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_56.c",
+          "symbol": "kern_right_class_mapping",
+          "bytes": 211,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_56.c",
+          "symbol": "unicode_list_1",
+          "bytes": 10,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_56.c",
+          "symbol": "unicode_list_3",
+          "bytes": 28,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_108.c",
+          "symbol": "font_dsc",
+          "bytes": 24,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_108.c",
+          "symbol": "glyph_bitmap",
+          "bytes": 25646,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_108.c",
+          "symbol": "glyph_dsc",
+          "bytes": 320,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_108.c",
+          "symbol": "cmaps",
+          "bytes": 24,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_108.c",
+          "symbol": "unicode_list_0",
+          "bytes": 38,
+          "section": ".flash.rodata",
+          "writable": false
+        }
+      ],
+      "tcp_pointer": {
+        "symbol": "clients",
+        "bytes": 4,
+        "section": ".dram1.bss",
+        "writable": true
+      },
+      "delta": {
+        ".dram0.bss": -432,
+        ".dram0.data": 128,
+        ".dram0.heap_start_low": 0,
+        ".dram1.bss": 6036,
+        ".dram1.data": 0,
+        ".dram1.heap_start_high": 12,
+        ".flash.rodata": 320320,
+        ".iram0.bss": 0,
+        ".iram0.data": 0,
+        ".iram0.text": 0,
+        ".iram0.text_end": 0,
+        ".tcm.data": 0,
+        ".tcm.text": 0
+      },
+      "internal_data_bss_delta": 5732
+    },
+    {
+      "profile": "build-native-rev3",
+      "sections": {},
+      "fonts": [
+        {
+          "symbol": "font_tab5_48",
+          "bytes": 28,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "symbol": "font_tab5_28",
+          "bytes": 28,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "symbol": "font_tab5_56",
+          "bytes": 28,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "symbol": "font_tab5_36",
+          "bytes": 28,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "symbol": "font_tab5_108",
+          "bytes": 28,
+          "section": ".flash.rodata",
+          "writable": false
+        }
+      ],
+      "baseline": {
+        "elf_sha256": "aecd3d242ce1bd1fca5373d868ba20c61c3531213d63d5ed526ed7783add6aff",
+        "bin_sha256": "d68aeece59cf315c560bad22d0643c27eddf67b7d33a180c6ece9122a1dcb969",
+        "sections": {
+          ".tcm.text": 322,
+          ".tcm.data": 72,
+          ".iram0.text": 96622,
+          ".iram0.text_end": 18,
+          ".iram0.data": 0,
+          ".iram0.bss": 0,
+          ".dram0.dummy": 0,
+          ".dram0.data": 15680,
+          ".dram0.bss": 81768,
+          ".dram0.heap_start": 8,
+          ".flash.rodata": 541040
+        },
+        "internal_data_bss": 97520
+      },
+      "candidate": {
+        "elf_sha256": "d88665a73c524b28e9f6af7122473cd29ddc9e8cdc429c2a1e0cf4412778dc4f",
+        "bin_sha256": "04c02f5f00aa3ff8212e98a96660af673f6dbd1dcd8010804ab68a4d3afba49a",
+        "sections": {
+          ".tcm.text": 322,
+          ".tcm.data": 72,
+          ".iram0.text": 99744,
+          ".iram0.text_end": 96,
+          ".iram0.data": 0,
+          ".iram0.bss": 0,
+          ".dram0.dummy": 0,
+          ".dram0.data": 15808,
+          ".dram0.bss": 87372,
+          ".dram0.heap_start": 4,
+          ".flash.rodata": 861288
+        },
+        "internal_data_bss": 103252
+      },
+      "font_payloads": [
+        {
+          "file": "font_tab5_28.c",
+          "symbol": "font_dsc",
+          "bytes": 24,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_28.c",
+          "symbol": "glyph_bitmap",
+          "bytes": 29357,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_28.c",
+          "symbol": "glyph_dsc",
+          "bytes": 3376,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_28.c",
+          "symbol": "cmaps",
+          "bytes": 96,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_28.c",
+          "symbol": "kern_classes",
+          "bytes": 16,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_28.c",
+          "symbol": "kern_class_values",
+          "bytes": 4071,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_28.c",
+          "symbol": "kern_left_class_mapping",
+          "bytes": 211,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_28.c",
+          "symbol": "kern_right_class_mapping",
+          "bytes": 211,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_28.c",
+          "symbol": "unicode_list_1",
+          "bytes": 10,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_28.c",
+          "symbol": "unicode_list_3",
+          "bytes": 28,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_36.c",
+          "symbol": "font_dsc",
+          "bytes": 24,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_36.c",
+          "symbol": "glyph_bitmap",
+          "bytes": 50589,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_36.c",
+          "symbol": "glyph_dsc",
+          "bytes": 3376,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_36.c",
+          "symbol": "cmaps",
+          "bytes": 96,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_36.c",
+          "symbol": "kern_classes",
+          "bytes": 16,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_36.c",
+          "symbol": "kern_class_values",
+          "bytes": 4071,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_36.c",
+          "symbol": "kern_left_class_mapping",
+          "bytes": 211,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_36.c",
+          "symbol": "kern_right_class_mapping",
+          "bytes": 211,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_36.c",
+          "symbol": "unicode_list_1",
+          "bytes": 10,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_36.c",
+          "symbol": "unicode_list_3",
+          "bytes": 28,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_48.c",
+          "symbol": "font_dsc",
+          "bytes": 24,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_48.c",
+          "symbol": "glyph_bitmap",
+          "bytes": 86718,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_48.c",
+          "symbol": "glyph_dsc",
+          "bytes": 3376,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_48.c",
+          "symbol": "cmaps",
+          "bytes": 96,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_48.c",
+          "symbol": "kern_classes",
+          "bytes": 16,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_48.c",
+          "symbol": "kern_class_values",
+          "bytes": 4071,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_48.c",
+          "symbol": "kern_left_class_mapping",
+          "bytes": 211,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_48.c",
+          "symbol": "kern_right_class_mapping",
+          "bytes": 211,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_48.c",
+          "symbol": "unicode_list_1",
+          "bytes": 10,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_48.c",
+          "symbol": "unicode_list_3",
+          "bytes": 28,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_56.c",
+          "symbol": "font_dsc",
+          "bytes": 24,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_56.c",
+          "symbol": "glyph_bitmap",
+          "bytes": 117829,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_56.c",
+          "symbol": "glyph_dsc",
+          "bytes": 3376,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_56.c",
+          "symbol": "cmaps",
+          "bytes": 96,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_56.c",
+          "symbol": "kern_classes",
+          "bytes": 16,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_56.c",
+          "symbol": "kern_class_values",
+          "bytes": 4071,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_56.c",
+          "symbol": "kern_left_class_mapping",
+          "bytes": 211,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_56.c",
+          "symbol": "kern_right_class_mapping",
+          "bytes": 211,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_56.c",
+          "symbol": "unicode_list_1",
+          "bytes": 10,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_56.c",
+          "symbol": "unicode_list_3",
+          "bytes": 28,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_108.c",
+          "symbol": "font_dsc",
+          "bytes": 24,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_108.c",
+          "symbol": "glyph_bitmap",
+          "bytes": 25646,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_108.c",
+          "symbol": "glyph_dsc",
+          "bytes": 320,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_108.c",
+          "symbol": "cmaps",
+          "bytes": 24,
+          "section": ".flash.rodata",
+          "writable": false
+        },
+        {
+          "file": "font_tab5_108.c",
+          "symbol": "unicode_list_0",
+          "bytes": 38,
+          "section": ".flash.rodata",
+          "writable": false
+        }
+      ],
+      "tcp_pointer": {
+        "symbol": "clients",
+        "bytes": 4,
+        "section": ".dram0.bss",
+        "writable": true
+      },
+      "delta": {
+        ".dram0.bss": 5604,
+        ".dram0.data": 128,
+        ".dram0.dummy": 0,
+        ".dram0.heap_start": -4,
+        ".flash.rodata": 320248,
+        ".iram0.bss": 0,
+        ".iram0.data": 0,
+        ".iram0.text": 3122,
+        ".iram0.text_end": 78,
+        ".tcm.data": 0,
+        ".tcm.text": 0
+      },
+      "internal_data_bss_delta": 5732
+    }
+  ],
+  "tcp_services_unchanged_from_baseline": true,
+  "tcp_allocation": "heap_caps_calloc(CLIENTS,sizeof(*clients),MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT)"
+}
