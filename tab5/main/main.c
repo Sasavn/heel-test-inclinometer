@@ -519,6 +519,7 @@ static void status(tab5_service_reply_fn reply,void *ctx) {
     cJSON_AddBoolToObject(j,"dual_mode_cap",true);
     cJSON_AddBoolToObject(j,"instrument_control_cap",true);
     cJSON_AddBoolToObject(j,"relative_data_cap",true);
+    cJSON_AddBoolToObject(j,"file_media_cap",true);
     cJSON_AddStringToObject(j,"instrument",relative_state.mode==TAB5_MODE_LEVEL?"level":"heel");
     cJSON_AddBoolToObject(j,"physical_inputs",physical_inputs_ready);
     cJSON_AddNumberToObject(j,"physical_input_retries",tab5_input_gpio_retries());

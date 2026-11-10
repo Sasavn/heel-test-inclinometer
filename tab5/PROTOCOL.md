@@ -147,7 +147,7 @@ retry clears it. The initial optional-peripheral failure policy remains unchange
 ## PC 1.9.0 controls (Tab5 1.8.5)
 
 Ordinary `status`/`diag` adds `instrument_control_cap:true` and
-`relative_data_cap:true` next to `dual_mode_cap:true`. `instrument` is the
+`relative_data_cap:true` and `file_media_cap:true` next to `dual_mode_cap:true`. `instrument` is the
 confirmed active `heel` or `level` mode. Merely opening a PC view must not
 change this mode. The existing `ver` identity and protocol version 2 remain.
 
@@ -197,6 +197,8 @@ formats are unchanged.
 
 ### Optional explicit file medium
 
+Only send the explicit forms when status advertises `file_media_cap:true`;
+older firmware such as 1.8.4 does not implement them.
 `files sd`, `files usb`, `get sd <basename>` and `get usb <basename>` choose the
 medium explicitly. An unavailable selected medium returns an error and never
 falls back. Bare `files` and `get <basename>` retain SD-first fallback to USB.
