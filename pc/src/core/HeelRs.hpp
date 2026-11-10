@@ -239,7 +239,19 @@ inline void RsFinish(const Settings& s, RsCase& k, const std::vector<double>& ra
     k.c.dTheta.clear();
     for (std::size_t i = 0; i < n; i++)
         k.c.dTheta.push_back(in.theta[i] - th0);
-    k.c.instruments = static_cast<int>(k.postIds.size());
+    // Count actual paired endpoints, not files. A second CSV can have no usable
+    // values on the selected axis. Require both posts on every included transfer
+    // before the data-completeness check may report two working instruments.
+    k.c.instruments = 0;
+    bool haveTransfer = false;
+    for (const rs::Meas& q : k.r.m)
+        if (!q.excluded && std::isfinite(q.h))
+        {
+            const int usable = static_cast<int>(std::count_if(q.dThetaPost.begin(), q.dThetaPost.end(),
+                [](double value) { return std::isfinite(value); }));
+            k.c.instruments = haveTransfer ? std::min(k.c.instruments, usable) : usable;
+            haveTransfer = true;
+        }
     k.c.spread = k.r.maxSpread;
     k.c.spreadLimit = s.rsSpread > 0 ? s.rsSpread : 0.1;
     k.c.signedArms = k.groupMode || !k.legacy;

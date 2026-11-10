@@ -31,6 +31,7 @@
 #include "core/TextUtil.hpp"
 #include "fw/Firmware.hpp"
 #include "ui/App.hpp"
+#include "ui/Tab5Text.hpp"
 #include "ui/Fonts.hpp"
 #include "ui/Theme.hpp"
 
@@ -514,6 +515,68 @@ int main(int argc, char** argv)
         st.size = ImVec2(1024, 700);
         st.Shot("00_not_connected_1024x700");
         st.size = ImVec2(1280, 800);
+        st.Frame();
+        auto click = [&](ImVec2 pos) {
+            auto& io = ImGui::GetIO();
+            io.AddMousePosEvent(pos.x, pos.y); st.Frame();
+            io.AddMouseButtonEvent(0, true); st.Frame();
+            io.AddMouseButtonEvent(0, false); st.Frame();
+        };
+        click(ImVec2(955, 29));
+        auto* wifi = ImGui::FindWindowByName("Подключение Tab5 по сети");
+        CHECK(wifi && wifi->Active);
+        st.Shot("wifi_ap");
+        if (wifi && wifi->Active) {
+            const auto& style = ImGui::GetStyle();
+            const float radioWidth = ImGui::GetFrameHeight() + style.ItemInnerSpacing.x +
+                                     ImGui::CalcTextSize("Точка доступа Tab5 (AP)").x;
+            click(ImVec2(wifi->Pos.x + style.WindowPadding.x + radioWidth + style.ItemSpacing.x + 8,
+                         wifi->Pos.y + wifi->TitleBarHeight + style.WindowPadding.y + 8));
+            st.Shot("wifi_router");
+            click(ImVec2(wifi->Pos.x + 150, wifi->Pos.y + wifi->Size.y - 16));
+            app.StartDemo(true); st.Run(500);
+            CHECK(app.Link().Snapshot().demo);
+            click(ImVec2(955, 29));
+            CHECK(wifi->Active);
+            st.Shot("wifi_demo");
+            click(ImVec2(wifi->Pos.x + 150, wifi->Pos.y + wifi->Size.y - 16));
+            CHECK(app.Link().Snapshot().demo); // Cancel retains Sim.
+            click(ImVec2(955, 29));
+            click(ImVec2(wifi->Pos.x + 30, wifi->Pos.y + wifi->TitleBarHeight + style.WindowPadding.y + 8));
+            st.Shot("wifi_demo_ap");
+            click(ImVec2(wifi->Pos.x + 50, wifi->Pos.y + wifi->Size.y - 16));
+            CHECK(!app.Link().Snapshot().demo); // Connect leaves Sim (noHardware keeps test isolated).
+
+        }
+    }
+
+    SECTION("Русские сообщения Tab5 без изменения протокола");
+    CHECK(ui::Tab5Text("TCP connecting") == "Подключение к Tab5 по TCP…");
+    CHECK(ui::Tab5Text("TCP authentication failed") == "Ключ доступа не принят прибором");
+    CHECK(ui::Tab5Text("Image incompatible with device chip revision") == "Прошивка не подходит для ревизии кристалла этого прибора");
+    CHECK(ui::Tab5Text("OTA failed: ERR ota owner") == "Ошибка обновления. Ответ прибора: ERR ota owner");
+    const std::string romReason = "ROM rejected command; status=1 reason=7 address=0x5012D04C";
+    CHECK(ui::Tab5TechnicalDetails(romReason) == "Техническая причина (без изменений):\n" + romReason);
+    CHECK(ui::Tab5Text(romReason) == "Не удалось выполнить операцию. Проверьте комплект, подключение и режим загрузчика");
+
+    SECTION("Tab5 virtual firmware and recording controls (offscreen)");
+    {
+        ui::App app(ui::AppOptions{false,true,false,1791400000,7});
+        app.Sim()->SetFwVersion("1.5.0-esp32");
+        Stand st{&app};st.Run(1500);
+        CHECK(app.Link().Snapshot().ver.IsTab5());
+        app.SetPage(ui::Page::Firmware);
+        app.SetFactoryPage(false);
+        st.Shot("tab5_firmware", true); // 1280x800: обе прокрутки запрещены
+        app.SetFactoryPage(true);
+        st.Shot("tab5_factory", true);
+        st.size = ImVec2(1024, 700);
+        app.SetFactoryPage(false);
+        st.Shot("tab5_firmware_1024x700", true);
+        app.SetFactoryPage(true);
+        st.Shot("tab5_factory_1024x700", true);
+        st.size = ImVec2(1280, 800);
+        app.SetPage(ui::Page::Measure);st.Shot("tab5_measure");
     }
 
     // 2. Демо-режим
@@ -526,6 +589,18 @@ int main(int argc, char** argv)
     st.Run(95000);
     app.SetChartWindow(60);
     st.Shot("01_measure", true);
+    auto zeroShot = [&](const char* name) {
+        auto& io = ImGui::GetIO();
+        io.AddMousePosEvent(280.f, 527.f); st.Frame();
+        io.AddMouseButtonEvent(0, true); st.Frame();
+        io.AddMouseButtonEvent(0, false); st.Frame();
+        CHECK(ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel));
+        st.Shot(name);
+        ImGui::ClosePopupToLevel(0, true); st.Frame();
+        io.AddMousePosEvent(-100.f, -100.f);
+    };
+    CHECK(!app.ZeroRecordingWarning());
+    zeroShot("record_sync_zero_idle");
     st.Run(17000);
     st.Shot("02_measure_calm", true);
 
@@ -542,6 +617,8 @@ int main(int argc, char** argv)
         st.Run(6000);
         app.SetChartWindow(120);
         st.Shot("03_measure_recording", true);
+        CHECK(app.ZeroRecordingWarning());
+        zeroShot("record_sync_zero_recording");
         c.recSwitch = false;
         c.motion = 1;
         c.batteryLow = false;

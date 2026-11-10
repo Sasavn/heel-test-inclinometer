@@ -274,7 +274,8 @@ struct SensorStatus
 struct DeviceStatus
 {
     int v = 0;
-    std::string fw;
+    std::string fw, board, platform;
+    int protocol = 1;
     std::uint64_t upS = 0, ms = 0;
     std::string time; // «ГГГГ-ММ-ДД ЧЧ:ММ:СС» по часам прибора
     bool rtc = false;
@@ -286,8 +287,9 @@ struct DeviceStatus
     std::string theme;
     bool savePending = false;
     // Суперцикл
-    double rate = 0.0;
-    int cpu = 0;
+    double rate = kNaN;
+    int cpu = -1;
+    bool haveLoopCounters=false, haveFallbacks=false;
     std::uint64_t loops = 0, loopMax = 0;
     std::vector<SensorStatus> sens;
     // Качка
@@ -312,6 +314,8 @@ struct DeviceStatus
     std::optional<int> batPct;
     // Прочее
     bool recSw = false;
+    bool recSyncCap = false;
+    std::optional<bool> recSync, actualRec;
     std::string svc;  // IDLE / BUSY / OK / FAIL
     std::string xfer; // idle / list / get
 
@@ -322,7 +326,7 @@ struct DeviceStatus
                 return &s;
         return nullptr;
     }
-    bool Recording() const { return sd == "RECORDING"; }
+    bool Recording() const { return recMask != 0 || sd == "RECORDING"; }
 };
 
 inline Stat5 ToStat5(const json::Value& a)
@@ -378,8 +382,9 @@ inline bool ParseStatus(std::string_view line, DeviceStatus& out, std::string* e
     s.rollCalm = j["rollcalm"].Num();
     s.rollHyst = j["rollhyst"].Num();
     s.savePending = j["save_pending"].Bool();
-    s.rate = j["rate"].Num();
-    s.cpu = static_cast<int>(j["cpu"].Int());
+    s.rate = j["rate"].IsNumber()?j["rate"].Num():kNaN;
+    s.cpu = j["cpu"].IsNumber()?static_cast<int>(j["cpu"].Int()):-1;
+    s.haveLoopCounters=j["loops"].IsNumber() && j["loop_max"].IsNumber();
     s.loops = static_cast<std::uint64_t>(j["loops"].Num());
     s.loopMax = static_cast<std::uint64_t>(j["loop_max"].Num());
     for (const auto& e : j["sens"].arr)
@@ -387,6 +392,7 @@ inline bool ParseStatus(std::string_view line, DeviceStatus& out, std::string* e
         SensorStatus d;
         d.addr = static_cast<int>(e["addr"].Int());
         d.st = e["st"].Str();
+        for (char& c : d.st) if(c>='a' && c<='z') c=static_cast<char>(c-'a'+'A');
         d.x = NumOrNaN(e["x"]);
         d.y = NumOrNaN(e["y"]);
         d.ox = e["ox"].Num();
@@ -417,11 +423,13 @@ inline bool ParseStatus(std::string_view line, DeviceStatus& out, std::string* e
     s.stabAxis = j["stab_axis"].Str();
     s.stabFill = static_cast<int>(j["stab_fill"].Int());
     const auto& bus = j["bus"];
+    s.haveFallbacks=bus["fallbacks"].IsNumber();
     s.fallbacks = static_cast<std::uint64_t>(bus["fallbacks"].Num());
     s.busGap = ToStat5(bus["gap"]);
     s.busIdle = ToStat5(bus["idle"]);
     s.busCyc = ToStat5(bus["cyc"]);
     s.maxRate = bus["max_rate"].Num();
+    s.board=j["board"].Str(); s.platform=j["platform"].Str(); s.protocol=static_cast<int>(j["proto"].Int(1));
     s.sd = j["sd"].Str();
     s.sdErr = static_cast<int>(j["sd_err"].Int());
     s.file = static_cast<int>(j["file"].Int());
@@ -435,11 +443,14 @@ inline bool ParseStatus(std::string_view line, DeviceStatus& out, std::string* e
         s.sdFreeMb = static_cast<std::uint64_t>(j["sd_free"].n);
     s.batV = j["bat_v"].Num();
     s.batPresent = j["bat_present"].Bool();
-    s.batLow = j["bat_low"].Bool();
-    if (j["bat_pct"].IsNumber())
+    s.batLow = s.batPresent && j["bat_low"].Bool();
+    if (s.batPresent && j["bat_pct"].IsNumber())
         s.batPct = static_cast<int>(j["bat_pct"].n);
     s.batSat = j["bat_sat"].Bool();
     s.recSw = j["rec_sw"].Bool();
+    if (j["rec_sw"].IsBool()) s.actualRec = j["rec_sw"].Bool();
+    s.recSyncCap = j["rec_sync_cap"].IsBool() && j["rec_sync_cap"].Bool();
+    if (j["rec_sync"].IsBool()) s.recSync = j["rec_sync"].Bool();
     s.svc = j["svc"].Str();
     s.xfer = j["xfer"].Str();
     out = std::move(s);
@@ -455,6 +466,9 @@ struct VersionInfo
     bool ours = false;    // ответ прибора BWM427
     std::string version;  // «1.3» (старые прошивки без номера — "")
     std::string build;    // «Oct  7 2026 20:46:12»
+    std::string board, chip;
+    int protocol = 1;
+    bool IsTab5() const { return ours && board == "tab5" && chip == "esp32p4" && protocol == 2; }
     std::string details;  // вторая строка: HAL, частота, UID
 };
 
@@ -467,6 +481,8 @@ inline VersionInfo ParseVer(const std::vector<std::string>& lines)
         if (StartsWith(l, "BWM427"))
         {
             v.ours = true;
+            auto field = [&](const std::string& key) { auto at=l.find(" "+key+"="); if(at==std::string::npos) return std::string(); at+=key.size()+2; return l.substr(at,l.find(' ',at)-at); };
+            v.board=field("board"); v.chip=field("chip"); v.protocol=field("proto")=="2"?2:1;
             const auto pv = l.find(" v");
             if (pv != std::string::npos)
             {

@@ -141,7 +141,7 @@ static std::string WhyNoPcRecord(const LinkSnapshot& s, bool download, bool firm
     return {};
 }
 
-bool App::StartPcRecording()
+bool App::StartPcRecording(bool mirrored)
 {
     if (PcRecording())
         return false;
@@ -166,6 +166,7 @@ bool App::StartPcRecording()
         return false;
     }
     pcrec_.rec = std::move(rec);
+    if (!mirrored && SyncEnabled()) { syncExpected_ = true; syncPrevious_.reset(); syncRecordReq_ = link_->Send("rec on"); link_->FastPoll(link_->NowMs()+4000); }
     pcrec_.linkLost = false;
     pcrec_.converting = false;
     link_->SetSamples(true);
@@ -173,10 +174,11 @@ bool App::StartPcRecording()
     return true;
 }
 
-void App::StopPcRecording()
+void App::StopPcRecording(bool mirrored)
 {
     if (!PcRecording())
         return;
+    if (!mirrored && SyncEnabled()) { syncExpected_ = false; syncPrevious_.reset(); syncRecordReq_ = link_->Send("rec off"); link_->FastPoll(link_->NowMs()+4000); }
     auto& r = *pcrec_.rec;
     pcrec_.buf.clear();
     link_->TakeSamples(pcrec_.buf); // всё принятое — в файлы
@@ -199,8 +201,63 @@ void App::StopPcRecording()
     link_->Log('!', "запись на ПК остановлена: " + ResultText(r, now));
 }
 
+void App::RequestRecordSync(bool value)
+{
+    if (!HaveStatus() || !snap_.status.recSyncCap || syncSettingReq_) return;
+    syncSettingReq_ = link_->Send(value ? "set recsync 1" : "set recsync 0");
+    syncPrevious_.reset();
+}
+
+void App::TickRecordSync()
+{
+    if (!Connected() || syncConnection_ != snap_.connectSeq) {
+        syncConnection_ = snap_.connectSeq;
+        syncPrevious_.reset(); syncExpected_.reset();
+        syncSettingReq_.reset(); syncRecordReq_.reset(); syncStatus_ = snap_.statusSeq;
+        return;
+    }
+    if (syncSettingReq_ && syncSettingReq_->done) {
+        if (!syncSettingReq_->ok || syncSettingReq_->final != "OK recsync") {
+            syncProblem_ = "Настройка синхронизации не подтверждена: " + syncSettingReq_->final;
+            Notify(syncProblem_, 2, 8000);
+        } else syncProblem_.clear();
+        syncSettingReq_.reset(); syncPrevious_.reset();
+        link_->Send("status", Origin::Poll);
+    }
+    if (syncRecordReq_ && syncRecordReq_->done) {
+        if (!syncRecordReq_->ok) {
+            syncProblem_ = "Частичная запись: команда прибору не выполнена: " + syncRecordReq_->final;
+            Notify(syncProblem_, 2, 10000); syncExpected_.reset();
+        } else syncProblem_.clear();
+        syncRecordReq_.reset();
+        link_->Send("status", Origin::Poll);
+    }
+    if (!HaveStatus() || snap_.nowMs - snap_.statusAtMs > 3000) {
+        syncPrevious_.reset(); return;
+    }
+    if (syncStatus_ == snap_.statusSeq) return;
+    syncStatus_ = snap_.statusSeq;
+    const auto actual = snap_.status.actualRec;
+    if (!SyncEnabled() || !actual || syncSettingReq_) { syncPrevious_.reset(); return; }
+    if (syncExpected_) {
+        // Suppress intermediate old snapshots and the command's own feedback.
+        if (*actual == *syncExpected_) { syncExpected_.reset(); syncPrevious_ = actual; }
+        else if (!syncRecordReq_) { syncExpected_.reset(); syncPrevious_ = actual;
+            syncProblem_ = "Частичная запись: состояние прибора не совпало с запросом"; }
+        return;
+    }
+    const bool edge = syncPrevious_ && *syncPrevious_ != *actual;
+    syncPrevious_ = actual;
+    if (!edge) return;
+    if (*actual && !PcRecording()) {
+        if (!StartPcRecording(true)) syncProblem_ = "Частичная запись: прибор пишет, запись на ПК не начата";
+        else syncProblem_.clear();
+    } else if (!*actual && PcRecording()) { StopPcRecording(true); syncProblem_.clear(); }
+}
+
 void App::TickRecord()
 {
+    TickRecordSync();
     auto* r = pcrec_.rec.get();
     if (!r)
         return;
@@ -247,6 +304,7 @@ void App::TickRecord()
 // Карточка «Запись на ПК». full — две строки (вторая: папка и метка / файлы записи), иначе одна (малый экран).
 void App::RecordCard(float w, bool full)
 {
+    if (!syncProblem_.empty()) TextColored(pal.warn, "%s", syncProblem_.c_str());
     const bool rec = PcRecording();
     const pcrec::Recorder* r = pcrec_.rec.get();
     const bool conv = r && r->Converting();

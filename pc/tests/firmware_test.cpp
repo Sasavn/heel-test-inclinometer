@@ -174,8 +174,7 @@ static void TestProcess()
     const std::string dfu = real.FindDfuUtil(&searched);
     CHECK(searched.size() >= 3);
     std::printf("  dfu-util: %s\n", dfu.empty() ? "не найден" : dfu.c_str());
-    bool driver = false;
-    std::printf("  USB DFU 0483:DF11 сейчас: %s\n", real.DfuDevicePresent(&driver) ? "есть" : "нет");
+    // Offscreen regression must not enumerate attached physical USB devices.
     if (!dfu.empty())
     {
         auto v = fw::WinProcess::Start(dfu, {"--version"}, &err);

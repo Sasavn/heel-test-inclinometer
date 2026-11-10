@@ -27,13 +27,15 @@
 #include "../core/HeelSteps.hpp"
 #include "../core/Project.hpp"
 #include "../fw/Firmware.hpp"
+#include "../fw/EspOta.hpp"
+#include "../fw/RomRecovery.hpp"
 
 struct ImVec4;
 
 namespace ui
 {
 
-inline constexpr const char* kAppVersion = "1.8.4";
+inline constexpr const char* kAppVersion = "1.8.7";
 
 enum class Page
 {
@@ -91,6 +93,7 @@ public:
     void SetShownPaths(std::vector<std::pair<std::string, std::string>> map) { shownPaths_ = std::move(map); }
     std::string Shown(const std::string& s) const;
     void SetPage(Page p) { page_ = p; }
+    void SetFactoryPage(bool on) {espFirmware_=true;factoryMode_=on;}
     Page GetPage() const { return page_; }
     DeviceLink& Link() { return *link_; }
     SimDevice* Sim() { return sim_.get(); }
@@ -125,8 +128,10 @@ public:
     void SetNavPinned(bool on) { settings_.navCollapsed = on ? 0 : -1; }
     void SetNavCollapsed(int c) { settings_.navCollapsed = c; } // -1 — сама, 0 — раскрыта, 1 — значками
     // Запись на ПК (AppRecord.cpp)
-    bool StartPcRecording();
-    void StopPcRecording();
+    bool StartPcRecording(bool mirrored = false);
+    void RequestRecordSync(bool value);
+    bool ZeroRecordingWarning() const { return PcRecording() || (HaveStatus() && snap_.nowMs - snap_.statusAtMs <= 3000 && snap_.status.actualRec.value_or(snap_.status.Recording())); }
+    void StopPcRecording(bool mirrored = false);
     bool PcRecording() const { return pcrec_.rec && pcrec_.rec->Running(); }
     void SetRecordDir(const std::string& dir, bool xlsx);
     void SetRecordLabel(const std::string& label);
@@ -262,6 +267,12 @@ public:
     const std::string& LastHotkey() const { return lastHotkey_; }
 
 private:
+    RequestPtr syncSettingReq_, syncRecordReq_;
+    std::optional<bool> syncPrevious_, syncExpected_;
+    std::uint64_t syncConnection_ = 0, syncStatus_ = 0;
+    std::string syncProblem_;
+    void TickRecordSync();
+    bool SyncEnabled() const { return HaveStatus() && snap_.status.recSyncCap && snap_.status.recSync.value_or(false); }
     // Каркас
     void RenderTopBar(float h);
     void RenderSidebar(float w, float h);
@@ -414,6 +425,16 @@ private:
     std::unique_ptr<DeviceLink> link_;
     std::unique_ptr<fw::IDfuBackend> dfuReal_, dfuDemo_;
     fw::Updater updater_;
+    fw::EspOta ota_;
+    fw::RomRecovery recovery_;
+    bool espFirmware_ = false, factoryMode_ = false, manualRom_ = true;
+    char factoryManifest_[1024] = {}, recoveryPort_[16] = {};
+    void PageEspRecovery();
+    int wifiRoute_ = 0;
+    char tcpHost_[64] = "192.168.4.1", tcpToken_[129] = {};
+    int tcpPort_ = 5000;
+    bool tcpMode_ = false, tcpDialog_ = false;
+    void PageEspFirmware();
     LinkSnapshot snap_;
     Page page_ = Page::Measure;
     bool navOpen_[3] = {true, true, true}; // группы левой панели: опыт, устройство, имитатор

@@ -7,17 +7,20 @@
 
 #include <imgui.h>
 
+#include "../comm/TcpConnection.hpp"
 #include "../comm/NullConnection.hpp"
 #include "../comm/SerialConnection.hpp"
 #include "../comm/SimConnection.hpp"
 #include "../core/TextUtil.hpp"
 #include "Dialogs.hpp"
 #include "Widgets.hpp"
+#include "Tab5Text.hpp"
 
 #ifdef KRENOMER_PROJECT_VERSION
 namespace
 {
 // kAppVersion («1.8.3») — начало версии из CMakeLists.txt (project VERSION 1.8.3): сведения о файле и окно — одно.
+// 1.8.5: явная кнопка Wi-Fi, подсказки AP/роутер и ручной IP без поиска.
 // 1.8.4: офлайн-установка времени с ПК прежней кнопкой; пояс только по capability, явный ACK и ошибки RTC.
 // 1.8.3: отчёты с плечами от борта без выхода за границы таблицы; отдельные папки комплектов без перезаписи;
 // понятный реверс выбранной оси и проверка опыта M025.
@@ -74,6 +77,8 @@ App::~App()
     StopPcRecording(); // дописать файлы записи на ПК (и .xlsx — деструктор Recorder дождётся)
     SaveSettingsNow();
     updater_.Cancel();
+    ota_.Cancel();
+    recovery_.Shutdown();
     link_.reset();
 }
 
@@ -132,6 +137,8 @@ void App::SaveSettingsSoon()
 
 void App::MakeLink(bool demo)
 {
+    ota_.Cancel();
+    recovery_.Shutdown();
     link_.reset(); // сначала закрыть прежний порт / имитатор
     if (demo)
     {
@@ -146,6 +153,10 @@ void App::MakeLink(bool demo)
         dfuDemo_.reset();
         if (opt_.noHardware)
             link_ = std::make_unique<DeviceLink>(std::make_unique<NullConnection>(), opt_.threaded);
+#ifdef _WIN32
+        else if (tcpMode_)
+            link_ = std::make_unique<DeviceLink>(std::make_unique<TcpConnection>(tcpHost_, tcpPort_, tcpToken_), opt_.threaded);
+#endif
         else
         {
             auto conn = std::make_unique<SerialConnection>();
@@ -171,7 +182,7 @@ void App::MakeLink(bool demo)
 
 void App::StartDemo(bool on)
 {
-    if (updater_.Busy() || dl_.running)
+    if ((updater_.Busy() || ota_.Busy() || recovery_.Busy()) || dl_.running)
     {
         Notify("Дождитесь окончания скачивания / перепрошивки", 2);
         return;
@@ -211,6 +222,8 @@ void App::Tick()
         files_.listed = false;
     }
     updater_.Tick(now);
+    ota_.Tick(now);
+    recovery_.Tick();
     TickFiles();
     TickSettings();
     TickDiag();
@@ -327,14 +340,14 @@ void App::RenderTopBar(float h)
     const bool narrow = W < S(1180);
     // Демо: одна кнопка «Выйти из демо»; с прибором: порт, «Отключить / Подключить» и «Демо» — все нейтральные
     const float demoW = narrow ? S(110) : S(124), connW = narrow ? S(116) : S(128), portW = narrow ? S(180) : S(230);
-    const float rightX = snap_.demo ? W - S(18) - S(150) : W - S(18) - demoW - connW - portW - 2 * S(8);
+    const float rightX = W - S(18) - demoW - connW - portW - 3 * S(8) - S(74);
 
     // Состояние связи: полный текст, а если не влезает до кнопок — короткий
     ImGui::SameLine(0, S(28));
     ImGui::SetCursorPosY((h - fh) * 0.5f);
     std::string chip, chipShort;
     ImVec4 fg = pal.navText, bg = pal.navFrame;
-    if (updater_.Busy())
+    if ((updater_.Busy() || ota_.Busy() || recovery_.Busy()))
     {
         chip = "Обновление прошивки…";
         chipShort = "Прошивка…";
@@ -382,23 +395,12 @@ void App::RenderTopBar(float h)
         chip = chipShort;
     Chip(chip.c_str(), fg, bg);
     if (ImGui::IsItemHovered() && snap_.state != LinkState::Connected && !snap_.problem.empty())
-        ImGui::SetTooltip("%s", snap_.problem.c_str());
+        ImGui::SetTooltip("%s", (tcpMode_ ? Tab5Text(snap_.problem) : snap_.problem).c_str());
 
     const bool off = snap_.state == LinkState::Off;
-    const bool busy = updater_.Busy() || dl_.running || PcRecording();
+    const bool busy = (updater_.Busy() || ota_.Busy() || recovery_.Busy()) || dl_.running || PcRecording();
     const char* busyWhy = PcRecording() ? "Идёт запись на ПК — сначала остановите её" : "Идёт скачивание или перепрошивка";
     ImGui::SetCursorPos(ImVec2(rightX, (h - fh) * 0.5f));
-    if (snap_.demo)
-    {
-        if (Button("Выйти из демо", BtnKind::Nav, ImVec2(S(150), 0), busy, busyWhy))
-            StartDemo(false);
-        if (ImGui::IsItemHovered() && !busy)
-            ImGui::SetTooltip("Закрыть имитатор и искать настоящий прибор");
-        ImGui::EndChild();
-        ImGui::PopStyleVar();
-        ImGui::PopStyleColor();
-        return;
-    }
     ImGui::SetNextItemWidth(portW);
     // Поле порта на синем: полупрозрачная светлая заливка, светлый текст
     ImGui::PushStyleColor(ImGuiCol_FrameBg, pal.navFrame);
@@ -419,14 +421,15 @@ void App::RenderTopBar(float h)
     }
     else
     {
-        std::string preview = settings_.port.empty() ? (narrow ? "Порт: авто" : "Порт: автоматически")
+        std::string preview = tcpMode_ ? std::string("TCP ")+tcpHost_+":"+std::to_string(tcpPort_) : settings_.port.empty() ? (narrow ? "Порт: авто" : "Порт: автоматически")
                                                      : "Порт: " + settings_.port;
         const bool open = ImGui::BeginCombo("##port", preview.c_str());
         ImGui::PopStyleColor(7);
         if (open)
         {
-            if (ImGui::Selectable("Автоматически (VID:PID 0483:5740)", settings_.port.empty()))
+            if (ImGui::Selectable("Автоматически STM32 (0483:5740); Tab5 USB — вручную", settings_.port.empty() && !tcpMode_))
             {
+                if(tcpMode_) {tcpMode_=false;MakeLink(false);}
                 settings_.port.clear();
                 link_->SetPortChoice("");
             }
@@ -436,21 +439,48 @@ void App::RenderTopBar(float h)
                                           (p.ours ? "  ✓ регистратор?" : "");
                 if (ImGui::Selectable(label.c_str(), settings_.port == p.name))
                 {
-                    settings_.port = p.name;
-                    link_->SetPortChoice(p.name);
+                    const auto selected=p.name;
+                    settings_.port=selected;
+                    if(tcpMode_) {tcpMode_=false;MakeLink(false);}
+                    link_->SetPortChoice(selected);
+                    break;
                 }
             }
             if (snap_.ports.empty())
                 Muted("COM-портов нет");
             ImGui::EndCombo();
         }
-        if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("Обычно — «автоматически»: программа сама находит прибор (ST Virtual COM Port 0483:5740).\n"
-                              "Выберите порт вручную, если в системе несколько таких устройств.");
     }
+        ImGui::SameLine(0, S(8));
+        if (Button("Wi-Fi", BtnKind::Nav, ImVec2(S(74), 0), busy, busyWhy)) tcpDialog_=true;
+        if(tcpDialog_) {ImGui::OpenPopup("Подключение Tab5 по сети");tcpDialog_=false;}
+        ImGui::SetNextWindowSize(ImVec2(S(560), 0), ImGuiCond_Always);
+        if(ImGui::BeginPopupModal("Подключение Tab5 по сети",nullptr,ImGuiWindowFlags_AlwaysAutoResize)) {
+            if (ImGui::RadioButton("Точка доступа Tab5 (AP)", wifiRoute_ == 0)) {
+                wifiRoute_ = 0; std::snprintf(tcpHost_, sizeof(tcpHost_), "%s", "192.168.4.1"); tcpPort_ = 5000;
+            }
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Общий роутер", wifiRoute_ == 1)) {
+                wifiRoute_ = 1; tcpHost_[0] = 0; tcpPort_ = 5000;
+            }
+            ImGui::TextWrapped(wifiRoute_ == 0 ? "Подключите ПК к точке доступа Tab5. Адрес: 192.168.4.1, порт: 5000."
+                                : "Подключите ПК и Tab5 к общему роутеру. Возьмите фактический IP Wi-Fi сети (STA) с экрана «Сеть» прибора и укажите в поле ниже.\nАдрес точки доступа 192.168.4.1 для этого режима не подходит.");
+            ImGui::SetNextItemWidth(S(230));
+            ImGui::InputText("IP-адрес (IPv4)",tcpHost_,sizeof(tcpHost_));
+            ImGui::SetNextItemWidth(S(110));
+            ImGui::InputInt("Порт",&tcpPort_);
+            ImGui::SetNextItemWidth(S(230));
+            ImGui::InputText("Ключ доступа",tcpToken_,sizeof(tcpToken_),ImGuiInputTextFlags_Password);
+            ImGui::TextWrapped("Адрес вводится вручную; поиска приборов в сети нет.\nКлюч — пароль точки доступа (AP) прибора, не пароль роутера.\nКлюч не сохраняется и не попадает в журнал команд.");
+            ImGui::BeginDisabled(busy || !tcpHost_[0] || tcpPort_<=0 || tcpPort_>65535);
+            if(ImGui::Button("Подключить")) {tcpMode_=true;MakeLink(false);ImGui::CloseCurrentPopup();}
+            ImGui::EndDisabled();
+            ImGui::SameLine();if(ImGui::Button("Отмена"))ImGui::CloseCurrentPopup();
+            ImGui::EndPopup();
+        }
     ImGui::SameLine(0, S(8));
-    if (Button(off ? "Подключить" : "Отключить", BtnKind::Nav, ImVec2(connW, 0), busy, busyWhy))
-        link_->SetEnabled(off);
+    if (Button(snap_.demo ? "Выйти из демо" : off ? "Подключить" : "Отключить", BtnKind::Nav, ImVec2(connW, 0), busy, busyWhy))
+        { if (snap_.demo) StartDemo(false); else link_->SetEnabled(off); }
     ImGui::SameLine(0, S(8));
     if (Button("Демо", BtnKind::Nav, ImVec2(demoW, 0), busy, busyWhy))
         StartDemo(true);
@@ -554,7 +584,7 @@ void App::RenderSidebar(float w, float h)
             ImVec4 bc = pal.orange;
             if (it.page == Page::Files && dl_.running)
                 badge = "⇩";
-            if (it.page == Page::Firmware && updater_.Busy())
+            if (it.page == Page::Firmware && (updater_.Busy() || ota_.Busy() || recovery_.Busy()))
                 badge = "●";
             if (it.page == Page::Measure && (Recording() || PcRecording()))
             {
@@ -728,7 +758,7 @@ void App::RenderNavRail(float w, float h)
         const ImVec4* badge = nullptr;
         if (it.page == Page::Measure && (Recording() || PcRecording()))
             badge = &red;
-        if ((it.page == Page::Files && dl_.running) || (it.page == Page::Firmware && updater_.Busy()))
+        if ((it.page == Page::Files && dl_.running) || (it.page == Page::Firmware && (updater_.Busy() || ota_.Busy() || recovery_.Busy())))
             badge = &pal.orange;
         ImGui::PushID(i);
         if (icon("##it", it.icon, page_ == it.page, it.label, badge))
@@ -845,7 +875,7 @@ void App::NotConnectedPanel(const char* what)
         if (!snap_.problem.empty() && !snap_.demo)
         {
             ImGui::Spacing();
-            Muted("Сейчас: %s", snap_.problem.c_str());
+            Muted("Сейчас: %s", (tcpMode_ ? Tab5Text(snap_.problem) : snap_.problem).c_str());
         }
         ImGui::Spacing();
         SmallMuted("Windows 7: для COM-порта нужен драйвер «STM32 Virtual COM Port» (STSW-STM32102), в Windows 10 и новее "
@@ -917,9 +947,11 @@ void App::RenderAbout()
             ImGui::Text("Регистратор крена — программа для ПК %s", kAppVersion);
         }
         ImGui::TextWrapped("Показания, качка, диагностика шины RS485, настройки, файлы замеров с карты и обновление "
-                           "прошивки регистратора крена (STM32F411 + два инклинометра BWM427) по USB.");
+                           "прошивки двух вариантов регистратора крена: STM32F411 по USB и Tab5 (ESP32-P4) по USB или Wi-Fi. "
+                           "Обработка записей и отчёты общие для обоих приборов.");
         ImGui::Spacing();
-        MutedWrapped("Связь: USB CDC (виртуальный COM-порт 0483:5740), команды прибора — README проекта.");
+        MutedWrapped("STM32: USB CDC 0483:5740. Tab5: выбранный COM-порт или Wi-Fi TCP. "
+                     "Способ обновления выбирается по подтверждённому типу прибора.");
         ImGui::Spacing();
         CardTitle("Сторонние компоненты");
         {

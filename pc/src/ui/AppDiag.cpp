@@ -185,14 +185,34 @@ void App::PageDiag()
         CardTitle("Связь ПК ↔ прибор");
         if (BeginKV("##kvlink", S(230)))
         {
-            KV("Порт", snap_.port.empty() ? "—" : snap_.port);
+            const char* flowState = snap_.pollPaused ? "пауза операции"
+                : !snap_.haveSample ? "ожидание первых данных"
+                : snap_.nowMs - snap_.sampleAtMs > 1500 ? "пауза потока" : "данные поступают";
+            KV("Канал", snap_.state == LinkState::Connected ? flowState
+               : (snap_.problem.empty() ? "ожидание подключения" : snap_.problem), nullptr,
+               "После подключения история накапливается с первых данных: пустой начальный график нормален. "
+               "Пауза операции не означает дефект радио. Пауза потока — возраст S больше 1500 мс по часам ПК.");
             KV("Поток углов", Fmt("%.1f строк/с (каждые %d мс)", snap_.streamHz, snap_.streamMs));
-            KV("Строк принято / команд", Num(snap_.linesRx) + " / " + Num(snap_.cmdsTx));
-            const ImVec4 tc = snap_.timeouts ? pal.warn : pal.text;
-            KV("Команд без ответа", Num(snap_.timeouts), &tc);
-            KV("Переподключений", Num(snap_.reconnects));
+            KV("Возраст S / R, мс", (snap_.haveSample ? Num(std::max<std::int64_t>(0, snap_.nowMs - snap_.sampleAtMs)) : "—") + " / " +
+               (snap_.samplesRx ? Num(std::max<std::int64_t>(0, snap_.nowMs - snap_.samplesAtMs)) : "—"));
             KV("Нераспознанных строк", Num(snap_.badLines));
             EndKV();
+        }
+        if (ImGui::TreeNode("Качество потока"))
+        {
+            if (BeginKV("##kvquality", S(190)))
+            {
+                KV("Строк / команд", Num(snap_.linesRx) + " / " + Num(snap_.cmdsTx));
+                KV("Команд без ответа", Num(snap_.timeouts));
+                KV("Переподключений", Num(snap_.reconnects));
+                KV("Макс. пауза S, мс", Num(snap_.maxStreamIntervalMs), nullptr,
+                   "Интервал доставки по часам ПК. Фрагменты TCP и несколько строк в recv не означают потери.");
+                KV("Пропуски номера R", Num(snap_.sampleSeqGaps), nullptr,
+                   "Только внутри подтверждённого samples ON. Не физические потери датчиков; S не считается.");
+                KV("R: прибор / ПК", Num(snap_.samplesDropped) + " / " + Num(snap_.samplesOverflow));
+                EndKV();
+            }
+            ImGui::TreePop();
         }
     }
     EndCard();
@@ -209,7 +229,7 @@ void App::PageDiag()
         {
             if (have)
             {
-                KV("Частота: задана / факт.", Fmt("%d Гц / %.1f Гц", s.freq, s.rate));
+                KV("Частота: задана / факт.", Fmt("%d Гц / ",s.freq)+(std::isfinite(s.rate)?Fmt("%.1f Гц",s.rate):"—"));
                 KV("Предел по шине", s.maxRate > 0 ? Fmt("%.1f Гц", s.maxRate) : "—", nullptr,
                    "1 / среднее время цикла: быстрее шина не успевает опросить оба датчика");
                 KV("Время цикла, мс", AvgRange(s.busCyc), nullptr, "Среднее (мин.…макс.): паузы и обмен с обоими датчиками");
@@ -219,7 +239,7 @@ void App::PageDiag()
                 KV("Простой до цикла, мс", AvgRange(s.busIdle), nullptr,
                    "Задержка старта цикла сверх паузы — суперцикл прибора был занят");
                 const ImVec4 fb = s.fallbacks ? pal.warn : pal.text;
-                KV("Резервный таймер", Num(s.fallbacks) + " срабатываний", &fb, "Должно быть 0 (таймер TIM5 исправен)");
+                KV("Резервный таймер", s.haveFallbacks?Num(s.fallbacks) + " срабатываний":"—", &fb, "Должно быть 0 (таймер TIM5 исправен)");
             }
             EndKV();
         }
@@ -237,9 +257,9 @@ void App::PageDiag()
                 if (snap_.haveVer && !snap_.ver.build.empty())
                     KV("Сборка", snap_.ver.build);
                 KV("Время работы", text::Duration(s.upS));
-                KV("Загрузка процессора", Fmt("%d %%", s.cpu));
-                KV("Проходов суперцикла", Num(s.loops) + " в секунду");
-                KV("Самый долгий проход", Fmt("%llu мс", static_cast<unsigned long long>(s.loopMax)));
+                KV("Загрузка процессора",s.cpu>=0?Fmt("%d %%",s.cpu):"—");
+                KV("Проходов суперцикла",s.haveLoopCounters?Num(s.loops) + " в секунду":"—");
+                KV("Самый долгий проход",s.haveLoopCounters?Fmt("%llu мс", static_cast<unsigned long long>(s.loopMax)):"—");
                 KV("Настройки во флеше", s.savePending ? "ждут сохранения" : "сохранены");
             }
             EndKV();

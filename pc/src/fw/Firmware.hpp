@@ -428,6 +428,8 @@ public:
         std::vector<std::uint8_t> data;
         if (!ReadFile(text::PathFromUtf8(imagePath), data))
             return Fail("не удалось прочитать файл " + imagePath);
+        if (link_ && (link_->Snapshot().ver.chip == "esp32p4" || link_->Snapshot().ver.board == "tab5"))
+        { error_ = "Tab5 requires ESP32 OTA, never STM32 DFU"; return false; }
         image_ = CheckImage(data);
         if (!image_.ok)
             return Fail("образ не годится: " + image_.error);
