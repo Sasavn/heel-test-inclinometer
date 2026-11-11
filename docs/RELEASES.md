@@ -16,7 +16,7 @@
 Для прибора Сергея с энкодером и тумблером P4 rev1 предназначен
 [Tab5-1.8.6-controls-P4-rev1.zip](https://github.com/Sasavn/heel-test-inclinometer/releases/download/tab5-v1.8.6/Tab5-1.8.6-controls-P4-rev1.zip).
 Прошивки опубликованы как предварительные: натурная проверка этого комплекта
-на платах не проводилась. [Проверки](../pc/docs/VALIDATION_1.9.0.md).
+на платах не проводилась. [Проверки новой справки](HELP_UPDATE_2026-11-11.md).
 PC-релиз содержит программу Windows; прошивки берутся из своего компонентного релиза.
 Старый [PC 1.8.7](https://github.com/Sasavn/heel-test-inclinometer/releases/tag/pc-v1.8.7) сохранён в истории.
 
