@@ -167,7 +167,7 @@ static void checks_for_transport(unsigned tr){
  send_command(tr,"relative axes reset");assert(!relative_state.config.axes_confirmed&&!committed.axes_confirmed);send_command(tr,"relative axes confirm");fresh();send_command(tr,"relative zero");assert(relative_state.offset_valid);
  load_relative_config();assert(relative_state.mode==TAB5_MODE_LEVEL&&relative_state.config.reference_index==1&&relative_state.config.axes_confirmed&&!relative_state.offset_valid);
  fresh();send_command(tr,"relative reset");assert(!relative_state.offset_valid&&!relative_state.pair_known);send_command(tr,"instrument heel");load_relative_config();assert(relative_state.mode==TAB5_MODE_HEEL);
- send_command(tr,"status");j=cJSON_Parse(output);assert(j);assert(cJSON_IsTrue(cJSON_GetObjectItem(j,"dual_mode_cap"))&&cJSON_IsTrue(cJSON_GetObjectItem(j,"instrument_control_cap"))&&cJSON_IsTrue(cJSON_GetObjectItem(j,"relative_data_cap")));assert(!strcmp(cJSON_GetObjectItem(j,"instrument")->valuestring,"heel"));cJSON_Delete(j);
+ send_command(tr,"status");j=cJSON_Parse(output);assert(j);assert(cJSON_IsTrue(cJSON_GetObjectItem(j,"dual_mode_cap"))&&cJSON_IsTrue(cJSON_GetObjectItem(j,"instrument_control_cap"))&&cJSON_IsTrue(cJSON_GetObjectItem(j,"relative_data_cap"))&&cJSON_IsTrue(cJSON_GetObjectItem(j,"file_media_cap")));assert(!strcmp(cJSON_GetObjectItem(j,"instrument")->valuestring,"heel"));cJSON_Delete(j);
  printf("PASS %s actual entry/queue/owner: strict syntax, NVS/reboot, transient REL, source provenance, nullable JSON, generation, guards recording/draining/transfer/OTA/lock, busy read-only status\n",tr?"TCP":"USB");
 }
 int main(void){
