@@ -35,6 +35,7 @@ enum class Origin
     App,      // кнопки интерфейса
     Poll,     // опрос status (в терминале скрыт)
     Internal, // ver при подключении, stream
+    Firmware, // команды собственного обновлятора; не снимают проверки платформы и занятости
 };
 
 struct Request
@@ -163,12 +164,14 @@ public:
     void FastPoll(std::int64_t untilMs, int periodMs = 300);
     // Запись на ПК: включить / выключить отсчёты samples (on — очередь отсчётов очищается).
     void SetSamples(bool on);
+    void SetControlLocks(bool recording, bool firmware);
     // Забрать принятые отсчёты (дописываются в out). Возвращает их число.
     std::size_t TakeSamples(std::vector<RxSample>& out);
     static constexpr std::size_t kMaxQueuedSamples = 200000; // ~1 ч при 2 × 25 Гц, если интерфейс не забирает
 
     LinkSnapshot Snapshot() const;
-    bool IsConnected() const { return state_.load() == LinkState::Connected; }
+    // A usable handshake includes the first status of this connection epoch.
+    bool IsConnected() const;
     bool IsDemo() const;
     History& GetHistory() { return history_; }
     IConnection* Connection() { return conn_.get(); }
@@ -187,6 +190,7 @@ private:
     void AfterReply(const RequestPtr& r, std::int64_t now);
     void LogLocked(char kind, const std::string& text, Origin origin, std::int64_t now);
     int SamplesSupportLocked() const;
+    std::string ControlBlockLocked(const std::string& cmd, Origin origin) const;
 
     std::unique_ptr<IConnection> conn_;
     History history_;
@@ -209,6 +213,7 @@ private:
     bool haveVer_ = false;
     proto::DeviceStatus status_;
     bool haveStatus_ = false;
+    bool recordingLock_ = false, firmwareLock_ = false;
     std::int64_t statusAt_ = 0;
     std::uint64_t statusSeq_ = 0;
     proto::StreamHeader header_;

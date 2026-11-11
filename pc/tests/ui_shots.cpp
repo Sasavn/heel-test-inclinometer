@@ -31,6 +31,7 @@
 #include "core/TextUtil.hpp"
 #include "fw/Firmware.hpp"
 #include "ui/App.hpp"
+#include "core/RelativeReport.hpp"
 #include "ui/Tab5Text.hpp"
 #include "ui/Fonts.hpp"
 #include "ui/Theme.hpp"
@@ -775,6 +776,16 @@ int main(int argc, char** argv)
     CHECK_MSG(app.Updater().GetStep() == fw::Updater::Step::Done, "%s", app.Updater().Error().c_str());
     st.Run(1000);
     st.Shot("13_firmware_done", true);
+
+    // Explicitly confirmed boot force may stop device-side recording; normal
+    // update still refuses it. PC capture/transfer remain independently locked.
+    auto forceControls=app.Sim()->GetControls();forceControls.recSwitch=true;
+    app.Sim()->SetControls(forceControls);st.Run(1500);
+    CHECK(app.Link().Snapshot().status.sd=="RECORDING");
+    CHECK(!app.StartFirmwareUpdate(false));CHECK(app.StartFirmwareUpdate(true));
+    for(int n=0;n<500 && app.Updater().Busy();++n)st.Run(100);
+    CHECK_MSG(app.Updater().GetStep()==fw::Updater::Step::Done,"%s",app.Updater().Error().c_str());
+    forceControls.recSwitch=false;app.Sim()->SetControls(forceControls);st.Run(1500);
 
     SECTION("терминал");
     app.SetPage(ui::Page::Terminal);
@@ -1714,6 +1725,109 @@ int main(int argc, char** argv)
         app.ProcessSetShip(1500.0, 15.0);
         st.Run(300);
     }
+
+    SECTION("Universal platform and relative instrument: real application path, simulated hardware");
+    {
+        ui::App levelApp(ui::AppOptions{false,true,false,1791400000,19});
+        levelApp.SetDemoPlatform(false);
+        levelApp.SetShownPaths({{text::PathToUtf8(ShotsWorkDir()),"C:\\Измерения"}});
+        Stand ls{&levelApp};ls.Run(2000);
+        CHECK(levelApp.Link().Snapshot().ver.board=="stm32f411");
+        CHECK(levelApp.SelectInstrument("level"));ls.Run(2000);
+        CHECK(levelApp.UsingLevel());
+        auto axes=levelApp.Link().Send("relative axes confirm");ls.Run(2500);
+        CHECK(axes->done.load() && axes->ok);CHECK(levelApp.LevelValidRows()>0);
+        levelApp.SetPage(ui::Page::Measure);levelApp.LevelSetView(0);
+        ls.Shot("50_level_stm32",true);
+        ls.size=ImVec2(1024,700);ls.Shot("50_level_stm32_1024x700",true);
+        ls.size=ImVec2(1280,800);
+        levelApp.LevelSetUnit(1);ls.Shot("51_level_slope",true);
+        levelApp.LevelSetView(1);ls.Shot("52_level_observation",true);
+        const auto levelRoot=ShotsWorkDir()/L"Угломер";
+        fs::create_directories(levelRoot,ec);
+        CHECK(levelApp.LevelStartRecording(text::PathToUtf8(levelRoot)));ls.Run(1500);
+        CHECK(levelApp.LevelRecording());CHECK(!levelApp.SelectInstrument("heel"));
+        auto controls=levelApp.Sim()->GetControls();controls.sensorOn[0]=false;levelApp.Sim()->SetControls(controls);
+        ls.Run(1200);const auto numeric=levelApp.LevelValidRows();ls.Run(800);
+        CHECK(levelApp.LevelValidRows()==numeric);
+        levelApp.LevelSetView(0);ls.Shot("53_level_missing",true);
+        controls.sensorOn[0]=true;levelApp.Sim()->SetControls(controls);ls.Run(2000);
+        CHECK(levelApp.LevelValidRows()>numeric);
+        levelApp.LevelStopRecording();
+        auto waitLevel=[&]{for(int n=0;n<2000 && levelApp.LevelBusy();++n){std::this_thread::sleep_for(std::chrono::milliseconds(5));ls.Run(50);}};
+        waitLevel();CHECK(!levelApp.LevelBusy());CHECK(levelApp.LevelRows()>0);
+        CHECK(levelApp.LevelSaveReport(text::PathToUtf8(levelRoot)));waitLevel();
+        const auto firstReport=text::PathFromUtf8(levelApp.LevelReportDir());
+        CHECK(!firstReport.empty());
+        CHECK(fs::file_size(firstReport/L"Отчет_Угломер.xlsx",ec)>10000);
+        CHECK(fs::file_size(firstReport/L"График_Угломер.png",ec)>10000);
+        level::Log exported;
+        CHECK(level::ReadFile(firstReport/"Journal_REL.CSV",exported));
+        CHECK(exported.numeric>0 && exported.rows.size()>exported.numeric);
+        const auto oldBook=ReadText(firstReport/L"Отчет_Угломер.xlsx");
+        CHECK(levelApp.LevelSaveReport(text::PathToUtf8(levelRoot)));waitLevel();
+        CHECK(levelApp.LevelReportDir()!=text::PathToUtf8(firstReport));
+        CHECK(ReadText(firstReport/L"Отчет_Угломер.xlsx")==oldBook);
+        levelApp.LevelSetView(2);ls.Run(7000);ls.Shot("54_level_report");
+        CHECK(levelApp.LevelImportFile(text::PathToUtf8(firstReport/L"Отчет_Угломер.xlsx")));waitLevel();
+        CHECK(levelApp.LevelValidRows()==exported.numeric);
+        levelApp.SetDemoPlatform(true);ls.Run(2000);
+        CHECK(levelApp.Link().Snapshot().ver.IsTab5());
+        levelApp.SetPage(ui::Page::Settings);ls.Shot("55_platform_auto_tab5");
+        CHECK(levelApp.SelectInstrument("level"));ls.Run(1800);
+        axes=levelApp.Link().Send("relative axes confirm");ls.Run(2000);
+        CHECK(axes->done.load() && axes->ok);
+        levelApp.SetPage(ui::Page::Measure);levelApp.LevelSetView(0);ls.Shot("56_level_tab5",true);
+        CHECK(levelApp.SelectInstrument("heel"));ls.Run(1200);CHECK(!levelApp.UsingLevel());
+
+        // Explicit SD/USB selection must survive identical names and must not
+        // silently fall back to the other volume when the selected one is absent.
+        levelApp.SetPage(ui::Page::Measure);ls.Run(500);
+        const auto mediaRoot=ShotsWorkDir()/L"Носители Tab5";
+        fs::create_directories(mediaRoot,ec);
+        levelApp.SetDownloadDir(text::PathToUtf8(mediaRoot));
+        auto sent=[&](const std::string& command) {
+            const auto terms=levelApp.Link().TermSince(0);
+            return std::any_of(terms.begin(),terms.end(),[&](const auto& t){return t.kind=='>' && t.text==command;});
+        };
+        for(int medium:{1,2})
+        {
+            CHECK(levelApp.SetFileMedium(medium));ls.Run(1800);
+            CHECK(levelApp.FileMedium()==medium && levelApp.FileCount()>=12);
+            CHECK(sent(medium==1?"files sd":"files usb"));
+            levelApp.SelectAllFiles(true);levelApp.StartDownload();
+            CHECK(levelApp.DownloadRunning());CHECK(!levelApp.SetFileMedium(medium==1?2:1));
+            for(int n=0;n<1000 && levelApp.DownloadRunning();++n)ls.Run(500);
+            CHECK(!levelApp.DownloadRunning());
+            std::size_t files=0;
+            for(const auto& entry:fs::directory_iterator(mediaRoot/(medium==1?"SD":"USB"),ec))
+                if(entry.is_regular_file() && entry.path().extension()==".CSV")++files;
+            CHECK(files>=12);
+        }
+        levelApp.SetPage(ui::Page::Files);ls.Run(200);ls.Shot("57_files_tab5_usb",true);
+        auto mediaControls=levelApp.Sim()->GetControls();mediaControls.usbCard=false;
+        levelApp.Sim()->SetControls(mediaControls);CHECK(levelApp.SetFileMedium(2));ls.Run(1800);
+        CHECK(levelApp.FileCount()==0 && levelApp.FileMedium()==2);
+        auto unavailable=levelApp.Link().Send("files usb");ls.Run(1000);
+        CHECK(unavailable->done.load() && !unavailable->ok && unavailable->final.find("no usb")!=std::string::npos);
+        CHECK(levelApp.SetFileMedium(1));ls.Run(1800);CHECK(levelApp.FileCount()>=12);
+        mediaControls.usbCard=true;levelApp.Sim()->SetControls(mediaControls);
+
+        // An identity change across reconnect closes the local recording only;
+        // it must never send a stop command to an unconfirmed replacement unit.
+        levelApp.SetPage(ui::Page::Measure);ls.Run(500);
+        levelApp.SetRecordDir(text::PathToUtf8(ShotsWorkDir()/L"Смена прибора"),false);
+        CHECK(levelApp.StartPcRecording());ls.Run(1200);
+        levelApp.Link().SetEnabled(false);ls.Run(500);
+        levelApp.Sim()->SetFwVersion("1.5.9");
+        const auto previousTerms=levelApp.Link().TermSince(0);
+        const auto previousSeq=previousTerms.empty()?0:previousTerms.back().seq;
+        levelApp.Link().SetEnabled(true);ls.Run(2500);
+        CHECK(!levelApp.PcRecording());
+        const auto afterReconnect=levelApp.Link().TermSince(previousSeq);
+        CHECK(std::none_of(afterReconnect.begin(),afterReconnect.end(),[](const auto& t){return t.kind=='>' && t.text=="rec off";}));
+    }
+
 
     SECTION("о программе");
     app.SetPage(ui::Page::Measure);

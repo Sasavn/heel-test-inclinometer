@@ -478,6 +478,11 @@ inline bool Parse(std::string_view input, Log& log)
     }
     log.firstLine = Printable(Trim(lines[0]));
 
+    // Relative pair audits are not ordinary heel records, even if Excel renamed the file.
+    for (std::size_t i=0;i<std::min<std::size_t>(lines.size(),16);++i)
+        if (lines[i].find("RefSeq")!=std::string_view::npos && lines[i].find("RelDX")!=std::string_view::npos)
+        { log.error="Журнал угломера: откройте его в разделе Угломер"; return false; }
+
     // «sep=;» (Excel) — разделитель задан явно
     char sep = 0;
     std::size_t from = 0;

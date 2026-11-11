@@ -200,7 +200,7 @@ class EspOta
         seq_ = link->Snapshot().connectSeq;
         link_->SetPollPaused(true);
         state_ = State::Info;
-        req_ = link_->Send("ota info");
+        req_ = link_->Send("ota info", Origin::Firmware);
         deadline_ = now + 120000;
         return true;
     }
@@ -209,7 +209,7 @@ class EspOta
         if (Busy() && link_)
         {
             if (session_ && !committed_ && link_->IsConnected())
-                link_->Send("ota abort");
+                link_->Send("ota abort", Origin::Firmware);
             link_->SetPollPaused(false);
             state_ = State::Failed;
             message_ = committed_ ? "Cancelled verification; committed image may reboot"
@@ -247,7 +247,7 @@ class EspOta
                 }
                 seq_ = s.connectSeq;
                 state_ = State::Verify;
-                req_ = link_->Send("ota info");
+                req_ = link_->Send("ota info", Origin::Firmware);
             }
             return;
         }
@@ -264,7 +264,7 @@ class EspOta
         if (state_ == State::Verify && !req_)
         {
             if (now >= verifyAt_)
-                req_ = link_->Send("ota info");
+                req_ = link_->Send("ota info", Origin::Firmware);
             return;
         }
         if (!req_ || !req_->done)
@@ -273,7 +273,7 @@ class EspOta
         {
             if (state_ == State::Chunk && req_->timedOut && retry_++ == 0 && link_->IsConnected())
             {
-                req_ = link_->Send(chunk_);
+                req_ = link_->Send(chunk_, Origin::Firmware);
                 return;
             }
             Fail("OTA failed: " + req_->final);
@@ -334,7 +334,7 @@ class EspOta
             state_ = State::Begin;
             req_ = link_->Send("ota begin tab5 esp32p4 2 " + image_.version + " " + std::to_string(data_.size()) + " " +
                                    image_.sha,
-                               Origin::App, 15000);
+                               Origin::Firmware, 15000);
             return;
         }
         if (state_ == State::Begin || state_ == State::Chunk)
@@ -350,14 +350,14 @@ class EspOta
             if (offset_ == data_.size())
             {
                 state_ = State::End;
-                req_ = link_->Send("ota end", Origin::App, 30000);
+                req_ = link_->Send("ota end", Origin::Firmware, 30000);
             }
             else
             {
                 chunkSize_ = std::min<std::size_t>(256, data_.size() - offset_);
                 chunk_ = "ota chunk " + std::to_string(offset_) + " " + Hex(data_.data() + offset_, chunkSize_);
                 state_ = State::Chunk;
-                req_ = link_->Send(chunk_);
+                req_ = link_->Send(chunk_, Origin::Firmware);
             }
             return;
         }
@@ -383,7 +383,7 @@ class EspOta
         if (link_)
         {
             if (session_ && !committed_ && link_->IsConnected())
-                link_->Send("ota abort");
+                link_->Send("ota abort", Origin::Firmware);
             link_->SetPollPaused(false);
         }
         return false;

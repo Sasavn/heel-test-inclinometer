@@ -137,12 +137,16 @@ void App::SaveSettingsSoon()
 
 void App::MakeLink(bool demo)
 {
+    if(PcRecording() || LevelRecording() || dl_.running || updater_.Busy() || ota_.Busy() || recovery_.Busy())
+    {Notify("Сначала завершите запись, передачу или обновление прибора",2);return;}
+    ResetLevelConnection();
     ota_.Cancel();
     recovery_.Shutdown();
     link_.reset(); // сначала закрыть прежний порт / имитатор
     if (demo)
     {
         sim_ = std::make_shared<SimDevice>(opt_.simSeed, opt_.simStart);
+        sim_->SetProfile(settings_.demoTab5, settings_.demoInstrument);
         link_ = std::make_unique<DeviceLink>(std::make_unique<SimConnection>(sim_), opt_.threaded);
         dfuDemo_ = std::make_unique<fw::DemoDfuBackend>(sim_, [this] { return link_ ? link_->NowMs() : 0; });
         updater_.SetBackend(link_.get(), dfuDemo_.get());
@@ -168,6 +172,8 @@ void App::MakeLink(bool demo)
     link_->SetStreamPeriod(settings_.streamMs);
     snap_ = link_->Snapshot();
     lastConnectSeq_ = 0;
+    instrumentReq_.reset(); instrumentWanted_.clear(); instrumentMessage_.clear();
+    instrumentConnection_ = 0; instrumentDeadline_ = 0;
     files_.list.clear();
     files_.listed = false;
     files_.note.clear();
@@ -187,7 +193,7 @@ void App::StartDemo(bool on)
         Notify("Дождитесь окончания скачивания / перепрошивки", 2);
         return;
     }
-    if (PcRecording())
+    if (PcRecording() || LevelRecording() || Recording())
     {
         Notify("Идёт запись на ПК — сначала остановите её", 2);
         return;
@@ -201,6 +207,99 @@ std::string App::WindowTitle() const
     return std::string("Регистратор крена — программа для ПК ") + kAppVersion;
 }
 
+bool App::UsingLevel() const
+{
+    if (Connected()) return HaveStatus() && snap_.status.dualModeCap && snap_.status.instrument == "level";
+    return settings_.demoInstrument == "level";
+}
+
+void App::SetDemoPlatform(bool tab5)
+{
+    if ((Connected() && !snap_.demo) || PcRecording() || LevelRecording() || Recording() ||
+        updater_.Busy() || ota_.Busy() || recovery_.Busy() || dl_.running) return;
+    settings_.demoTab5 = tab5;
+    SaveSettingsSoon();
+    if (snap_.demo) MakeLink(true);
+}
+
+const char* App::DeviceOperationBlock(bool allowDeviceRecording) const
+{
+    if (!HaveStatus()) return "Дождитесь свежего status текущего подключения";
+    if (!DeviceProfile().Known()) return "Платформа не распознана: управление недоступно";
+    const device::Activity activity{PcRecording(), LevelRecording(), Recording(),
+        dl_.running || snap_.getActive || (!snap_.status.xfer.empty() && snap_.status.xfer != "idle"),
+        updater_.Busy() || ota_.Busy() || recovery_.Busy(),
+        !set_.applying.empty() || set_.timeReq || set_.zeroReq || set_.addrPhase == 1 || set_.addrPhase == 2 ||
+        instrumentReq_ || !instrumentWanted_.empty() || syncSettingReq_ || syncRecordReq_ || syncExpected_.has_value() || snap_.status.svc == "BUSY"};
+    if (activity.Blocked(allowDeviceRecording))
+    {
+        if (activity.firmware) return "Идёт обновление прошивки";
+        if (activity.pcRecording || activity.levelRecording || (!allowDeviceRecording && activity.deviceRecording)) return "Идёт запись — сначала остановите её";
+        if (activity.transfer) return "Идёт передача файлов";
+        return "Дождитесь завершения команды прибора";
+    }
+    return nullptr;
+}
+
+bool App::SelectInstrument(const std::string& mode)
+{
+    if (mode != "heel" && mode != "level") return false;
+    if (!Connected())
+    {
+        if (PcRecording() || LevelRecording() || updater_.Busy() || ota_.Busy() || recovery_.Busy() || dl_.running) return false;
+        settings_.demoInstrument = mode;
+        SaveSettingsSoon();
+        return true;
+    }
+    if (const auto* why = DeviceOperationBlock()) { instrumentMessage_ = why; return false; }
+    if (!device::InstrumentControl(DeviceProfile(), snap_.status))
+    {
+        instrumentMessage_ = "Для выбора угломера обновите прошивку своей платформы";
+        return false;
+    }
+    instrumentMessage_ = "Ожидание подтверждённого режима в status…";
+    instrumentWanted_ = mode;
+    instrumentConnection_ = snap_.connectSeq;
+    instrumentStatus_ = snap_.statusSeq;
+    instrumentDeadline_ = snap_.nowMs + 6000;
+    instrumentReq_ = link_->Send("instrument " + mode);
+    return true;
+}
+
+void App::TickInstrument()
+{
+    if (instrumentWanted_.empty()) return;
+    if (!Connected() || instrumentConnection_ != snap_.connectSeq)
+    {
+        instrumentMessage_ = "Режим не подтверждён: соединение изменилось";
+        instrumentReq_.reset(); instrumentWanted_.clear(); return;
+    }
+    if (instrumentReq_ && instrumentReq_->done.load())
+    {
+        if (!instrumentReq_->ok)
+        {
+            instrumentMessage_ = instrumentReq_->final;
+            instrumentReq_.reset(); instrumentWanted_.clear(); return;
+        }
+        // OK alone never changes the selected instrument.
+        instrumentStatus_ = snap_.statusSeq;
+        instrumentReq_.reset();
+        link_->Send("status", Origin::Poll);
+        link_->FastPoll(snap_.nowMs + 6000);
+    }
+    if (!instrumentReq_ && HaveStatus() && snap_.statusSeq > instrumentStatus_)
+    {
+        instrumentMessage_ = snap_.status.instrument == instrumentWanted_ ? "Режим подтверждён прибором" : "Прибор подтвердил другой режим";
+        if (snap_.demo) { settings_.demoInstrument = snap_.status.instrument == "level" ? "level" : "heel"; SaveSettingsSoon(); }
+        instrumentWanted_.clear();
+    }
+    else if (snap_.nowMs > instrumentDeadline_)
+    {
+        instrumentMessage_ = "Нет свежего подтверждения режима от прибора";
+        instrumentReq_.reset(); instrumentWanted_.clear();
+    }
+}
+
 void App::Notify(const std::string& text, int kind, int ms, const std::string& folder)
 {
     toasts_.push_back({text, kind, link_->NowMs() + ms, folder});
@@ -212,20 +311,30 @@ void App::Tick()
 {
     const std::int64_t now = link_->NowMs();
     snap_ = link_->Snapshot();
+    link_->SetControlLocks(PcRecording() || LevelRecording(), updater_.Busy() || ota_.Busy() || recovery_.Busy());
     if (snap_.connectSeq != lastConnectSeq_ && snap_.state == LinkState::Connected)
     {
+        if(PcRecording() && (pcrec_.sourceIdentity.empty() || pcrec_.sourceIdentity!=device::RecordingIdentity(snap_.ver)))
+        {
+            StopPcRecording(true); // local stop only: never send rec off to the new unit
+            Notify("Запись завершена при смене подключения: идентичность прибора не подтверждена. Начните новый сеанс",2);
+        }
         lastConnectSeq_ = snap_.connectSeq;
         if (!snap_.demo)
             Notify("Прибор подключён: " + snap_.port +
                        (snap_.ver.version.empty() ? std::string() : ", прошивка v" + snap_.ver.version),
                    1);
         files_.listed = false;
+        files_.medium=0;files_.list.clear();files_.sel.clear();files_.listReq.reset();
+        for (auto& f : set_.f) f.edited = false;
     }
     updater_.Tick(now);
     ota_.Tick(now);
     recovery_.Tick();
     TickFiles();
     TickSettings();
+    TickInstrument();
+    TickLevel();
     TickDiag();
     TickRecord();
     TickProcess();
@@ -398,7 +507,7 @@ void App::RenderTopBar(float h)
         ImGui::SetTooltip("%s", (tcpMode_ ? Tab5Text(snap_.problem) : snap_.problem).c_str());
 
     const bool off = snap_.state == LinkState::Off;
-    const bool busy = (updater_.Busy() || ota_.Busy() || recovery_.Busy()) || dl_.running || PcRecording();
+    const bool busy = (updater_.Busy() || ota_.Busy() || recovery_.Busy()) || dl_.running || PcRecording() || LevelRecording() || Recording();
     const char* busyWhy = PcRecording() ? "Идёт запись на ПК — сначала остановите её" : "Идёт скачивание или перепрошивка";
     ImGui::SetCursorPos(ImVec2(rightX, (h - fh) * 0.5f));
     ImGui::SetNextItemWidth(portW);
@@ -427,7 +536,7 @@ void App::RenderTopBar(float h)
         ImGui::PopStyleColor(7);
         if (open)
         {
-            if (ImGui::Selectable("Автоматически STM32 (0483:5740); Tab5 USB — вручную", settings_.port.empty() && !tcpMode_))
+            if (ImGui::Selectable("Автоматически: STM32 / Tab5 по USB", settings_.port.empty() && !tcpMode_))
             {
                 if(tcpMode_) {tcpMode_=false;MakeLink(false);}
                 settings_.port.clear();
@@ -847,7 +956,7 @@ void App::RenderPage()
 {
     switch (page_)
     {
-    case Page::Measure: PageMeasure(); break;
+    case Page::Measure: if (UsingLevel()) PageLevel(); else PageMeasure(); break;
     case Page::Diag: PageDiag(); break;
     case Page::Settings: PageSettings(); break;
     case Page::Files: PageFiles(); break;

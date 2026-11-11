@@ -129,6 +129,9 @@ static std::string WhyNoPcRecord(const LinkSnapshot& s, bool download, bool firm
 {
     if (s.state != LinkState::Connected)
         return "нет связи с прибором";
+    if (!device::FreshStatus(true, s.haveStatus, s.statusAtMs, s.connectedAtMs, s.nowMs))
+        return "нужен свежий status текущего подключения";
+    if (!device::Detect(s.ver, s.status, s.haveVer).Known()) return "неизвестная платформа";
     if (s.samplesSupport < 0)
         return s.ver.version.empty() ? std::string("нужна прошивка 1.5 или новее")
                                      : "нужна прошивка 1.5 или новее (у прибора v" + s.ver.version + ")";
@@ -145,7 +148,9 @@ bool App::StartPcRecording(bool mirrored)
 {
     if (PcRecording())
         return false;
-    const std::string why = WhyNoPcRecord(snap_, dl_.running, updater_.Busy(), pcrec_.rec && pcrec_.rec->Converting());
+    const auto* block = DeviceOperationBlock(mirrored);
+    const std::string why = block ? block : UsingLevel() ? "в режиме угломера используйте запись относительных пар" :
+        WhyNoPcRecord(snap_, dl_.running, updater_.Busy() || ota_.Busy() || recovery_.Busy(), pcrec_.rec && pcrec_.rec->Converting());
     if (!why.empty())
     {
         Notify("Запись на ПК не начата: " + why, 2, 6000);
@@ -166,6 +171,8 @@ bool App::StartPcRecording(bool mirrored)
         return false;
     }
     pcrec_.rec = std::move(rec);
+    pcrec_.sourceIdentity = device::RecordingIdentity(snap_.ver);
+    link_->SetControlLocks(true, updater_.Busy() || ota_.Busy() || recovery_.Busy());
     if (!mirrored && SyncEnabled()) { syncExpected_ = true; syncPrevious_.reset(); syncRecordReq_ = link_->Send("rec on"); link_->FastPoll(link_->NowMs()+4000); }
     pcrec_.linkLost = false;
     pcrec_.converting = false;
@@ -188,6 +195,7 @@ void App::StopPcRecording(bool mirrored)
     link_->SetSamples(false);
     const std::int64_t now = link_->NowMs();
     r.Stop(pcrec::WallNowMs(), now);
+    link_->SetControlLocks(LevelRecording(), updater_.Busy() || ota_.Busy() || recovery_.Busy());
     pcrec_.converting = r.Converting();
     pcrec_.linkLost = false;
     std::string msg = "Запись на ПК остановлена: " + ResultText(r, now);
@@ -203,7 +211,7 @@ void App::StopPcRecording(bool mirrored)
 
 void App::RequestRecordSync(bool value)
 {
-    if (!HaveStatus() || !snap_.status.recSyncCap || syncSettingReq_) return;
+    if (DeviceOperationBlock() || !snap_.status.recSyncCap || UsingLevel()) return;
     syncSettingReq_ = link_->Send(value ? "set recsync 1" : "set recsync 0");
     syncPrevious_.reset();
 }
@@ -309,7 +317,8 @@ void App::RecordCard(float w, bool full)
     const pcrec::Recorder* r = pcrec_.rec.get();
     const bool conv = r && r->Converting();
     const std::int64_t now = link_->NowMs();
-    const std::string why = WhyNoPcRecord(snap_, dl_.running, updater_.Busy(), conv);
+    const auto* block = DeviceOperationBlock();
+    const std::string why = block ? block : WhyNoPcRecord(snap_, dl_.running, updater_.Busy() || ota_.Busy() || recovery_.Busy(), conv);
     const float fh = ImGui::GetFrameHeight();
     const float padX = S(14), padY = full ? S(10) : S(7);
     const float h = 2 * padY + fh + (full ? fh + S(6) : 0.f);

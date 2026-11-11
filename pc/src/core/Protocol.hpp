@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "Json.hpp"
+#include "Relative.hpp"
 
 namespace proto
 {
@@ -314,6 +315,8 @@ struct DeviceStatus
     std::optional<int> batPct;
     // Прочее
     bool recSw = false;
+    bool dualModeCap = false, instrumentControlCap = false, relativeDataCap = false, fileMediaCap = false;
+    std::string instrument; // confirmed device mode, never inferred from the chosen PC page
     bool recSyncCap = false;
     std::optional<bool> recSync, actualRec;
     std::string svc;  // IDLE / BUSY / OK / FAIL
@@ -429,7 +432,7 @@ inline bool ParseStatus(std::string_view line, DeviceStatus& out, std::string* e
     s.busIdle = ToStat5(bus["idle"]);
     s.busCyc = ToStat5(bus["cyc"]);
     s.maxRate = bus["max_rate"].Num();
-    s.board=j["board"].Str(); s.platform=j["platform"].Str(); s.protocol=static_cast<int>(j["proto"].Int(1));
+    s.board=j["board"].Str(); s.platform=j["platform"].Str(); s.protocol=!j.Has("proto")?1:j["proto"].IsNumber() && std::isfinite(j["proto"].n) && j["proto"].n>=0 && j["proto"].n<=100 && std::floor(j["proto"].n)==j["proto"].n?static_cast<int>(j["proto"].n):0;
     s.sd = j["sd"].Str();
     s.sdErr = static_cast<int>(j["sd_err"].Int());
     s.file = static_cast<int>(j["file"].Int());
@@ -449,6 +452,11 @@ inline bool ParseStatus(std::string_view line, DeviceStatus& out, std::string* e
     s.batSat = j["bat_sat"].Bool();
     s.recSw = j["rec_sw"].Bool();
     if (j["rec_sw"].IsBool()) s.actualRec = j["rec_sw"].Bool();
+    s.fileMediaCap = j["file_media_cap"].IsBool() && j["file_media_cap"].Bool();
+    s.dualModeCap = j["dual_mode_cap"].IsBool() && j["dual_mode_cap"].Bool();
+    s.instrumentControlCap = j["instrument_control_cap"].IsBool() && j["instrument_control_cap"].Bool();
+    s.relativeDataCap = j["relative_data_cap"].IsBool() && j["relative_data_cap"].Bool();
+    s.instrument = j["instrument"].Str();
     s.recSyncCap = j["rec_sync_cap"].IsBool() && j["rec_sync_cap"].Bool();
     if (j["rec_sync"].IsBool()) s.recSync = j["rec_sync"].Bool();
     s.svc = j["svc"].Str();
@@ -456,6 +464,10 @@ inline bool ParseStatus(std::string_view line, DeviceStatus& out, std::string* e
     out = std::move(s);
     return true;
 }
+
+using RelativeStatus = level::Status;
+inline bool ParseRelativeStatus(std::string_view input, RelativeStatus& out, std::string* error=nullptr)
+{ return level::ParseStatus(input,out,error); }
 
 // ---------------------------------------------------------------------------------------------------------------
 // ver
@@ -482,7 +494,11 @@ inline VersionInfo ParseVer(const std::vector<std::string>& lines)
         {
             v.ours = true;
             auto field = [&](const std::string& key) { auto at=l.find(" "+key+"="); if(at==std::string::npos) return std::string(); at+=key.size()+2; return l.substr(at,l.find(' ',at)-at); };
-            v.board=field("board"); v.chip=field("chip"); v.protocol=field("proto")=="2"?2:1;
+            v.board=field("board"); v.chip=field("chip");
+            const auto protocol=field("proto");
+            v.protocol=protocol.empty()?1:0;
+            if(!protocol.empty()) { const auto parsed=ToInt(protocol); if(parsed>=0 && parsed<=100)v.protocol=static_cast<int>(parsed); }
+            v.version=field("fw");
             const auto pv = l.find(" v");
             if (pv != std::string::npos)
             {

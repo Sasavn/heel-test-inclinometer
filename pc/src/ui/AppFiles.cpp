@@ -17,11 +17,22 @@ namespace ui
 
 namespace fs = std::filesystem;
 
+bool App::SetFileMedium(int medium)
+{
+    if(medium<0 || medium>2 || dl_.running || files_.listReq || Recording() || PcRecording() || LevelRecording())return false;
+    if(medium && !(HaveStatus() && DeviceProfile().IsTab5() && snap_.status.fileMediaCap))return false;
+    files_.medium=medium;files_.list.clear();files_.sel.clear();files_.note.clear();files_.noteKind.clear();files_.listed=false;files_.listMsg.clear();
+    if(HaveStatus())RequestFileList();
+    return true;
+}
+
 void App::RequestFileList()
 {
-    if (files_.listReq || !Connected())
-        return;
-    files_.listReq = link_->Send("files", Origin::App, 15000);
+    if (files_.listReq || !HaveStatus() || !DeviceProfile().Known() || Recording() || PcRecording() || LevelRecording() ||
+        dl_.running || updater_.Busy() || ota_.Busy() || recovery_.Busy())return;
+    const bool explicitMedia=DeviceProfile().IsTab5() && snap_.status.fileMediaCap;
+    const std::string medium=explicitMedia && files_.medium?files_.medium==1?" sd":" usb":"";
+    files_.listReq = link_->Send("files"+medium, Origin::App, 15000);
 }
 
 void App::SelectAllFiles(bool on)
@@ -37,9 +48,9 @@ void App::SetDownloadDir(const std::string& dir)
 
 void App::StartDownload()
 {
-    if (dl_.running || !Connected())
+    if (dl_.running || !HaveStatus() || !DeviceProfile().Known() || Recording() || updater_.Busy() || ota_.Busy() || recovery_.Busy())
         return;
-    if (PcRecording())
+    if (PcRecording() || LevelRecording())
     {
         Notify("Идёт запись на ПК — остановите её («Измерение»): передача файла заняла бы канал USB, и отсчёты "
                "терялись бы",
@@ -59,9 +70,13 @@ void App::StartDownload()
         Notify("Отметьте файлы для скачивания", 2);
         return;
     }
+    const bool explicitMedia=DeviceProfile().IsTab5() && snap_.status.fileMediaCap;
+    dl_.medium=explicitMedia && files_.medium?(files_.medium==1?"sd":"usb"):"";
+    const auto destination=text::PathFromUtf8(files_.dir)/(dl_.medium.empty()?fs::path{}:fs::path(dl_.medium=="sd"?"SD":"USB"));
+    dl_.directory=text::PathToUtf8(destination);dl_.connection=snap_.connectSeq;
     std::error_code ec;
-    fs::create_directories(text::PathFromUtf8(files_.dir), ec);
-    if (!fs::is_directory(text::PathFromUtf8(files_.dir), ec))
+    fs::create_directories(destination, ec);
+    if (!fs::is_directory(destination, ec))
     {
         Notify(std::string("Не удалось создать папку ") + Shown(files_.dir), 2);
         return;
@@ -116,12 +131,17 @@ void App::TickFiles()
     }
     // Список — при первом заходе на страницу
     if (page_ == Page::Files && Connected() && !files_.listed && !files_.listReq && !dl_.running && HaveStatus() &&
-        snap_.status.sd == "READY")
+        (snap_.status.sd == "READY" || (DeviceProfile().IsTab5() && snap_.status.fileMediaCap)))
         RequestFileList();
 
     if (!dl_.running)
         return;
 
+    if(Connected() && dl_.connection!=snap_.connectSeq)
+    {
+        for(auto& job:dl_.jobs)if(job.state<2){job.state=3;job.msg="Прибор переподключён — повторите скачивание";}
+        dl_.running=false;link_->SetPollPaused(false);Notify("Скачивание остановлено при переподключении; данные другого прибора не подставляются",2);return;
+    }
     // Скорость
     std::uint64_t cur = dl_.doneBytes;
     if (dl_.current >= 0 && dl_.jobs[static_cast<std::size_t>(dl_.current)].sink)
@@ -197,7 +217,7 @@ void App::TickFiles()
             }
             return; // ждём переподключения
         }
-        const fs::path target = text::PathFromUtf8(files_.dir) / text::PathFromUtf8(j.f.name);
+        const fs::path target = text::PathFromUtf8(dl_.directory) / text::PathFromUtf8(j.f.name);
         std::error_code ec;
         if (!settings_.overwriteFiles && fs::exists(target, ec) && fs::file_size(target, ec) == j.f.size)
         {
@@ -208,7 +228,7 @@ void App::TickFiles()
             continue;
         }
         j.sink = std::make_shared<DownloadSink>(target, j.f.size);
-        j.req = link_->SendGet(j.f.name, j.sink);
+        j.req = link_->SendGet(dl_.medium.empty()?j.f.name:dl_.medium+" "+j.f.name, j.sink);
         j.state = 1;
         dl_.current = static_cast<int>(i);
         dl_.fileStartMs = now;
@@ -245,7 +265,15 @@ void App::PageFiles()
     // Состояние карты и кнопки
     if (BeginCard("##f_head", ImVec2(W, 0)))
     {
-        CardTitle("Файлы замеров на карте прибора");
+        CardTitle("Файлы замеров на приборе");
+        if(HaveStatus() && DeviceProfile().IsTab5() && s.fileMediaCap)
+        {
+            int medium=files_.medium;const char* media[]={"Авто (SD / USB)","SD","USB-накопитель"};
+            ImGui::BeginDisabled(dl_.running || files_.listReq || rec || PcRecording() || LevelRecording());
+            ImGui::SetNextItemWidth(S(190));if(ImGui::Combo("Носитель",&medium,media,3))SetFileMedium(medium);
+            ImGui::EndDisabled();
+            MutedWrapped("Выбранный носитель не подменяется другим. SD и USB скачиваются в отдельные подпапки.");
+        }
         std::string state = "—";
         if (HaveStatus())
         {
@@ -260,7 +288,7 @@ void App::PageFiles()
                     state += " · свободно " + text::MegaBytes(*s.sdFreeMb) + " из " + text::MegaBytes(s.sdTotalMb);
             }
         }
-        ImGui::TextUnformatted(("Карта памяти: " + state).c_str());
+        ImGui::TextUnformatted((files_.medium==2?"Выбран USB-накопитель; результат — по списку файлов":"SD: " + state).c_str());
         if (files_.listed && files_.listMsg.empty())
         {
             std::uint64_t total = 0;
@@ -271,7 +299,7 @@ void App::PageFiles()
                   text::Bytes(total).c_str());
         }
         ImGui::Spacing();
-        const bool canList = HaveStatus() && s.sd == "READY" && !dl_.running;
+        const bool canList = HaveStatus() && DeviceProfile().Known() && (s.sd == "READY" || (DeviceProfile().IsTab5() && s.fileMediaCap)) && !rec && !PcRecording() && !LevelRecording() && !dl_.running;
         if (Button(files_.listReq ? "Обновление…" : "Обновить список", BtnKind::Normal, ImVec2(0, 0),
                    !canList || files_.listReq != nullptr,
                    rec ? "Идёт запись замера" : dl_.running ? "Идёт скачивание" : "Карта не готова"))

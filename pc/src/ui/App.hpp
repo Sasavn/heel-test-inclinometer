@@ -24,6 +24,7 @@
 #include "../core/UserMethod.hpp"
 #include "../core/PcRecorder.hpp"
 #include "../core/PcSettings.hpp"
+#include "../core/DeviceProfile.hpp"
 #include "../core/HeelSteps.hpp"
 #include "../core/Project.hpp"
 #include "../fw/Firmware.hpp"
@@ -35,7 +36,8 @@ struct ImVec4;
 namespace ui
 {
 
-inline constexpr const char* kAppVersion = "1.8.7";
+inline constexpr const char* kAppVersion = "1.9.0";
+struct LevelUiState;
 
 enum class Page
 {
@@ -98,8 +100,24 @@ public:
     DeviceLink& Link() { return *link_; }
     SimDevice* Sim() { return sim_.get(); }
     void StartDemo(bool on);
+    void SetDemoPlatform(bool tab5);
+    bool SelectInstrument(const std::string& mode);
+    bool UsingLevel() const;
+    bool LevelRecording() const;
+    bool LevelImportFile(const std::string&);
+    bool LevelSaveReport(const std::string&);
+    bool LevelStartRecording(const std::string&);
+    void LevelStopRecording();
+    bool LevelBusy() const;
+    std::size_t LevelRows() const;
+    std::size_t LevelValidRows() const;
+    const std::string& LevelReportDir() const;
+    void LevelSetView(int);
+    void LevelSetUnit(int, double baselineMm = 1000);
     std::int64_t Now() const { return link_->NowMs(); }
     void RequestFileList();
+    bool SetFileMedium(int);
+    int FileMedium() const { return files_.medium; }
     void SelectAllFiles(bool on);
     void StartDownload();
     std::size_t FileCount() const { return files_.list.size(); }
@@ -292,8 +310,20 @@ private:
     void Notify(const std::string& text, int kind = 0, int ms = 4000, const std::string& folder = {});
     void MakeLink(bool demo);
     bool Connected() const { return snap_.state == LinkState::Connected; }
-    bool HaveStatus() const { return Connected() && snap_.haveStatus; }
-    bool Recording() const { return HaveStatus() && snap_.status.Recording(); }
+    bool HaveStatus() const { return device::FreshStatus(Connected(), snap_.haveStatus, snap_.statusAtMs, snap_.connectedAtMs, snap_.nowMs); }
+    bool Recording() const { return HaveStatus() && snap_.status.actualRec.value_or(snap_.status.Recording()); }
+    device::Profile DeviceProfile() const { return device::Detect(snap_.ver, snap_.status, HaveStatus() && snap_.haveVer); }
+    const char* DeviceOperationBlock(bool allowDeviceRecording = false) const;
+    void TickInstrument();
+    RequestPtr instrumentReq_;
+    std::string instrumentWanted_, instrumentMessage_;
+    std::uint64_t instrumentConnection_ = 0, instrumentStatus_ = 0;
+    std::int64_t instrumentDeadline_ = 0;
+    std::shared_ptr<LevelUiState> level_;
+    LevelUiState& LevelState();
+    void PageLevel();
+    void TickLevel();
+    void ResetLevelConnection();
 
     // Страницы (App*.cpp)
     void PageMeasure();
@@ -503,6 +533,7 @@ private:
         RequestPtr addrReq;
         std::int64_t addrDeadline = 0;
         std::uint64_t addrSeq = 0;
+        std::uint64_t addrConnection = 0;
         std::string addrMsg;
         int streamMs = 100;
     } set_;
@@ -519,6 +550,7 @@ private:
     };
     struct
     {
+        int medium = 0; // 0 auto, 1 SD, 2 USB
         std::vector<proto::FileEntry> list;
         std::map<std::string, bool> sel;
         std::map<std::string, std::string> note; // имя -> «скачан …» / ошибка
@@ -530,6 +562,8 @@ private:
     } files_;
     struct
     {
+        std::string medium, directory;
+        std::uint64_t connection = 0;
         std::vector<FileJob> jobs;
         int current = -1;
         bool running = false, cancel = false;
@@ -547,6 +581,7 @@ private:
         std::unique_ptr<pcrec::Recorder> rec;
         char dir[1024] = {};
         char label[96] = {};
+        std::string sourceIdentity;
         bool linkLost = false;   // связь пропала во время записи (перерыв)
         bool converting = false; // ждём книгу .xlsx
         std::vector<RxSample> buf;

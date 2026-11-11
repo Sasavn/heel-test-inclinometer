@@ -24,6 +24,7 @@
 #include <vector>
 
 #include "../core/Codec.hpp"
+#include "../core/Relative.hpp"
 #include "../core/Protocol.hpp"
 
 class SimDevice
@@ -44,6 +45,7 @@ public:
         bool card = true;                     // карта вставлена
         int motion = 1;                       // качка: 0 — штиль, 1 — слабая, 2 — сильная
         bool batteryLow = false;              // АКБ разряжена
+        bool usbCard = true;                  // Tab5 demo: second volume with mirrored sample fixtures
     };
 
     explicit SimDevice(std::uint32_t seed = 12345, std::time_t startTime = 0) : rng_(seed)
@@ -111,6 +113,18 @@ public:
     {
         std::lock_guard lock(m_);
         fwVersion_ = v;
+        modern_ = false;
+        InvalidateRelative(true);
+    }
+
+    // Explicit demo profile; legacy SetFwVersion remains available to old tests.
+    void SetProfile(bool tab5, const std::string& mode = "heel")
+    {
+        std::lock_guard lock(m_);
+        tab5_ = tab5; modern_ = true;
+        fwVersion_ = tab5 ? "1.8.5-esp32" : "1.6.0";
+        instrument_ = mode == "level" ? "level" : "heel";
+        InvalidateRelative(true);
     }
 
     // Для тестов: выбрасывать каждую k-ю строку R (прибор «не успел отправить»; 0 — не выбрасывать).
@@ -256,12 +270,15 @@ private:
 
     void ResetState(std::int64_t now)
     {
+        instrument_ = "heel";
+        relative_ = {};
         bootMs_ = now;
         simMs_ = now;
         nextPoll_ = now;
         nextRoll_ = now;
         for (auto& s : sens_)
             s = Sensor{};
+        InvalidateRelative(true);
         streamMs_ = 0;
         samplesOn_ = false;
         xfer_ = {};
@@ -419,6 +436,7 @@ private:
                     AppendRow(i, t);
                 }
         // samples: строка R на каждый свежий отсчёт (usb_cli_ext_samples)
+        UpdateRelative(t, fresh);
         if (samplesOn_ && !inDfu_ && t >= usbBackAt_)
             for (int i = 0; i < kSensors; i++)
                 if (fresh[i])
@@ -724,6 +742,72 @@ private:
 
     int Cpu() const { return 11 + static_cast<int>((simMs_ / 1000) % 3) + (xfer_.mode ? 6 : 0); }
 
+    void InvalidateRelative(bool resetOffset)
+    {
+        ++relative_.generation;
+        relative_.ready = false; relative_.quality = level::Warmup;
+        relative_.sequence = {}; relative_.time = {};
+        relative_.raw = relative_.value = relative_.ref = relative_.obj = {level::NaN, level::NaN};
+        if (resetOffset) { relative_.offset = {0, 0}; relative_.offsetValid = false; }
+        for (int i = 0; i < kSensors; ++i) relUsed_[i] = sens_[i].okCount;
+    }
+
+    void UpdateRelative(std::int64_t t, const bool* fresh)
+    {
+        const int r = relative_.reference - 2, o = relative_.object - 2;
+        if (!modern_ || instrument_ != "level" || !relative_.axesConfirmed ||
+            !fresh[r] || !fresh[o] || sens_[r].okCount <= relUsed_[r] || sens_[o].okCount <= relUsed_[o]) return;
+        relative_.ref = {sens_[r].rawX, sens_[r].rawY};
+        relative_.obj = {sens_[o].rawX, sens_[o].rawY};
+        for (int axis = 0; axis < 2; ++axis)
+        {
+            relative_.raw[axis] = relative_.obj[axis] - relative_.ref[axis];
+            relative_.value[axis] = relative_.raw[axis] - relative_.offset[axis];
+        }
+        // Synthetic receive provenance: both heads were freshly polled; 8 ms apart.
+        relative_.time = {static_cast<std::uint64_t>(std::max<std::int64_t>(0, t * 1000 - (r ? 4000 : 12000))),
+                          static_cast<std::uint64_t>(std::max<std::int64_t>(0, t * 1000 - (o ? 4000 : 12000)))};
+        relative_.skew = relative_.time[0] > relative_.time[1] ? relative_.time[0] - relative_.time[1] : relative_.time[1] - relative_.time[0];
+        relative_.sequence = {sens_[r].okCount, sens_[o].okCount};
+        relative_.ready = true; relative_.quality = 0;
+        for (int i = 0; i < kSensors; ++i) relUsed_[i] = sens_[i].okCount;
+    }
+
+    level::Status RelativeStatus(std::int64_t now) const
+    {
+        auto s = relative_; s.mode = instrument_;
+        const auto us = static_cast<std::uint64_t>(std::max<std::int64_t>(0, now)) * 1000;
+        for (int i = 0; i < 2; ++i) s.age[i] = us >= s.time[i] ? us - s.time[i] : 0;
+        if (!ctl_.sensorOn[s.reference - 2] || !ctl_.sensorOn[s.object - 2]) s.quality |= level::Missing;
+        if (!s.axesConfirmed) s.quality |= level::Axes;
+        if (!s.sequence[0] || !s.sequence[1]) s.quality |= level::Warmup;
+        if (s.age[0] > level::MaxAgeUs || s.age[1] > level::MaxAgeUs) s.quality |= level::Stale;
+        if (s.skew > level::MaxSkewUs) s.quality |= level::Skew;
+        if (instrument_ != "level") s.quality |= level::Warmup;
+        s.ready = s.ready && s.quality == 0;
+        if (!s.ready) s.raw = s.value = s.ref = s.obj = {level::NaN, level::NaN};
+        return s;
+    }
+
+    std::string RelativeJson(std::int64_t now) const
+    {
+        const auto s = RelativeStatus(now);
+        std::string j = "{\"mode\":\"" + instrument_ + "\"";
+        auto u = [&](const char* key, std::uint64_t value) { j += ",\"" + std::string(key) + "\":" + std::to_string(value); };
+        auto b = [&](const char* key, bool value) { j += ",\"" + std::string(key) + "\":" + (value ? "true" : "false"); };
+        auto f = [&](const char* key, double value) { j += ",\"" + std::string(key) + "\":" + (std::isfinite(value) ? Fx(value, 6) : "null"); };
+        u("reference", s.reference); u("object", s.object); b("ready", s.ready); u("quality", s.quality);
+        b("axes_confirmed", s.axesConfirmed); b("rel_offset", s.offsetValid);
+        u("skew_us", s.skew); u("ref_us", s.time[0]); u("obj_us", s.time[1]);
+        u("ref_seq", s.sequence[0]); u("obj_seq", s.sequence[1]); u("generation", s.generation);
+        b("hardware_sync", false); u("heads_supported", 2);
+        u("ref_age_us", s.age[0]); u("obj_age_us", s.age[1]); u("max_age_us", level::MaxAgeUs); u("max_skew_us", level::MaxSkewUs);
+        f("raw_x", s.raw[0]); f("raw_y", s.raw[1]); f("x", s.value[0]); f("y", s.value[1]);
+        f("offset_x", s.offset[0]); f("offset_y", s.offset[1]);
+        f("ref_x", s.ref[0]); f("ref_y", s.ref[1]); f("obj_x", s.obj[0]); f("obj_y", s.obj[1]);
+        return j + "}";
+    }
+
     std::string StatusJson(std::int64_t now) const
     {
         std::string j = "{\"v\":1,\"fw\":\"" + fwVersion_ + "\"";
@@ -732,6 +816,13 @@ private:
             j += ",\"" + std::string(k) + "\":" + (std::isfinite(v) ? Fx(v, dec) : std::string("null"));
         };
         auto b = [&](const char* k, bool v) { j += ",\"" + std::string(k) + "\":" + (v ? "true" : "false"); };
+        if (modern_)
+        {
+            j += tab5_ ? ",\"board\":\"tab5\",\"platform\":\"esp32p4\",\"proto\":2" : ",\"board\":\"stm32f411\",\"platform\":\"stm32f411\",\"proto\":2";
+            b("dual_mode_cap", true); b("instrument_control_cap", true); b("relative_data_cap", true); b("file_media_cap",tab5_);
+            j += ",\"instrument\":\"" + instrument_ + "\"";
+        }
+        else if (fwVersion_.find("-esp32") != std::string::npos) b("dual_mode_cap", true);
         auto st = [&](const char* k, const Stat& s) {
             j += ",\"" + std::string(k) + "\":[" + std::to_string(s.n) + "," + std::to_string(s.last) + "," +
                  std::to_string(s.min) + "," + std::to_string(s.Avg()) + "," + std::to_string(s.max) + "]";
@@ -917,9 +1008,41 @@ private:
         }
         if (cmd == "ver")
         {
-            Out("BWM427 inclinometer firmware v" + fwVersion_ + (fwVersion_.find("-esp32")!=std::string::npos ? " board=tab5 chip=esp32p4 proto=2" : ", build Oct  7 2026 21:05:00"));
+            Out("BWM427 inclinometer firmware v" + fwVersion_ +
+                (modern_ ? (tab5_ ? " board=tab5 chip=esp32p4 proto=2" : " board=stm32f411 chip=stm32f411 proto=2") :
+                 fwVersion_.find("-esp32")!=std::string::npos ? " board=tab5 chip=esp32p4 proto=2" : ", build Oct  7 2026 21:05:00"));
             Out("HAL 1.8.1, SYSCLK 96 MHz, UID 0034003A3133510B37363834");
             return Out("OK");
+        }
+        if (cmd == "instrument" || cmd == "relative")
+        {
+            if (!modern_) return Out("ERR unknown command");
+            if (cmd == "relative" && arg == "status") { Out(RelativeJson(now)); return Out("OK relative"); }
+            if (sdState_ == "RECORDING" || xfer_.mode || inDfu_) return Out("ERR busy recording/transfer/update");
+            if (cmd == "instrument")
+            {
+                if (arg != "heel" && arg != "level") return Out("ERR usage: instrument heel|level");
+                instrument_ = arg; InvalidateRelative(true); return Out("OK instrument");
+            }
+            if (arg.rfind("roles ", 0) == 0)
+            {
+                int ref = 0, obj = 0; char tail = 0;
+                if (std::sscanf(arg.c_str(), "roles %d %d %c", &ref, &obj, &tail) != 2 ||
+                    (ref != 2 && ref != 3) || (obj != 2 && obj != 3) || ref == obj) return Out("ERR relative roles");
+                relative_.reference = ref; relative_.object = obj;
+                relative_.axesConfirmed = false; InvalidateRelative(true);
+            }
+            else if (arg == "axes confirm" || arg == "axes reset")
+            { relative_.axesConfirmed = arg == "axes confirm"; InvalidateRelative(true); }
+            else if (arg == "zero")
+            {
+                const auto current = RelativeStatus(now);
+                if (!current.usable()) return Out("ERR relative not ready");
+                relative_.offset = current.raw; relative_.offsetValid = true; InvalidateRelative(false);
+            }
+            else if (arg == "reset") InvalidateRelative(true);
+            else return Out("ERR relative command");
+            return Out("OK relative");
         }
         if (cmd == "diag")
             return Diag(arg, now);
@@ -977,10 +1100,13 @@ private:
         }
         if (cmd == "files")
         {
-            if (!arg.empty())
+            const bool explicitMedia=modern_ && tab5_ && (arg=="sd" || arg=="usb");
+            const bool usb=explicitMedia && arg=="usb";
+            if (!arg.empty() && !explicitMedia)
                 return Out("ERR usage: files");
             xfer_ = {};
-            if (!CardReady())
+            if(usb && (!ctl_.usbCard || sdState_=="RECORDING"))return Out(ctl_.usbCard?"ERR busy recording":"ERR no usb medium");
+            if (!usb && !CardReady())
                 return;
             xfer_.mode = 1;
             xfer_.file = 0;
@@ -988,7 +1114,15 @@ private:
             return;
         }
         if (cmd == "get")
+        {
+            if(modern_ && tab5_ && (arg.rfind("sd ",0)==0 || arg.rfind("usb ",0)==0))
+            {
+                const bool usb=arg.rfind("usb ",0)==0;
+                if(usb && (!ctl_.usbCard || sdState_=="RECORDING"))return Out(ctl_.usbCard?"ERR busy recording":"ERR no usb medium");
+                return Get(arg.substr(usb?4:3),now,usb);
+            }
             return Get(arg, now);
+        }
         if (cmd == "samples" && HasSamples())
         {
             if (arg == "on" || arg.rfind("on ", 0) == 0)
@@ -1044,7 +1178,7 @@ private:
         return true;
     }
 
-    void Get(const std::string& arg, std::int64_t now)
+    void Get(const std::string& arg, std::int64_t now,bool usb=false)
     {
         if (arg == "abort")
         {
@@ -1068,7 +1202,7 @@ private:
             return Out("ERR usage: get <name> [offset] | get abort");
         if (name.find_first_of("/\\:*?\"<>|") != std::string::npos)
             return Out("ERR only files in the card root");
-        if (!CardReady())
+        if (!usb && !CardReady())
             return;
         std::size_t idx = files_.size();
         for (std::size_t i = 0; i < files_.size(); i++)
@@ -1375,6 +1509,10 @@ private:
     Controls ctl_;
 
     std::string fwVersion_ = "1.5";
+    bool modern_ = false, tab5_ = false;
+    std::string instrument_ = "heel";
+    level::Status relative_;
+    std::uint64_t relUsed_[kSensors]{};
     std::int64_t bootMs_ = 0, simMs_ = 0, nextPoll_ = 0, nextRoll_ = 0;
     std::int64_t usbBackAt_ = 0;
     bool inDfu_ = false;

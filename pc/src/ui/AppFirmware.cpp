@@ -26,12 +26,15 @@ void App::SetFirmwarePath(const std::string& path)
 bool App::StartFirmwareUpdate(bool force)
 {
     settings_.firmwarePath = fw_.path;
-    if (PcRecording())
+    if (PcRecording() || LevelRecording() || (!force && Recording()) || dl_.running || ota_.Busy() || recovery_.Busy() ||
+        (Connected() && (DeviceOperationBlock(force) || !DeviceProfile().IsStm32())))
     {
-        Notify("Обновление не начато: идёт запись на ПК — остановите её", 2, 6000);
+        const auto* why = Connected() ? DeviceOperationBlock(force) : nullptr;
+        Notify(std::string("Обновление не начато: ") + (why ? why : "идёт запись/передача или выбрана другая платформа"), 2, 6000);
         return false;
     }
     const bool ok = updater_.Start(fw_.path, force, link_->NowMs());
+    link_->SetControlLocks(PcRecording() || LevelRecording(), updater_.Busy() || ota_.Busy() || recovery_.Busy());
     if (!ok)
         Notify("Обновление не начато: " + updater_.Error(), 2, 6000);
     return ok;
@@ -39,11 +42,18 @@ bool App::StartFirmwareUpdate(bool force)
 
 void App::PageFirmware()
 {
-    const bool tab5Device=snap_.ver.board=="tab5" || snap_.ver.chip=="esp32p4";
-    if(tab5Device)espFirmware_=true;
-    if (espFirmware_ || tcpMode_ || tab5Device || ota_.Busy() || recovery_.Busy()) {
+    const auto profile = DeviceProfile();
+    if (Connected() && !profile.Known() && !updater_.Busy() && !ota_.Busy() && !recovery_.Busy())
+    {
+        CardTitle("Прошивка");
+        MutedWrapped("Дождитесь свежих ver/status с распознанной платформой. Обновление неизвестного прибора недоступно.");
+        return;
+    }
+    const bool tab5Device = Connected() && profile.IsTab5();
+    if (Connected() && profile.Known()) { espFirmware_ = tab5Device; if (!tab5Device) factoryMode_ = false; }
+    if (espFirmware_ || tab5Device || ota_.Busy() || recovery_.Busy()) {
         ImGui::BeginDisabled(updater_.Busy() || ota_.Busy() || recovery_.Busy());
-        if(!tab5Device && !tcpMode_ && ImGui::SmallButton("STM32 DFU"))espFirmware_=false;
+        if(!Connected() && ImGui::SmallButton("STM32 DFU"))espFirmware_=false;
         ImGui::EndDisabled();
         PageEspFirmware();return;
     }
@@ -93,7 +103,7 @@ void App::PageFirmware()
     {
         {FontScope f(fontH2);ImGui::TextUnformatted("Прошивка прибора сейчас");}
         ImGui::SameLine(0,S(8));
-        if(ImGui::SmallButton("ESP32..."))espFirmware_=true;
+        if(!Connected() && ImGui::SmallButton("Tab5…"))espFirmware_=true;
         ImGui::Spacing();
         if (BeginKV("##kvcur", S(110)))
         {
@@ -252,7 +262,8 @@ void App::PageFirmware()
                           : fw_.dfuPath.empty() ? "Не найден dfu-util.exe"
                           : !deviceOk        ? "Прибор не подключён"
                           : dl_.running      ? "Идёт скачивание файлов"
-                          : PcRecording()    ? "Идёт запись на ПК — остановите её на странице «Измерение»"
+                          : PcRecording() || LevelRecording() ? "Идёт запись — остановите её"
+                          : Connected() && DeviceOperationBlock() ? DeviceOperationBlock()
                                              : nullptr;
         if (!updater_.Busy())
         {
@@ -359,7 +370,7 @@ void App::PageEspFirmware()
         if (dialogs::PickFile(path, L"Прошивка Tab5 (*.bin)\0*.bin\0", L"Обновление прошивки Tab5")) SetFirmwarePath(path);
     }
     Hint("Для обновления нужен только файл приложения ESP32-P4, а не комплект первой прошивки.\nПроверяются плата, кристалл, протокол, версия, структура образа и SHA256.\nОбразы STM32, C6 и полного содержимого памяти не принимаются.");
-    const bool enabled = Connected() && snap_.ver.IsTab5() && !recovery_.Busy() && !PcRecording() && !dl_.running && !snap_.status.recMask;
+    const bool enabled = DeviceProfile().IsTab5() && !DeviceOperationBlock();
     ImGui::BeginDisabled(!enabled);
     if (ImGui::Button("Проверить и обновить"))
     {
@@ -401,7 +412,8 @@ void App::PageEspRecovery()
     Hint("Укажите порт физического Tab5, например COM5. USB Serial/JTAG ESP32-P4 имеет VID 303a.\nАвтоматического поиска ESP-плат нет. ROM подтверждает кристалл, ревизию и настройки защиты,\nно не модель платы: идентификатора Tab5 в eFuse нет. Прибор выбирает пользователь.");
     ImGui::Checkbox("Режим загрузчика уже включён", &manualRom_);
     Hint("Если флажок установлен, заранее включите загрузчик вручную кнопками BOOT и сброса.\nЕсли снят — программа запросит переход в загрузчик линиями DTR/RTS через USB Serial/JTAG.\nФизическая проверка этого перехода ещё не выполнена.");
-    const bool ready = !PcRecording() && !dl_.running && !ota_.Busy() && !opt_.noHardware && !snap_.demo && !(Connected() && snap_.status.Recording());
+    const bool ready = !PcRecording() && !LevelRecording() && !dl_.running && !ota_.Busy() && !updater_.Busy() &&
+        !opt_.noHardware && !snap_.demo && (!Connected() || (DeviceProfile().IsTab5() && !DeviceOperationBlock()));
     ImGui::BeginDisabled(!ready);
     if (ImGui::Button("Проверить и записать")) ImGui::OpenPopup("Записать комплект Tab5?");
     ImGui::EndDisabled();
@@ -412,7 +424,7 @@ void App::PageEspRecovery()
         ImGui::TextWrapped("Рабочее соединение закроется. Программа проверит и запишет четыре части комплекта, сохранив настройки прибора.");
         ImGui::TextWrapped("После обрыва повторите запись комплекта целиком. Физическая проверка первой прошивки и восстановления ещё не выполнена.");
         ImGui::PopTextWrapPos();
-        if (ImGui::Button("Записать и проверить"))
+        if (ImGui::Button("Записать и проверить") && ready)
         {
             recovery_.Start(link_.get(), factoryManifest_, recoveryPort_, manualRom_);
             ImGui::CloseCurrentPopup();

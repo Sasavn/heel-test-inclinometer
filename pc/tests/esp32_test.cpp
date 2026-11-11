@@ -156,7 +156,8 @@ class Peer : public IConnection
         }
         else if (a == "status")
         {
-            reply("{\"v\":1,\"sens\":[],\"bat_present\":false}");
+            reply("{\"v\":1,\"sens\":[],\"bat_present\":false,\"board\":\"tab5\","
+                  "\"platform\":\"esp32p4\",\"proto\":2,\"fw\":\"" + version + "\",\"xfer\":\"idle\"}");
             reply("OK");
         }
         else
@@ -243,6 +244,7 @@ struct Rig
         for (int i = 0; i < ms; i += 10)
         {
             now += 10;
+            link.SetControlLocks(false, ota.Busy());
             link.Step(now);
             ota.Tick(now);
         }
@@ -422,6 +424,7 @@ static void ProductionIntegration(const char *dll)
         for (int i = 0; i < ms; i += 10)
         {
             now += 10;
+            link.SetControlLocks(false, ota.Busy());
             link.Step(now);
             ota.Tick(now);
         }
@@ -480,8 +483,14 @@ int main(int argc, char **argv)
         Rig r;
         CHECK(r.link.IsConnected());
         CHECK(r.Start());
+        r.link.SetControlLocks(false, true);
+        for (const char* cmd : {"zero", "rec on", "reset", "ota begin tab5 esp32p4 2 x 1 x", "ota chunk 0 00", "ota end", "ota abort"})
+        {
+            const auto denied = r.link.Send(cmd, Origin::User);
+            CHECK(denied->done && !denied->ok);
+        }
         r.Finish();
-        CHECK(r.ota.GetState() == fw::EspOta::State::WaitReboot);
+        CHECK_MSG(r.ota.GetState() == fw::EspOta::State::WaitReboot, "%s", r.ota.Message().c_str());
         CHECK(r.peer->bytes == good);
         CHECK(r.peer->bootSlot == 1);
         r.Reboot();

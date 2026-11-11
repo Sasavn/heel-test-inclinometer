@@ -7,7 +7,7 @@ if(WIN32 AND VCPKG_TARGET_TRIPLET MATCHES "-static(-|$)")
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 endif()
 
-project(Krenomer VERSION 1.8.7 LANGUAGES CXX RC)
+project(Krenomer VERSION 1.9.0 LANGUAGES CXX RC)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -61,6 +61,7 @@ endif()
 # Интерфейс (страницы): программа и стенд снимков.
 add_library(krenomer_ui STATIC
     src/ui/App.cpp
+    src/ui/AppLevel.cpp
     src/ui/AppMeasure.cpp
     src/ui/AppRecord.cpp
     src/ui/AppDiag.cpp
@@ -122,7 +123,7 @@ endif()
 # (демо dfu-util), обработка опыта кренования (process_test), стенд снимков экрана без окна и видеокарты (ui_shots).
 if(KRENOMER_BUILD_TESTS)
     enable_testing()
-    foreach(_t tcp_transport_test clock_sync_test protocol_test link_test firmware_test process_test esp32_test esprom_test recovery_test export_target_test report_grid_test reverse_regression_test plateau_detector_test two_sensor_report_test)
+    foreach(_t tcp_transport_test clock_sync_test protocol_test link_test firmware_test process_test esp32_test esprom_test recovery_test export_target_test report_grid_test reverse_regression_test plateau_detector_test two_sensor_report_test relative_test device_profile_test)
         add_executable(${_t} tests/${_t}.cpp)
         target_include_directories(${_t} PRIVATE src tests)
         target_link_libraries(${_t} PRIVATE krenomer_core)

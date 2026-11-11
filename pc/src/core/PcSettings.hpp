@@ -20,6 +20,8 @@ struct PcSettings
     std::string downloadDir;  // "" — Документы\Регистратор крена
     int chartWindowS = 60;    // окно графиков, с
     int streamMs = 100;       // период потока stream, мс
+    bool demoTab5 = false;
+    std::string demoInstrument = "heel"; // offline preview only; connected status is authoritative
     bool darkTheme = false;
     std::string firmwarePath; // последний выбранный .bin
     std::string port;         // "" — автоматически (0483:5740)
@@ -122,6 +124,8 @@ struct PcSettings
             port = kv["port"];
         chartWindowS = num("chart_window_s", chartWindowS, 10, 600);
         streamMs = num("stream_ms", streamMs, 50, 1000);
+        demoTab5 = flag("demo_tab5", demoTab5);
+        if (kv.count("demo_instrument")) demoInstrument = kv["demo_instrument"] == "level" ? "level" : "heel";
         darkTheme = flag("dark_theme", darkTheme);
         overwriteFiles = flag("overwrite_files", overwriteFiles);
         termShowStream = flag("term_show_stream", termShowStream);
@@ -236,6 +240,7 @@ struct PcSettings
             out << "port=" << port << "\n";
             out << "chart_window_s=" << chartWindowS << "\n";
             out << "stream_ms=" << streamMs << "\n";
+            out << "demo_tab5=" << (demoTab5 ? 1 : 0) << "\ndemo_instrument=" << demoInstrument << "\n";
             out << "dark_theme=" << (darkTheme ? 1 : 0) << "\n";
             out << "overwrite_files=" << (overwriteFiles ? 1 : 0) << "\n";
             out << "term_show_stream=" << (termShowStream ? 1 : 0) << "\n";

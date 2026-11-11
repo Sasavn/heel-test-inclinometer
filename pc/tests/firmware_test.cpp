@@ -98,6 +98,8 @@ static void TestUpdateDemo()
     auto run = [&](std::int64_t ms) {
         for (std::int64_t e = t + ms; t < e; t += 20)
         {
+            link.SetControlLocks(false, up.Busy());
+            link.SetPollPaused(up.Busy());
             link.Step(t);
             up.Tick(t);
         }
@@ -107,6 +109,12 @@ static void TestUpdateDemo()
     const fs::path img = WriteTemp(FakeImage(81920, "1.4"), L"krenomer_test_fw.bin");
     CHECK(up.Start(text::PathToUtf8(img), false, t));
     CHECK(up.GetStep() == fw::Updater::Step::Boot);
+    link.SetControlLocks(false, true);
+    for (const char* cmd : {"zero", "rec on", "boot force"})
+    {
+        const auto denied = link.Send(cmd, Origin::User);
+        CHECK(denied->done && !denied->ok);
+    }
     bool sawDfu = false, sawDownload = false, sawReadback = false;
     for (int i = 0; i < 3000 && up.Busy(); i++)
     {

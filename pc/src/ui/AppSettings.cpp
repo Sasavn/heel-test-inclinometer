@@ -72,8 +72,10 @@ double DeviceValue(const proto::DeviceStatus& s, int i)
     }
 }
 
-bool Valid(int i, double v)
+bool Valid(int i, double v, const device::Profile& profile)
 {
+    if (i == 2) return profile.ValidGap(v);
+    if (i == 7 && !profile.Setting("batalarm")) return false;
     const auto& f = kFields[i];
     const double eps = 0.5 * std::pow(10.0, -f.decimals);
     if (!std::isfinite(v) || v < f.min - eps || v > f.max + eps)
@@ -87,10 +89,10 @@ bool Same(int i, double a, double b)
 }
 
 // «1…50», «0.01…0.99»
-std::string RangeText(int i)
+std::string RangeText(int i, const device::Profile& profile)
 {
     const auto& f = kFields[i];
-    return proto::Fixed(f.min, f.decimals) + "…" + proto::Fixed(f.max, f.decimals);
+    return proto::Fixed(i == 2 ? profile.MinGap() : f.min, f.decimals) + "…" + proto::Fixed(f.max, f.decimals);
 }
 
 std::string SetCommand(int i, const char* key, double v)
@@ -116,14 +118,14 @@ void App::EditSetting(const std::string& name, double value)
 
 void App::ApplySettings()
 {
-    if (!HaveStatus() || !set_.applying.empty())
+    if (DeviceOperationBlock())
         return;
     set_.applyLog.clear();
     set_.applyOk = true;
     for (int i = 0; i < 9; i++)
     {
         auto& f = set_.f[i];
-        if (f.edited && Valid(i, f.value) && !Same(i, f.value, DeviceValue(snap_.status, i)))
+        if (f.edited && DeviceProfile().Setting(f.key) && Valid(i, f.value, DeviceProfile()) && !Same(i, f.value, DeviceValue(snap_.status, i)))
             set_.applying.emplace_back(i, link_->Send(SetCommand(i, f.key, f.value)));
         else
             f.edited = false;
@@ -132,7 +134,7 @@ void App::ApplySettings()
 
 void App::SyncTime()
 {
-    if (!Connected() || set_.timeReq)
+    if (DeviceOperationBlock())
         return;
     // A cached capability from a previous Tab5 must never reach a reconnected STM32.
     if (!clockpc::CurrentStatus(snap_.haveStatus, snap_.statusAtMs, snap_.connectedAtMs))
@@ -155,9 +157,11 @@ void App::SyncTime()
 
 void App::StartAddressChange(int from, int to)
 {
+    if (DeviceOperationBlock() || !DeviceProfile().AddressChange() || from == to || from < 1 || from > 247 || to < 1 || to > 247) return;
     set_.addrFrom = from;
     set_.addrTo = to;
     set_.addrPhase = 1;
+    set_.addrConnection = snap_.connectSeq;
     set_.addrMsg.clear();
     set_.addrReq = link_->Send(Fmt("addr %d %d", from, to));
 }
@@ -165,6 +169,11 @@ void App::StartAddressChange(int from, int to)
 void App::TickSettings()
 {
     const std::int64_t now = link_->NowMs();
+    if ((set_.addrPhase == 1 || set_.addrPhase == 2) && (!Connected() || set_.addrConnection != snap_.connectSeq))
+    {
+        set_.addrPhase = 4; set_.addrReq.reset();
+        set_.addrMsg = "Смена адреса не подтверждена: соединение изменилось";
+    }
     // Применение настроек
     if (!set_.applying.empty() && std::all_of(set_.applying.begin(), set_.applying.end(),
                                               [](const auto& a) { return a.second->done.load(); }))
@@ -228,7 +237,7 @@ void App::TickSettings()
     }
     if (set_.addrPhase == 2)
     {
-        if (snap_.statusSeq > set_.addrSeq && snap_.haveStatus && snap_.status.svc != "BUSY")
+        if (snap_.statusSeq > set_.addrSeq && HaveStatus() && snap_.status.svc != "BUSY")
         {
             if (snap_.status.svc == "OK")
             {
@@ -254,6 +263,31 @@ void App::TickSettings()
 
 void App::PageSettings()
 {
+    if (!Connected() && BeginCard("##instrument"))
+    {
+        CardTitle("Прибор");
+        Muted("Платформа: %s", Connected() ? DeviceProfile().Name() : settings_.demoTab5 ? "Tab5 (демо)" : "STM32 (демо)");
+        int mode = UsingLevel() ? 1 : 0;
+        const bool allowed = !Connected() || (device::InstrumentControl(DeviceProfile(), snap_.status) && !DeviceOperationBlock());
+        ImGui::BeginDisabled(!allowed);
+        static const char* labels[] = {"Креномер", "Угломер"};
+        static const int values[] = {0, 1};
+        if (Segmented("instrument", &mode, labels, values, 2)) SelectInstrument(mode ? "level" : "heel");
+        ImGui::EndDisabled();
+        if (Connected() && HaveStatus() && !device::InstrumentControl(DeviceProfile(), snap_.status))
+            MutedWrapped("Для выбора угломера обновите прошивку своей платформы.");
+        if (!instrumentMessage_.empty()) MutedWrapped(instrumentMessage_.c_str());
+        if (!Connected() || snap_.demo)
+        {
+            int platform = settings_.demoTab5 ? 1 : 0;
+            static const char* platforms[] = {"STM32 · демо", "Tab5 · демо"};
+            ImGui::BeginDisabled(PcRecording() || LevelRecording() || Recording() || updater_.Busy() || ota_.Busy() || recovery_.Busy() || dl_.running);
+            if (Segmented("demo_platform", &platform, platforms, values, 2)) SetDemoPlatform(platform == 1);
+            ImGui::EndDisabled();
+        }
+    }
+    if (!Connected()) EndCard();
+    if (!Connected()) ImGui::Dummy(ImVec2(0, S(6)));
     if (!Connected())
     {
         NotConnectedPanel("Здесь — настройки прибора, часы, ноль и смена Modbus-адреса датчика.");
@@ -303,12 +337,44 @@ void App::PageSettings()
 
 void App::SettingsDeviceCard()
 {
-    const bool have = snap_.haveStatus;
+    const bool have = HaveStatus();
+    const auto profile = DeviceProfile();
     if (BeginCard("##s_dev"))
     {
-        CardTitle("Настройки прибора",
-                  "Меняются так же, как из меню прибора, и сохраняются в его флеш-памяти через 3 с (во время записи "
-                  "замера — после её остановки).");
+        // Keep the instrument choice in the existing card header: the settings
+        // page must still fit at 1280x800 after adding the universal workflow.
+        { FontScope f(fontH2); ImGui::AlignTextToFramePadding(); ImGui::TextUnformatted("Прибор"); }
+        ImGui::SameLine(0, S(12));
+        if (snap_.demo)
+        {
+            int platform = settings_.demoTab5 ? 1 : 0;
+            const char* platforms[] = {"STM32 · демо", "Tab5 · демо"};
+            ImGui::BeginDisabled(DeviceOperationBlock() != nullptr);
+            ImGui::SetNextItemWidth(S(135));
+            if (ImGui::Combo("##demo_platform", &platform, platforms, 2)) SetDemoPlatform(platform == 1);
+            ImGui::EndDisabled();
+        }
+        else
+        {
+            ImGui::AlignTextToFramePadding();
+            Muted("%s", profile.Name());
+        }
+        if (ImGui::GetContentRegionAvail().x < S(175)) ImGui::NewLine();
+        else ImGui::SameLine(0, S(12));
+        int mode = UsingLevel() ? 1 : 0;
+        const char* labels[] = {"Креномер", "Угломер"};
+        const bool modeAllowed = device::InstrumentControl(profile, snap_.status) && !DeviceOperationBlock();
+        ImGui::BeginDisabled(!modeAllowed);
+        ImGui::SetNextItemWidth(S(140));
+        if (ImGui::Combo("##instrument", &mode, labels, 2)) SelectInstrument(mode ? "level" : "heel");
+        ImGui::EndDisabled();
+        if (!device::InstrumentControl(profile, snap_.status))
+            Hint("Эта прошивка поддерживает только креномер. Для выбора угломера установите новую прошивку своей платформы.");
+        MutedWrapped("Настройки сохраняются в приборе через 3 с; во время записи — после её остановки.");
+        if (!instrumentMessage_.empty()) MutedWrapped(instrumentMessage_.c_str());
+        const char* blocked = DeviceOperationBlock();
+        if (blocked) MutedWrapped(blocked);
+        ImGui::BeginDisabled(blocked != nullptr);
         int changed = 0;
         bool invalid = false;
         static const char* groups[] = {"Опрос и фильтр", "Оценка качки (ГОТОВ / КАЧКА)", "Питание и экран"};
@@ -332,6 +398,7 @@ void App::SettingsDeviceCard()
             {
                 auto& fld = set_.f[i];
                 const auto& info = kFields[i];
+                if (i == 7 && !profile.Setting("batalarm")) continue;
                 const double dev = have ? DeviceValue(snap_.status, i) : info.def;
                 if (!fld.edited)
                     fld.value = dev;
@@ -341,7 +408,7 @@ void App::SettingsDeviceCard()
                 ImGui::TextUnformatted(info.label);
                 Hint(info.hint);
                 ImGui::TableNextColumn();
-                const bool ok = Valid(i, fld.value);
+                const bool ok = Valid(i, fld.value, profile);
                 invalid |= fld.edited && !ok;
                 if (!ok)
                 {
@@ -395,7 +462,7 @@ void App::SettingsDeviceCard()
                 FontScope f(fontSmall);
                 ImGui::SetCursorPosY(ImGui::GetCursorPosY() + S(3));
                 if (!ok)
-                    TextColored(pal.err, "допустимо %s", RangeText(i).c_str());
+                    TextColored(pal.err, "допустимо %s", RangeText(i, profile).c_str());
                 else if (fld.edited && !Same(i, fld.value, dev))
                 {
                     changed++;
@@ -405,7 +472,7 @@ void App::SettingsDeviceCard()
                         TextColored(pal.warn, "на приборе: %.*f", info.decimals, dev);
                 }
                 else if (i != 8)
-                    Muted("%s", RangeText(i).c_str());
+                    Muted("%s", RangeText(i, profile).c_str());
             }
             ImGui::EndTable();
         }
@@ -426,6 +493,7 @@ void App::SettingsDeviceCard()
                 set_.f[i].value = kFields[i].def;
                 set_.f[i].edited = true;
             }
+        ImGui::EndDisabled();
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("Подставить заводские значения (их ещё нужно применить)");
         if (busy)
@@ -456,7 +524,8 @@ void App::SettingsClockCard()
     if (BeginCard("##s_clock"))
     {
         CardTitle("Часы и ноль");
-        const bool have = Connected() && clockpc::CurrentStatus(snap_.haveStatus, snap_.statusAtMs, snap_.connectedAtMs);
+        const bool have = HaveStatus();
+        const bool blocked = DeviceOperationBlock() != nullptr;
         if (BeginKV("##kvclk", S(150)))
         {
             KV("Часы прибора", have ? snap_.status.time + (snap_.status.rtc ? "  (модуль RTC)" : "  (RTC недоступен)") : "—");
@@ -481,7 +550,7 @@ void App::SettingsClockCard()
             }
             EndKV();
         }
-        if (Button("Синхронизировать время с ПК", BtnKind::Primary, ImVec2(0, 0), !have || set_.timeReq != nullptr))
+        if (Button("Синхронизировать время с ПК", BtnKind::Primary, ImVec2(0, 0), blocked))
             SyncTime();
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("Без интернета: время ПК → прибор и модуль RTC по USB или локальному TCP; пояс — при поддержке прибора");
@@ -497,10 +566,10 @@ void App::SettingsClockCard()
              "сохраняется при выключении прибора — задаётся на каждом замере.");
         ImGui::SameLine(0, S(14));
         if (ZeroRecordingWarning()) TextColored(pal.warn, "Идёт запись: установка нуля изменит данные в файлах.");
-        if (Button("Ноль", BtnKind::Normal, ImVec2(S(96), 0), !have || set_.zeroReq != nullptr))
+        if (Button("Ноль", BtnKind::Normal, ImVec2(S(96), 0), blocked))
             set_.zeroReq = link_->Send("zero");
         ImGui::SameLine(0, S(8));
-        if (Button("Сбросить", BtnKind::Normal, ImVec2(S(110), 0), !have || set_.zeroReq != nullptr))
+        if (Button("Сбросить", BtnKind::Normal, ImVec2(S(110), 0), blocked))
             set_.zeroReq = link_->Send("zero reset");
     }
     EndCard();
@@ -511,6 +580,11 @@ void App::SettingsAddrCard()
     if (BeginCard("##s_addr"))
     {
         CardTitle("Смена Modbus-адреса датчика");
+        if (!DeviceProfile().AddressChange())
+        {
+            MutedWrapped("Смена адреса недоступна на этой платформе.");
+            EndCard(); return;
+        }
         Banner(pal.warn, pal.warnBg, "⚠",
                "На шине RS485 оставьте ТОЛЬКО датчик, адрес которого меняется, — остальные отключите! Новый датчик "
                "обычно имеет адрес 1; прибор опрашивает адреса 2 (Д2) и 3 (Д3).");
@@ -534,7 +608,7 @@ void App::SettingsAddrCard()
         if (busy)
             ImGui::EndDisabled();
         const bool same = set_.addrFrom == set_.addrTo;
-        const char* why = !HaveStatus()       ? "Нет связи с прибором"
+        const char* why = DeviceOperationBlock() ? DeviceOperationBlock()
                           : Recording()       ? "Идёт запись замера — остановите её тумблером"
                           : same              ? "Адреса должны различаться"
                           : !set_.addrOnlyOne ? "Подтвердите, что на шине только этот датчик"
@@ -598,7 +672,7 @@ void App::SettingsPcCard()
         { FontScope f(fontH2); ImGui::TextUnformatted("Программа на ПК"); }
         ImGui::SameLine();
     bool sync = HaveStatus() && snap_.status.recSync.value_or(false);
-    ImGui::BeginDisabled(!HaveStatus() || !snap_.status.recSyncCap || !snap_.status.recSync.has_value() || syncSettingReq_ != nullptr);
+    ImGui::BeginDisabled(DeviceOperationBlock() || !snap_.status.recSyncCap || !snap_.status.recSync.has_value());
     { FontScope f(fontSmall);
         if (ui::Checkbox("Синхронизация записи на устройствах", &sync)) RequestRecordSync(sync);
     }

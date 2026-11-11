@@ -1,8 +1,8 @@
 #pragma once
 // COM-порт прибора (USB CDC, ST Virtual COM Port VID:PID 0483:5740) через CSerialPort.
 //
-// Автоматически пробуются только порты с VID:PID 0483:5740 (выбранный пользователем — любой). VID:PID у ST общий,
-// поэтому «наш» порт подтверждает DeviceLink ответом на ver (BWM427…); чужой — Reject(): не трогать 30 с.
+// Автоматически пробуются STM32 0483:5740 и USB Serial/JTAG ESP32 303a:1001.
+// VID:PID — только кандидат: DeviceLink подтверждает ver/status; возможности — по свежему профилю.
 // Порт пропал (прибор выдернули или он ушёл в загрузчик) — событие hot-plug или ошибка записи закрывают его;
 // дальше поиск раз в секунду, и прибор подхватывается сам после перезагрузки или перепрошивки.
 // Открытие/закрытие — только из Tick() (поток связи) и деструктора; события hot-plug лишь ставят флаги.
@@ -23,6 +23,7 @@
 #include "Connection.hpp"
 #include "LineSplitter.hpp"
 #include "../core/TextUtil.hpp"
+#include "../core/DeviceProfile.hpp"
 
 class SerialConnection final : public IConnection,
                                public itas109::CSerialPortListener,
@@ -132,7 +133,7 @@ public:
             return;
         nextOpenMs_ = now + 1000;
 
-        // Кандидаты: выбранный порт или все порты 0483:5740, последний удачный — первым.
+        // Кандидаты: выбранный порт или USB STM32/Tab5, последний удачный — первым.
         std::vector<std::string> candidates;
         {
             std::lock_guard lock(infoMutex_);
@@ -150,7 +151,7 @@ public:
         }
         if (candidates.empty())
         {
-            SetProblem(choice_.empty() ? "прибор не найден: нет COM-порта с VID:PID 0483:5740 (подключите USB)"
+            SetProblem(choice_.empty() ? "прибор не найден: нет USB-порта STM32 или Tab5 (подключите USB)"
                                        : "порт " + choice_ + " не найден");
             return;
         }
@@ -216,8 +217,8 @@ public:
             retryAt_[name] = !choice_.empty() ? now + 3000 : giveUp ? INT64_MAX : now + 30000;
             if (Same(name, lastGood_))
                 lastGood_.clear();
-            SetProblem(name + (foreign ? " (0483:5740) — другое устройство, не регистратор крена"
-                                       : " (0483:5740) не отвечает на команды — пробую снова через 30 с"));
+            SetProblem(name + (foreign ? " — другое устройство, не BWM427"
+                                       : " не отвечает на команды — пробую снова через 30 с"));
         }
     }
 
@@ -281,7 +282,7 @@ private:
             p.description = info.description;
 #endif
             p.hwid = info.hardwareId;
-            p.ours = Same(p.hwid, kHwId);
+            p.ours = device::UsbCandidate(p.hwid);
             list.push_back(std::move(p));
         }
         std::sort(list.begin(), list.end(), [](const PortInfo& a, const PortInfo& b) {

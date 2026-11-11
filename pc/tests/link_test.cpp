@@ -691,7 +691,14 @@ static CsvCheck CheckCsv(const fs::path& p)
 static void TestPcRecording()
 {
     SECTION("запись на ПК: CSV по датчикам, ноль посреди записи, обрыв связи, перезагрузка, .xlsx");
-    const fs::path dir = fs::temp_directory_path() / L"krenomer_pcrec_test";
+    // x64/x86 suites may run concurrently. Never delete or reuse another
+    // process's recording files; the no-overwrite assertions need a fresh root.
+#ifdef _WIN32
+    const std::string runId = std::to_string(GetCurrentProcessId());
+#else
+    const std::string runId = std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+#endif
+    const fs::path dir = fs::temp_directory_path() / ("krenomer_pcrec_test_" + runId);
     std::error_code ec;
     fs::remove_all(dir, ec);
     Rig r(3);
@@ -791,7 +798,7 @@ static void TestPcRecording()
     rec2.Stop(wall0 + 1000, r.t + 1000);
     CHECK(rec2.TotalRows() == 1 && fs::exists(dir / text::PathFromUtf8(pcrec::CsvName(rec2.Base(), 2)), ec));
     CHECK(CheckCsv(d2).rows + CheckCsv(d3).rows == rowsAll); // прежние файлы целы
-    // Файлы оставлены для проверки openpyxl (scratch-скрипт): %TEMP%\krenomer_pcrec_test
+    // Файлы оставлены для проверки openpyxl (scratch-скрипт): %TEMP%\krenomer_pcrec_test_<process>
 }
 
 static void TestThreaded()

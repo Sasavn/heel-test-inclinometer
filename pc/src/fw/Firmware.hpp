@@ -462,7 +462,7 @@ public:
         if (!link_->IsConnected())
             return Fail("прибор не подключён: подключите его по USB (или переведите в загрузчик кнопками BOOT0 + NRST)");
         Info(std::string("перевод прибора в загрузчик: ") + (force ? "boot force" : "boot"));
-        bootReq_ = link_->Send(force ? "boot force" : "boot", Origin::App, 4000);
+        bootReq_ = link_->Send(force ? "boot force" : "boot", Origin::Firmware, 4000);
         Go(Step::Boot, now, 6000);
         return true;
     }
@@ -598,7 +598,8 @@ public:
         case Step::WaitDevice:
         {
             const auto s = link_->Snapshot();
-            if (s.state == LinkState::Connected && s.connectSeq != startConnectSeq_ && s.haveVer)
+            if (s.state == LinkState::Connected && s.connectSeq != startConnectSeq_ && s.haveVer &&
+                s.haveStatus && s.statusAtMs >= s.connectedAtMs)
             {
                 newVersion_ = s.ver.version;
                 progress_ = 1.0;

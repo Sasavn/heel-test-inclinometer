@@ -5,6 +5,7 @@
 #include <limits>
 
 #include "../core/Download.hpp"
+#include "../core/DeviceProfile.hpp"
 
 namespace
 {
@@ -72,6 +73,12 @@ void DeviceLink::Run()
 bool DeviceLink::IsDemo() const
 {
     return conn_->IsDemo();
+}
+
+bool DeviceLink::IsConnected() const
+{
+    std::lock_guard lock(m_);
+    return state_.load() == LinkState::Connected && haveVer_ && haveStatus_ && statusAt_ >= connectedAt_;
 }
 
 void DeviceLink::Step(std::int64_t now)
@@ -199,7 +206,7 @@ void DeviceLink::Step(std::int64_t now)
         if (state_.load() == LinkState::Connected && !inFlight_ && queue_.empty() && !expectAbortReply_)
         {
             const int period = now < fastPollUntil_ ? fastPollMs_ : 1000;
-            if (!pollPaused_ && now - lastStatusReq_ >= period)
+            if ((!pollPaused_ || !haveStatus_) && now - lastStatusReq_ >= period)
             {
                 auto r = std::make_shared<Request>();
                 r->cmd = "status";
@@ -251,16 +258,24 @@ void DeviceLink::Step(std::int64_t now)
             if (state_.load() == LinkState::Connected || head == probe_)
             {
                 queue_.pop_front();
-                inFlight_ = head;
-                head->deadline = now + head->timeoutMs;
-                if (head->cmd == "samples on" || head->cmd == "samples off")
+                if (const auto why = ControlBlockLocked(head->cmd, head->origin); !why.empty())
                 {
-                    rawSequenceActive_ = false;
-                    std::fill(std::begin(haveRawN_), std::end(haveRawN_), false);
+                    LogLocked('!', "не отправлено: " + head->cmd + ": " + why, head->origin, now);
+                    Complete(head, false, proto::StartsWith(why, "ERR ") ? why : "не отправлено: " + why, now);
                 }
-                toWrite += head->cmd + "\r\n";
-                cmdsTx_++;
-                LogLocked('>', head->cmd, head->origin, now);
+                else
+                {
+                    inFlight_ = head;
+                    head->deadline = now + head->timeoutMs;
+                    if (head->cmd == "samples on" || head->cmd == "samples off")
+                    {
+                        rawSequenceActive_ = false;
+                        std::fill(std::begin(haveRawN_), std::end(haveRawN_), false);
+                    }
+                    toWrite += head->cmd + "\r\n";
+                    cmdsTx_++;
+                    LogLocked('>', head->cmd, head->origin, now);
+                }
             }
         }
         if (!open && (!queue_.empty() || inFlight_))
@@ -280,6 +295,10 @@ void DeviceLink::Step(std::int64_t now)
 
 void DeviceLink::OnOpened(std::int64_t now)
 {
+    ver_ = {}; haveVer_ = false;
+    status_ = {}; haveStatus_ = false; statusAt_ = 0;
+    sample_ = {}; sampleAt_ = 0;
+    samplesQueue_.clear();
     state_ = LinkState::Probing;
     probeAt_ = now + 200;
     probeTries_ = 0;
@@ -314,6 +333,10 @@ void DeviceLink::OnClosed(std::int64_t now, const std::string& why)
         historyGap_ = true;
     }
     FailAll("связь с прибором потеряна", true);
+    ver_ = {}; haveVer_ = false;
+    status_ = {}; haveStatus_ = false; statusAt_ = 0;
+    sample_ = {}; haveSample_ = false; sampleAt_ = 0;
+    samplesQueue_.clear();
     probe_.reset();
     expectAbortReply_ = false;
     samplesOn_ = false;
@@ -394,15 +417,14 @@ void DeviceLink::AfterReply(const RequestPtr& r, std::int64_t now)
             queue_.push_back(s);
             lastStreamCmd_ = now;
             streamDirty_ = false;
-            if (!pollPaused_)
-            {
-                auto st = std::make_shared<Request>();
-                st->cmd = "status";
-                st->origin = Origin::Poll;
-                st->timeoutMs = 2000;
-                queue_.push_back(st);
-                lastStatusReq_ = now;
-            }
+            // The first status belongs to the handshake, even while an updater
+            // has paused periodic polling. Never reuse the pre-reboot snapshot.
+            auto st = std::make_shared<Request>();
+            st->cmd = "status";
+            st->origin = Origin::Poll;
+            st->timeoutMs = 2000;
+            queue_.push_back(st);
+            lastStatusReq_ = now;
         }
         else if (r->timedOut && ++probeTries_ < 3)
             probeAt_ = now + 300;
@@ -638,6 +660,50 @@ void DeviceLink::HandleLine(const std::string& line, std::int64_t now)
     LogLocked('<', line, Origin::App, now); // без запроса (например, ответ после таймаута)
 }
 
+std::string DeviceLink::ControlBlockLocked(const std::string& cmd, Origin origin) const
+{
+    const std::string verb = LowerAscii(FirstWord(cmd));
+    const bool setting = verb == "set" || verb == "zero" || verb == "addr" || verb == "instrument" ||
+                         (verb == "relative" && cmd != "relative status");
+    const bool otaWrite = verb == "ota" && cmd != "ota info" && cmd != "ota status";
+    const bool firmware = verb == "boot" || verb == "dfu" || verb == "reset" || otaWrite;
+    const bool updater = origin == Origin::Firmware && firmware;
+    // Once OTA has started, chunks/commit/abort use the established identity of
+    // this connection. Its initial status may age while ordinary polling is paused.
+    const bool continuation = updater && (proto::StartsWith(cmd, "ota chunk ") || cmd == "ota end" || cmd == "ota abort");
+    const bool force = updater && cmd == "boot force";
+    const bool record = proto::StartsWith(cmd, "rec on");
+    if (setting || firmware || record || (verb == "get" && cmd != "get abort"))
+    {
+        const bool fresh = device::FreshStatus(true, haveStatus_, statusAt_, connectedAt_, now_.load());
+        const bool epochStatus = haveVer_ && haveStatus_ && statusAt_ >= connectedAt_;
+        const auto profile = device::Detect(ver_, status_, epochStatus && (fresh || continuation));
+        std::string why;
+        if (!fresh && !continuation) why = "нужен свежий status текущего подключения";
+        else if (!profile.Known()) why = "неизвестная платформа: управление недоступно";
+        else if (firmwareLock_ && !updater) why = "идёт обновление прошивки";
+        else if ((setting || firmware || verb == "get") &&
+                 (recordingLock_ || (!force && !continuation && status_.actualRec.value_or(status_.Recording()))))
+        {
+            // Preserve the existing negative wire results for legacy callers.
+            if (status_.actualRec.value_or(status_.Recording()) && verb == "addr") why = "ERR busy recording";
+            else if (status_.actualRec.value_or(status_.Recording()) && (verb == "boot" || verb == "dfu"))
+                why = "ERR recording to SD in progress: stop it before updating";
+            else why = "идёт запись";
+        }
+        else if ((setting || firmware || record) && ((!continuation && !status_.xfer.empty() && status_.xfer != "idle") || (inFlight_ && inFlight_->sink))) why = "идёт передача файлов";
+        else if (verb == "relative" && !status_.relativeDataCap) why = "обновите прошивку: relative_data_cap недоступна";
+        else if (verb == "addr" && !profile.AddressChange()) why = "смена адреса недоступна на этой платформе";
+        else if (proto::StartsWith(cmd, "set batalarm") && !profile.Setting("batalarm")) why = "batalarm недоступен на этой платформе";
+        else if (proto::StartsWith(cmd, "set gap ") && !profile.ValidGap(proto::ToDouble(std::string_view(cmd).substr(8)))) why = "пауза RS485 вне пределов платформы";
+        else if (verb == "instrument" && !device::InstrumentControl(profile, status_)) why = "обновите прошивку: instrument_control_cap недоступна";
+        else if ((verb == "boot" || verb == "dfu") && !profile.IsStm32()) why = "STM32 DFU недоступен на этой платформе";
+        else if (otaWrite && !profile.IsTab5()) why = "Tab5 OTA недоступно на этой платформе";
+        return why;
+    }
+    return {};
+}
+
 RequestPtr DeviceLink::Send(const std::string& cmd, Origin origin, int timeoutMs)
 {
     auto r = std::make_shared<Request>();
@@ -646,7 +712,7 @@ RequestPtr DeviceLink::Send(const std::string& cmd, Origin origin, int timeoutMs
     r->timeoutMs = timeoutMs;
     std::lock_guard lock(m_);
     const LinkState st = state_.load();
-    if (st == LinkState::Off || st == LinkState::Searching)
+    if (st != LinkState::Connected)
     {
         r->linkLost = true;
         r->final = "нет связи с прибором";
@@ -655,9 +721,23 @@ RequestPtr DeviceLink::Send(const std::string& cmd, Origin origin, int timeoutMs
         r->done.store(true, std::memory_order_release);
         return r;
     }
+    if (const auto why = ControlBlockLocked(cmd, origin); !why.empty())
+    {
+        r->final = proto::StartsWith(why, "ERR ") ? why : "не отправлено: " + why;
+        LogLocked('!', "не отправлено: " + cmd + ": " + why, origin, now_.load());
+        r->done.store(true, std::memory_order_release);
+        return r;
+    }
     queue_.push_back(r);
     cv_.notify_one();
     return r;
+}
+
+void DeviceLink::SetControlLocks(bool recording, bool firmware)
+{
+    std::lock_guard lock(m_);
+    recordingLock_ = recording;
+    firmwareLock_ = firmware;
 }
 
 RequestPtr DeviceLink::SendGet(const std::string& name, std::shared_ptr<DownloadSink> sink)
@@ -670,11 +750,28 @@ RequestPtr DeviceLink::SendGet(const std::string& name, std::shared_ptr<Download
     r->sink = std::move(sink);
     std::lock_guard lock(m_);
     const LinkState st = state_.load();
-    if (st == LinkState::Off || st == LinkState::Searching)
+    if (st != LinkState::Connected)
     {
         r->linkLost = true;
         r->final = "нет связи с прибором";
         r->sink->OnFinish(false, r->final, DownloadSink::Result::LinkLost);
+        r->done.store(true, std::memory_order_release);
+        return r;
+    }
+    // A long download pauses ordinary polling. Refresh status between files,
+    // before dispatching the next get; mutations never use the expired snapshot.
+    if (pollPaused_ && !device::FreshStatus(true, haveStatus_, statusAt_, connectedAt_, now_.load()))
+    {
+        auto status = std::make_shared<Request>();
+        status->cmd = "status"; status->origin = Origin::Poll; status->timeoutMs = 2000;
+        queue_.push_back(status);
+        queue_.push_back(r);
+        return r;
+    }
+    if (const auto why = ControlBlockLocked(r->cmd, r->origin); !why.empty())
+    {
+        r->final = "не отправлено: " + why;
+        r->sink->OnFinish(false, r->final, DownloadSink::Result::DeviceError);
         r->done.store(true, std::memory_order_release);
         return r;
     }
