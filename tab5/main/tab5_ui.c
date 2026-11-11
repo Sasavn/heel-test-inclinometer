@@ -34,7 +34,7 @@ NUI_FONT_DECLARE(font_tab5_28);NUI_FONT_DECLARE(font_tab5_36);NUI_FONT_DECLARE(f
 #define F108 (&font_tab5_108)
 enum {BG,CARD,ALT,FRAME,TEXT,DIM,MUTED,NAV,NAVSEL,NAVTEXT,NAVMUTED,PRIMARY,ORANGE,RED,OUTLINE,GHOST,OK,WARN,ERR,INFO,NEUTRAL,LINE,STYLE_COUNT};
 enum {MEASURE,ROLL,GRAPH,RECORD,SETTINGS,NETWORK};
-enum {A_START=1,A_ZERO,A_RESET,A_APPLY,A_CANCEL,A_REVEAL,A_NET_APPLY,A_LIGHT,A_DARK,A_TIME,A_NUM_OK,A_MODAL_CANCEL,A_CONFIRM,A_DISCARD,A_STAY,A_LANG,A_TEXT_OK,A_TIME_OK,A_NOTICE_CLOSE,A_TIME_SYNC,A_TZ_SELECT,A_TZ_MINUS,A_TZ_PLUS,A_BACKLIGHT,A_RECORD_SYNC,A_DEVICE,A_MODE_HEEL,A_MODE_LEVEL,A_REL_SWAP,A_REL_AXES,A_REL_BOOT,A_REL_SAVE,A_REL_CAPTURE,A_REL_RESET,A_REL_UNIT,A_WS_HOLD,A_WS_CLEAR,A_WS_LIMITS,A_WS_X_MINUS,A_WS_X_PLUS,A_WS_Y_MINUS,A_WS_Y_PLUS,A_WS_FILTER,A_WS_ENABLE,A_WS_SAVE};
+enum {A_START=1,A_ZERO,A_RESET,A_APPLY,A_CANCEL,A_REVEAL,A_NET_APPLY,A_LIGHT,A_DARK,A_TIME,A_NUM_OK,A_MODAL_CANCEL,A_CONFIRM,A_DISCARD,A_STAY,A_LANG,A_TEXT_OK,A_TIME_OK,A_NOTICE_CLOSE,A_TIME_SYNC,A_TZ_SELECT,A_TZ_MINUS,A_TZ_PLUS,A_BACKLIGHT,A_RECORD_SYNC,A_DEVICE,A_MODE_HEEL,A_MODE_LEVEL,A_REL_SWAP,A_REL_AXES,A_REL_BOOT,A_REL_SAVE,A_REL_CAPTURE,A_REL_RESET,A_REL_UNIT,A_WS_HOLD,A_WS_CLEAR,A_WS_LIMITS,A_WS_X_MINUS,A_WS_X_PLUS,A_WS_Y_MINUS,A_WS_Y_PLUS,A_WS_FILTER,A_WS_ENABLE,A_WS_SAVE,A_HELP,A_HELP_PREVIOUS,A_HELP_NEXT};
 static struct {
     nui_obj_t *notice,*notice_text,*notice_close;char last_notice[160];
     nui_obj_t *root,*rail,*pages[6],*nav[6],*selected[6],*badge,*rail_time,*rail_power,*rail_resources[3];
@@ -274,6 +274,34 @@ static void refresh_settings(void){
 }
 static void close_modal(void){encoder_modal_forget();if(u.veil)nui_obj_delete(u.veil);u.veil=u.dialog=u.keyboard=u.text_field=NULL;u.modal_kind=0;}
 static void open_modal(int x,int y,int w,int h,int kind){close_modal();e.paint_dirty=true;e.saved_level=e.level;e.saved_index=e.index;e.level=ENC_MODAL;e.modal_index=kind==3?2:0;e.date_index=0;u.modal_kind=kind;u.veil=box(u.root,0,0,1280,720,BG);style_color(u.veil,NUI_STYLE_BG_COLOR,nui_color_hex(0x080E1E),0);nui_obj_set_style_bg_opa(u.veil,140,0);nui_obj_add_flag(u.veil,NUI_OBJ_FLAG_CLICKABLE);u.dialog=box(u.veil,x,y,w,h,CARD);nui_obj_set_style_radius(u.dialog,20,0);}
+/* Read-only operator help: no backend action, configuration or zero state. */
+static const struct {const char *title,*line[7];} help_pages[]={
+    {"Начало работы",{"1. Настройки > Прибор: назначьте опору и объект.","2. Совместите направления X/Y обеих головок.","Проверьте крепление; подтвердите оси в меню.","3. Сохраните роли / запуск; выберите Выравнивание.","4. Дождитесь свежих ответов обоих датчиков.","5. REL отсчёт нужен лишь для условного нуля.","Для записи проверьте носители и нажмите Старт."}},
+    {"Обычный «Ноль» креномера",{"«Ноль» запоминает сглаженные X/Y каждой","доступной головки как её собственное смещение.","Показание = сглаженный угол минус это смещение.","Это местный отсчёт, не заводская калибровка.","«Сброс нуля» убирает эти смещения обеих головок.","Обычный ноль не меняет разность или отсчёт REL.","Для выравнивания обнулять головки не требуется."}},
+    {"REL: объект минус опора",{"Выравнивание использует декодированные углы","до сглаживания и обычного нуля головок.","Живая разность D = угол объекта − угол опоры.","«REL отсчёт» запоминает текущую разность D0.","Результат REL = D − D0 по каждой оси X/Y.","Опора продолжает измеряться после захвата REL.","«Сброс REL» убирает D0, обычный ноль остаётся."}},
+    {"Пример для одной оси",{"Опора +2°, объект +3°: живая разность +1°.","Нажмите «REL отсчёт»: D0 = +1°, результат 0°.","Опора остаётся +2°, объект стал +3.2°:","живая разность +1.2°, результат REL +0.2°.","Ноль REL означает возврат к выбранной разности.","Он сам по себе не означает горизонтальность.","Две головки не определяют плоскостность детали."}},
+    {"После смены режима и перезапуска",{"Обычный ноль и отсчёт REL теряются при перезапуске.","Смена режима, ролей или осей сбрасывает REL.","После смены ролей снова проверьте оси и свежую пару.","Роли, оси и режим «При загрузке» сохраняются","кнопкой «Сохранить роли / запуск» в меню Прибор.","Выбор режима на экране действует до перезапуска.","Единицы Tab5 после перезапуска снова градусы."}},
+    {"Качество и единицы",{"При ошибке, пропуске или старой паре результат —.","Отсутствующие данные нельзя считать нулём.","Нужны ответы не старше 500 мс с разносом до 50 мс.","Это времена приёма, аппаратной синхронизации нет.","мм/м = 1000 * tan(угол); берётся итоговый угол.","Для мм/м при модуле угла от 89° — вне диапазона.","Ни обычный ноль, ни REL не выравнивают оси за вас."}},
+    {"Запись на Tab5",{"Проверьте SD и USB-A: готовность, место и ошибки.","На экране Старт пишет на доступные носители;","выбор SD/USB через ПК зависит от команды записи.","В выравнивании пишутся исходные D2/D3 и REL CSV.","Нажмите Стоп и дождитесь закрытия файлов.","При записи смена режима, ролей и REL заблокирована.","Обычный USB-C здесь служит связью с ПК, не флешкой."}},
+    {"Наблюдение и программа ПК",{"Tab5: наблюдение, HOLD, min/max, тренд и допуски.","HOLD фиксирует экран; журнал продолжает запись.","Допуск — заданный предел, не точность датчика.","График креномера и качество пары есть на Tab5.","У ПК свои HOLD, графики, анализ и отчёт.","Отчёт ПК не является функцией прошивки Tab5.","Автоматической оценки плоскостности здесь нет."}},
+};
+static struct {nui_obj_t *entry,*level_entry,*title,*line[7],*previous,*next,*counter;unsigned index;} help;
+static void help_refresh(void){
+    text(help.title,help_pages[help.index].title);
+    for(unsigned i=0;i<7;i++)text(help.line[i],help_pages[help.index].line[i]);
+    char b[24];snprintf(b,sizeof(b),"%u / %u",help.index+1,(unsigned)(sizeof(help_pages)/sizeof(help_pages[0])));text(help.counter,b);
+    enabled(help.previous,help.index>0);enabled(help.next,help.index+1<sizeof(help_pages)/sizeof(help_pages[0]));
+}
+static void help_open(void){
+    open_modal(184,76,1080,620,8);help.index=0;
+    help.title=label(u.dialog,"",24,16,1032,52,F36,TEXT);
+    for(unsigned i=0;i<7;i++)help.line[i]=label(u.dialog,"",24,90+i*52,1032,48,F28,TEXT);
+    button(u.dialog,"Назад",24,530,260,64,GHOST,A_MODAL_CANCEL);
+    help.previous=button(u.dialog,"Ранее",300,530,260,64,OUTLINE,A_HELP_PREVIOUS);
+    help.next=button(u.dialog,"Далее",576,530,260,64,PRIMARY,A_HELP_NEXT);
+    help.counter=label(u.dialog,"",852,542,204,40,F28,MUTED);nui_obj_set_style_text_align(help.counter,NUI_TEXT_ALIGN_CENTER,0);
+    help_refresh();
+}
 static void update_measure(void);
 static void update_record(void);
 static void show_page(unsigned page){
@@ -451,9 +479,11 @@ static void dual_open(void){
     dual_modal_refresh();
 }
 static void dual_build(void){
-    dual.entry=button(u.pages[SETTINGS],"Прибор",0,96,1096,72,OUTLINE,A_DEVICE);
+    dual.entry=button(u.pages[SETTINGS],"Прибор",0,96,540,72,OUTLINE,A_DEVICE);
+    help.entry=button(u.pages[SETTINGS],"Справка",556,96,540,72,OUTLINE,A_HELP);
     dual.page=box(u.pages[MEASURE],0,0,1096,636,BG);
-    label(dual.page,"Выравнивание",0,0,750,58,F48,TEXT);
+    label(dual.page,"Выравнивание",0,0,580,58,F48,TEXT);
+    help.level_entry=button(dual.page,"Справка",600,0,188,58,OUTLINE,A_HELP);
     dual.unit=button(dual.page,"Градусы",804,0,292,58,OUTLINE,A_REL_UNIT);
     dual.basis=label(dual.page,"",0,70,1096,68,F24,MUTED);
     for(unsigned i=0;i<2;i++){
@@ -468,9 +498,9 @@ static void dual_build(void){
     dual.reset=button(dual.page,"Сброс REL",744,538,352,94,OUTLINE,A_REL_RESET);
 }
 static void dual_refresh(void){
-    if(!u.state.dual_mode_known){if(dual.entry){hide(dual.entry,true);hide(dual.page,true);nui_obj_set_y(u.settings_view,96);nui_obj_set_height(u.settings_view,540);}return;}
+    if(!u.state.dual_mode_known){if(dual.entry){hide(dual.entry,true);hide(help.entry,true);hide(dual.page,true);nui_obj_set_y(u.settings_view,96);nui_obj_set_height(u.settings_view,540);}return;}
     if(!dual.entry)dual_build();
-    hide(dual.entry,false);nui_obj_set_y(u.settings_view,184);nui_obj_set_height(u.settings_view,452);
+    hide(dual.entry,false);hide(help.entry,false);nui_obj_set_y(u.settings_view,184);nui_obj_set_height(u.settings_view,452);
 
     bool level=u.state.mode==TAB5_MODE_LEVEL;hide(dual.page,!level);
     if(u.modal_kind==6)dual_modal_refresh();
@@ -600,6 +630,9 @@ static void action_event(nui_event_t *ev){
     if(id>=600&&id<604){unsigned i=id-600;u.visible[i]=!u.visible[i];style_num(u.legend[i],NUI_STYLE_OPA,u.visible[i]?255:115,0);chart_refresh(true);return;}
     if(id>=610&&id<613){u.range=(unsigned)(id-610);chart_refresh(true);return;}
     switch(id){
+    case A_HELP:help_open();break;
+    case A_HELP_PREVIOUS:if(help.index)help.index--;help_refresh();break;
+    case A_HELP_NEXT:if(help.index+1<sizeof(help_pages)/sizeof(help_pages[0]))help.index++;help_refresh();break;
     case A_WS_HOLD:workspace_action(TAB5_UI_WORKSPACE_HOLD);break;
     case A_WS_CLEAR:workspace_action(TAB5_UI_WORKSPACE_CLEAR);break;
     case A_WS_LIMITS:workspace_limits();break;
@@ -684,20 +717,20 @@ static void close_notice(void){
 }
 static unsigned enc_page_count(void){return (unsigned)(sizeof(u.pages)/sizeof(u.pages[0]));}
 static unsigned enc_count(void){
-    if(u.page==MEASURE)return u.state.dual_mode_known&&u.state.mode==TAB5_MODE_LEVEL?4:3;
+    if(u.page==MEASURE)return u.state.dual_mode_known&&u.state.mode==TAB5_MODE_LEVEL?5:3;
     if(workspace_level()&&u.page==ROLL)return 3;
     if(u.page==GRAPH)return workspace_level()?0:8;
     if(u.page==RECORD)return 1;
-    if(u.page==SETTINGS)return u.state.dual_mode_known?15:14;
+    if(u.page==SETTINGS)return u.state.dual_mode_known?16:14;
     if(u.page==NETWORK)return 8; /* includes STA password and Apply */
     return 0;
 }
 static nui_obj_t *enc_object(unsigned index){
-    if(u.page==MEASURE){if(u.state.dual_mode_known){if(index==3)return dual.unit;if(u.state.mode==TAB5_MODE_LEVEL)return index==0?dual.start:index==1?dual.capture:dual.reset;}return index==0?u.start[0]:enc_button(index==1?A_ZERO:A_RESET);}
+    if(u.page==MEASURE){if(u.state.dual_mode_known){if(index==4)return help.level_entry;if(index==3)return dual.unit;if(u.state.mode==TAB5_MODE_LEVEL)return index==0?dual.start:index==1?dual.capture:dual.reset;}return index==0?u.start[0]:enc_button(index==1?A_ZERO:A_RESET);}
     if(workspace_level()&&u.page==ROLL)return index==0?ws.hold:index==1?ws.clear:ws.limits;
     if(u.page==RECORD)return workspace_level()?ws.stop:u.start[1];
     if(u.page==GRAPH)return index<3?u.ranges[index]:index==3?u.chart_touch:u.legend[index-4];
-    if(u.page==SETTINGS){if(u.state.dual_mode_known){if(!index)return dual.entry;index--;}return index<13?u.setting_rows[index]:u.set_apply;}
+    if(u.page==SETTINGS){if(u.state.dual_mode_known){if(!index)return dual.entry;if(index==1)return help.entry;index-=2;}return index<13?u.setting_rows[index]:u.set_apply;}
     if(u.page==NETWORK){nui_obj_t *items[]={u.net_switch[0],u.net_fields[0],u.net_fields[1],u.net_switch[1],u.net_fields[2],u.net_fields[3],u.reveal,u.net_apply};return index<8?items[index]:NULL;}
     return NULL;
 }
@@ -854,7 +887,7 @@ static void encoder_touch(nui_obj_t *obj,int id){
             else if(id==A_MODAL_CANCEL)e.modal_index=7;else if(id==A_TIME_SYNC)e.modal_index=8;else if(id==A_TIME_OK)e.modal_index=9;}
         else {nui_obj_t *items[256];unsigned n=enc_modal_buttons(items);unsigned keys=u.keyboard?(unsigned)nui_native_keyboard_get_keys(u.keyboard,NULL,NULL,0):0;for(unsigned i=0;i<n;i++)if(items[i]==obj)e.modal_index=keys+i;}
     }else if(id>=100&&id<100+(int)enc_page_count()){e.level=ENC_MENU;e.index=0;}
-    else {e.level=ENC_SELECT;for(unsigned i=0;i<enc_count();i++){nui_obj_t *item=enc_object(i);if(item&&enc_descendant(obj,item)){e.index=i;break;}}if(u.page==SETTINGS&&id>=200&&id<216)e.index=(id-200)/2+(u.state.dual_mode_known?1:0);}
+    else {e.level=ENC_SELECT;for(unsigned i=0;i<enc_count();i++){nui_obj_t *item=enc_object(i);if(item&&enc_descendant(obj,item)){e.index=i;break;}}if(u.page==SETTINGS&&id>=200&&id<216)e.index=(id-200)/2+(u.state.dual_mode_known?2:0);}
     encoder_paint();
 }
 static void event(nui_event_t *ev){action_event(ev);encoder_paint();}
@@ -891,12 +924,12 @@ static void enc_edit_nudge(int direction,unsigned multiplier){
 static void enc_activate(void){
     if(u.page==SETTINGS){
         unsigned index=e.index;
-        if(u.state.dual_mode_known){if(!index){enc_action(A_DEVICE);return;}index--;}
+        if(u.state.dual_mode_known){if(!index){enc_action(A_DEVICE);return;}if(index==1){enc_action(A_HELP);return;}index-=2;}
         if(index<9){e.edit=index;e.original=index<8?u.draft[index]:0;e.original_light=u.state.light_theme;e.level=ENC_EDIT;e.streak=0;e.rotating=false;enc_hint("< > вращайте — значение · нажмите — готово · удерживайте — отмена");}
         else if(index!=10)enc_action(index==9?A_TIME:index==11?A_BACKLIGHT:index==12?A_RECORD_SYNC:A_APPLY);
     }else if(workspace_level()&&u.page==ROLL){enc_action(e.index==0?A_WS_HOLD:e.index==1?A_WS_CLEAR:A_WS_LIMITS);}
     else if(u.page==GRAPH){if(e.index<3)enc_action(610+e.index);else if(e.index==3){e.cursor=true;e.level=ENC_EDIT;e.cursor_s=u.range==0?30:u.range==1?120:600;e.rotating=false;enc_cursor(0);enc_hint("вращайте — время · нажмите — выйти");}else enc_action(600+e.index-4);}
-    else if(u.page==MEASURE){if(u.state.dual_mode_known&&u.state.mode==TAB5_MODE_LEVEL)enc_action(e.index==0?A_START:e.index==1?A_REL_CAPTURE:e.index==2?A_REL_RESET:A_REL_UNIT);else enc_action(e.index==0?A_START:e.index==1?A_ZERO:A_RESET);}
+    else if(u.page==MEASURE){if(u.state.dual_mode_known&&u.state.mode==TAB5_MODE_LEVEL)enc_action(e.index==0?A_START:e.index==1?A_REL_CAPTURE:e.index==2?A_REL_RESET:e.index==3?A_REL_UNIT:A_HELP);else enc_action(e.index==0?A_START:e.index==1?A_ZERO:A_RESET);}
     else if(u.page==RECORD)enc_action(A_START);
     else if(u.page==NETWORK){if(e.index==0||e.index==3){unsigned i=e.index==3;nui_obj_t *sw=u.net_switch[i];if(nui_obj_has_state(sw,NUI_STATE_CHECKED))nui_obj_remove_state(sw,NUI_STATE_CHECKED);else nui_obj_add_state(sw,NUI_STATE_CHECKED);nui_obj_send_event(sw,NUI_EVENT_VALUE_CHANGED,NULL);}else if(e.index==6)enc_action(A_REVEAL);else if(e.index==7)enc_action(A_NET_APPLY);else enc_action(500+(e.index<3?e.index-1:e.index-2));}
 }
@@ -1211,7 +1244,7 @@ static void build_network(void){
 }
 void tab5_ui_init(tab5_ui_action_cb_t cb,void *user){
     if(u.root){tab5_ui_destroy();}
-    memset(&u,0,sizeof(u));memset(&dual,0,sizeof(dual));memset(&ws,0,sizeof(ws));light_changed=sync_changed=light_sent_set=sync_sent_set=false;light_draft=0;sync_draft=false;encoder_reset();if(!role_prop)role_prop=nui_style_register_prop(0);u.cb=cb;u.user=user;palette(true);
+    memset(&u,0,sizeof(u));memset(&dual,0,sizeof(dual));memset(&ws,0,sizeof(ws));memset(&help,0,sizeof(help));light_changed=sync_changed=light_sent_set=sync_sent_set=false;light_draft=0;sync_draft=false;encoder_reset();if(!role_prop)role_prop=nui_style_register_prop(0);u.cb=cb;u.user=user;palette(true);
     u.root=box(nui_screen_active(),0,0,1280,720,BG);u.rail=box(u.root,0,0,152,720,NAV);
     const char *names[]={"Углы","Качка","График","Запись","Настройки","Сеть"};int icons[]={0,1,13,2,3,4};
     for(unsigned i=0;i<6;i++){
