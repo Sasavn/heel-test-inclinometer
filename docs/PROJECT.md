@@ -9,14 +9,14 @@ ESP32-P4. В каждой платформе используются две г�
 [Скачать и проверить состав комплекта](RELEASES.md#pc-190) ·
 [Программа PC и F1](../pc/README.md) · [Главная страница](../README.md).
 Комплект: [PC 1.9.0](https://github.com/Sasavn/heel-test-inclinometer/releases/tag/pc-v1.9.0),
-[STM32 1.6.0](https://github.com/Sasavn/heel-test-inclinometer/releases/tag/stm32-v1.6.0),
-[Tab5 1.8.5](https://github.com/Sasavn/heel-test-inclinometer/releases/tag/tab5-v1.8.5).
+[STM32 1.6.0](https://github.com/Sasavn/heel-test-inclinometer/releases/tag/stm32-v1.6.1),
+[Tab5 1.8.5](https://github.com/Sasavn/heel-test-inclinometer/releases/tag/tab5-v1.8.6).
 [Сводка проверок](../pc/docs/VALIDATION_1.9.0.md).
 
 <a id="stm32"></a>
 ## STM32F411
 
-**Рабочие приборы: Креномер и Угломер** с новой прошивкой STM32 **1.6.0**.
+**Рабочие приборы: Креномер и Угломер** с новой прошивкой STM32 **1.6.1**.
 PC подключается через USB CDC (COM-порт), проверяет identity устройства и его
 возможности. Старые прошивки креномера не получают угломер от обновления PC.
 
@@ -32,7 +32,7 @@ PC подключается через USB CDC (COM-порт), проверяе�
 <a id="tab5"></a>
 ## ESP32-P4 / M5Stack Tab5
 
-**Рабочие приборы: Креномер и Угломер** с новой прошивкой Tab5 **1.8.5**.
+**Рабочие приборы: Креномер и Угломер** с новой прошивкой Tab5 **1.8.6**.
 Аппаратная база — M5Stack Tab5 / ESP32-P4 с экраном 1280×720 и двумя головками
 BWM427. Подключение к PC — USB или TCP/Wi-Fi. После соединения платформа
 распознаётся автоматически; IP-адрес сети автоматически не обнаруживается.

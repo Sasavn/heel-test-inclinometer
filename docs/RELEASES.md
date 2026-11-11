@@ -10,17 +10,30 @@
 | Компонент | Файлы | Назначение |
 |---|---|---|
 | [PC 1.9.0](https://github.com/Sasavn/heel-test-inclinometer/releases/tag/pc-v1.9.0) | [x64 EXE](https://github.com/Sasavn/heel-test-inclinometer/releases/download/pc-v1.9.0/krenomer-pc-1.9.0-win-x64.exe), [x86 EXE](https://github.com/Sasavn/heel-test-inclinometer/releases/download/pc-v1.9.0/krenomer-pc-1.9.0-win-x86.exe), ZIP, SHA256SUMS | Общее приложение, автоопределение, Креномер / Угломер |
-| [STM32 1.6.0](https://github.com/Sasavn/heel-test-inclinometer/releases/tag/stm32-v1.6.0) | [Комплект BIN](https://github.com/Sasavn/heel-test-inclinometer/releases/download/stm32-v1.6.0/STM32-1.6.0-heel-level.zip) | Только STM32F411, два стартовых режима |
-| [Tab5 1.8.5](https://github.com/Sasavn/heel-test-inclinometer/releases/tag/tab5-v1.8.5) | Factory и OTA: default/controls, P4 rev1/rev3 | Только ESP32-P4 / Tab5; выбрать правильную ревизию и органы управления |
+| [STM32 1.6.1](https://github.com/Sasavn/heel-test-inclinometer/releases/tag/stm32-v1.6.1) | [Комплект BIN](https://github.com/Sasavn/heel-test-inclinometer/releases/download/stm32-v1.6.1/STM32-1.6.1-zero-help.zip) | Только STM32F411, два стартовых режима |
+| [Tab5 1.8.6](https://github.com/Sasavn/heel-test-inclinometer/releases/tag/tab5-v1.8.6) | Factory и OTA: default/controls, P4 rev1/rev3 | Только ESP32-P4 / Tab5; выбрать правильную ревизию и органы управления |
 
 Для прибора Сергея с энкодером и тумблером P4 rev1 предназначен
-[Tab5-1.8.5-controls-P4-rev1.zip](https://github.com/Sasavn/heel-test-inclinometer/releases/download/tab5-v1.8.5/Tab5-1.8.5-controls-P4-rev1.zip).
+[Tab5-1.8.6-controls-P4-rev1.zip](https://github.com/Sasavn/heel-test-inclinometer/releases/download/tab5-v1.8.6/Tab5-1.8.6-controls-P4-rev1.zip).
 Прошивки опубликованы как предварительные: натурная проверка этого комплекта
 на платах не проводилась. [Проверки](../pc/docs/VALIDATION_1.9.0.md).
 PC-релиз содержит программу Windows; прошивки берутся из своего компонентного релиза.
 Старый [PC 1.8.7](https://github.com/Sasavn/heel-test-inclinometer/releases/tag/pc-v1.8.7) сохранён в истории.
 
 [STM32](PROJECT.md#stm32) · [ESP/Tab5](PROJECT.md#tab5) · [Описание приборов](PROJECT.md).
+
+## Обновление справки 11.11.2026
+
+В STM32 **1.6.1** и Tab5 **1.8.6** добавлена справка самого прибора об
+обычном нуле, REL-нуле, подготовке, единицах, качестве и сохранении.
+[Расширенная инструкция с примером](UGLOMER_HELP.md).
+Измерительные алгоритмы, протокол и форматы записи сохранены;
+PC **1.9.0** остаётся актуальным приложением.
+
+Предыдущие [STM32 1.6.0](https://github.com/Sasavn/heel-test-inclinometer/releases/tag/stm32-v1.6.0)
+и [Tab5 1.8.5](https://github.com/Sasavn/heel-test-inclinometer/releases/tag/tab5-v1.8.5)
+сохранены без замены файлов. Новые прошивки проверены на программных стендах,
+натурная установка в этой работе не выполнялась.
 
 ## Все опубликованные релизы
 

@@ -12,8 +12,8 @@
 
 **[Скачать: версии, файлы и SHA-256](../docs/RELEASES.md#pc-190).**
 [PC 1.9.0](https://github.com/Sasavn/heel-test-inclinometer/releases/tag/pc-v1.9.0): x64/x86, отдельные EXE либо ZIP с инструкцией.
-[STM32 FW 1.6.0](https://github.com/Sasavn/heel-test-inclinometer/releases/tag/stm32-v1.6.0) и
-[Tab5 FW 1.8.5](https://github.com/Sasavn/heel-test-inclinometer/releases/tag/tab5-v1.8.5) поставляются отдельно.
+[STM32 FW 1.6.1](https://github.com/Sasavn/heel-test-inclinometer/releases/tag/stm32-v1.6.1) и
+[Tab5 FW 1.8.6](https://github.com/Sasavn/heel-test-inclinometer/releases/tag/tab5-v1.8.6) поставляются отдельно.
 Прежние комплекты сохранены в каталоге. [Изменения](docs/RELEASE_1.9.0.md) ·
 [Проверки](docs/VALIDATION_1.9.0.md).
 
