@@ -760,6 +760,98 @@ static int scenario_level(void){
     printf("level scenario: %d errors\n",errors);return errors?1:0;
 }
 
+/* Full help navigation uses only the offline encoder, in both instrument modes. */
+static bool tree_has_text(lv_obj_t *obj, const char *text) {
+    if(lv_obj_check_type(obj, &lv_label_class) && !strcmp(lv_label_get_text(obj), text))return true;
+    for(uint32_t i=0;i<lv_obj_get_child_count(obj);i++)
+        if(tree_has_text(lv_obj_get_child(obj,i),text))return true;
+    return false;
+}
+
+static int scenario_help(void) {
+    for(unsigned theme=0;theme<2;theme++)for(unsigned mode=0;mode<2;mode++) {
+        sim_app_init(theme ? APP_THEME_LIGHT : APP_THEME_DARK);
+        check(app_set_instrument(mode),"help: select instrument");
+        ui_main_show();sim_run(400);
+        prefix=theme ? (mode ? "light_level" : "light_heel") :
+                      (mode ? "dark_level" : "dark_heel");
+        size_t used_first=0,used_last=0;
+        for(unsigned visit=0;visit<2;visit++) {
+            focus_to(C_MENU);sim_click();
+#if UI_MENU_STYLE == 2
+            focus_to(T_DEV);sim_click();focus_to(D_HELP);
+            const int help_index=D_HELP;
+#else
+            focus_to(A_HELP);
+            const int help_index=A_HELP;
+#endif
+            check(focused_index()==help_index,"help: menu item reached by encoder");
+            sim_click();sim_run(400);
+            lv_obj_t *screen=lv_screen_active();
+            lv_group_t *group=cur_group();
+            lv_obj_t *area=lv_group_get_focused(group);
+            check(tree_has_text(screen,"Справка"),"help: opened from menu");
+            check(tree_has_text(area,"Обычный ноль") && tree_has_text(area,"REL ноль") &&
+                  tree_has_text(area,"Пример REL") && tree_has_text(area,"Начало работы"),
+                  "help: practical sections present");
+            check(lv_group_get_obj_count(group)==1 && lv_group_get_editing(group),
+                  "help: encoder starts in scroll edit mode");
+            check(lv_obj_get_scroll_y(area)==0,"help: starts at top");
+            unsigned page=0;
+            bool seen[64]={0};
+            uint32_t children=lv_obj_get_child_count(area);
+            check(children<=64,"help: label coverage capacity");
+            while(page<160) {
+                lv_area_t viewport;lv_obj_get_coords(area,&viewport);
+                for(uint32_t i=0;i<children && i<64;i++) {
+                    lv_area_t bounds;lv_obj_get_coords(lv_obj_get_child(area,i),&bounds);
+                    if(bounds.y1<=viewport.y2 && bounds.y2>=viewport.y1)seen[i]=true;
+                }
+                char name[64];snprintf(name,sizeof(name),"help_%03u",page);
+                if(!visit)shot(name);
+                else {check_bar("help repeat");check_tree(screen,"help repeat");}
+                if(lv_obj_get_scroll_bottom(area)<=0)break;
+                int32_t previous=lv_obj_get_scroll_y(area);
+                sim_rotate(3);sim_run(400);
+                check(lv_obj_get_scroll_y(area)>previous,"help: forward encoder scroll advances");
+                if(lv_obj_get_scroll_y(area)<=previous)break;
+                page++;
+            }
+            check(page<160 && lv_obj_get_scroll_bottom(area)<=0,"help: end reached");
+            for(uint32_t i=0;i<children && i<64;i++)check(seen[i],"help: every label reached in viewport");
+            lv_area_t last,bounds;
+            lv_obj_get_coords(lv_obj_get_child(area,-1),&last);lv_obj_get_coords(area,&bounds);
+            check(last.y2<bounds.y2,"help: final paragraph fully scrolls into view");
+            int32_t bottom=lv_obj_get_scroll_y(area);
+            sim_rotate(-1);sim_run(400);
+            check(lv_obj_get_scroll_y(area)<bottom,"help: reverse encoder scroll advances");
+            sim_rotate(-500);sim_run(400);
+            check(lv_obj_get_scroll_y(area)==0,"help: reverse scroll reaches top");
+            sim_click();sim_run(400);
+            check(focused_index()==help_index,"help: click returns to same menu item");
+            check(!lv_group_get_editing(cur_group()),"help: menu navigation mode restored");
+#if UI_MENU_STYLE == 2
+            focus_to(D_BACK);sim_click();focus_to(T_BACK);sim_click();
+#else
+            focus_to(A_BACK);sim_click();
+#endif
+            sim_run(400);
+            check(g_relative.mode==mode,"help: instrument mode preserved");
+            if(mode)check(tree_has_text(lv_screen_active(),"Угломер"),"help: returns to level screen");
+            else check(lv_group_get_obj_count(cur_group())==3,"help: returns to heel controls");
+            if(!visit)shot("help_return");
+            used_last=heap_used("help after return");
+            if(!visit)used_first=used_last;
+            printf("help menu=%u theme=%u mode=%u visit=%u pages=%u labels=%lu\n",
+                   UI_MENU_STYLE,theme,mode,visit,page+1,(unsigned long)children);
+        }
+        check(used_last<=used_first+64,"help: repeated visit leaks memory");
+    }
+    printf("help scenario: %d errors\n",errors);
+    return errors?1:0;
+}
+
+
 int main(int argc, char **argv) {
 	setvbuf(stdout, NULL, _IONBF, 0); // вывод сразу (если сценарий зависнет)
 	if (argc > 1)
@@ -773,6 +865,7 @@ int main(int argc, char **argv) {
 	printf("  первый кадр: %lu flush, %lu пикс\n", (unsigned long) first.flushes,
 			(unsigned long) first.pixels);
 	if(argc>2 && !strcmp(argv[2],"level"))return scenario_level();
+	if(argc>2 && !strcmp(argv[2],"help"))return scenario_help();
 	size_t used0 = heap_used("после ui_init");
 	size_t used1 = 0, used2 = 0;
 

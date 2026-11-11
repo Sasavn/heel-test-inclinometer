@@ -6,7 +6,7 @@
 #define VERSION_H_
 
 #include "relative.h"
-#define FW_VERSION "1.6.0"
+#define FW_VERSION "1.6.1"
 #if APP_DEFAULT_INSTRUMENT == 1
 #define FW_DEFAULT_INSTRUMENT "level"
 #else
