@@ -16,6 +16,7 @@ from run_services_startup_guard import mask_c
 ROOT = Path(__file__).resolve().parents[2]
 p = argparse.ArgumentParser(description=__doc__)
 p.add_argument('--out', type=Path, default=ROOT/'tab5/build-host/pc-dual')
+p.add_argument('--wire-out', type=Path, help='Optional actual JSON/REL CSV dumps; never changes firmware')
 p.add_argument('--idf', type=Path, default=Path(os.environ.get(
     'IDF_PATH', 'C:/Projects/ClaudeExp/diplom_project_tab5/.tools/esp-idf')))
 a = p.parse_args()
@@ -80,7 +81,11 @@ build = subprocess.run(cmd, capture_output=True)
 if build.returncode:
     print((build.stdout+build.stderr).decode(errors='replace'))
     raise SystemExit(build.returncode)
-run = subprocess.run([str(exe)], cwd=out, capture_output=True, timeout=60)
+env = os.environ.copy()
+if a.wire_out:
+    a.wire_out.resolve().mkdir(parents=True, exist_ok=True)
+    env['TAB5_WIRE_DUMP_DIR'] = str(a.wire_out.resolve())
+run = subprocess.run([str(exe)], cwd=out, capture_output=True, timeout=60, env=env)
 (out/'test.log').write_bytes(run.stdout+run.stderr)
 print((run.stdout+run.stderr).decode(errors='replace'))
 report = {'pass': run.returncode == 0, 'compile_command': cmd,
