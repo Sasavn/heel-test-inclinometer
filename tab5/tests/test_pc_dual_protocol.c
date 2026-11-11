@@ -170,6 +170,39 @@ static void checks_for_transport(unsigned tr){
  send_command(tr,"status");j=cJSON_Parse(output);assert(j);assert(cJSON_IsTrue(cJSON_GetObjectItem(j,"dual_mode_cap"))&&cJSON_IsTrue(cJSON_GetObjectItem(j,"instrument_control_cap"))&&cJSON_IsTrue(cJSON_GetObjectItem(j,"relative_data_cap"))&&cJSON_IsTrue(cJSON_GetObjectItem(j,"file_media_cap")));assert(!strcmp(cJSON_GetObjectItem(j,"instrument")->valuestring,"heel"));cJSON_Delete(j);
  printf("PASS %s actual entry/queue/owner: strict syntax, NVS/reboot, transient REL, source provenance, nullable JSON, generation, guards recording/draining/transfer/OTA/lock, busy read-only status\n",tr?"TCP":"USB");
 }
+static void dump_status_line(const char *dir,const char *name){
+ char path[1024];snprintf(path,sizeof(path),"%s/%s",dir,name);
+ const char *end=strchr(output,'\n');assert(end&&output[0]=='{');
+ FILE *f=fopen(path,"wb");assert(f);size_t n=(size_t)(end-output)+1;assert(fwrite(output,1,n,f)==n);assert(!fclose(f));
+}
+static void dump_wire(void){
+ const char *dir=getenv("TAB5_WIRE_DUMP_DIR");if(!dir)return;
+ send_command(0,"instrument level");send_command(0,"relative roles 2 3");send_command(0,"relative axes confirm");
+ cJSON *j=get_status(0);assert(cJSON_IsFalse(cJSON_GetObjectItem(j,"ready")));
+ dump_status_line(dir,"wire-tab5.notready.json");cJSON_Delete(j);
+ assert(tab5_services_record_relative_start("wire_tab5")==ESP_OK);
+ for(unsigned n=0;n<2;n++){
+  now+=100000;fresh();j=get_status(0);assert(cJSON_IsTrue(cJSON_GetObjectItem(j,"ready")));
+  if(!n)dump_status_line(dir,"wire-tab5.ready.json");
+  cJSON_Delete(j);
+  tab5_service_sample_t row={.sensor=2,.date="11.11.2026",.time="00:00:00",
+   .relative_record=true,.relative_config=relative_state.config,.relative_observed_us=now,.ms=(uint32_t)(now/1000)};
+  tab5_relative_read(&relative_state,&actual,now,&row.relative);
+  assert(row.relative.ready&&tab5_services_submit(&row,tab5_services_record_epoch())==ESP_OK);
+  media_step(0);media_step(1);
+ }
+ now+=TAB5_RELATIVE_MAX_AGE_US+1;
+ tab5_service_sample_t gap={.sensor=2,.relative_record=true,.relative_event=true,
+  .relative_config=relative_state.config,.relative_observed_us=now,.ms=(uint32_t)(now/1000)};
+ tab5_relative_read(&relative_state,&actual,now,&gap.relative);
+ assert(!gap.relative.ready&&(gap.relative.quality&TAB5_PAIR_STALE));
+ assert(tab5_services_submit(&gap,tab5_services_record_epoch())==ESP_OK);stop_and_drain();
+ FILE *src=fopen("test-sd/wire_tab5_REL.CSV","rb");assert(src);
+ char path[1024];snprintf(path,sizeof(path),"%s/wire-tab5.REL.CSV",dir);FILE *dst=fopen(path,"wb");assert(dst);
+ char bytes[1024];size_t n;while((n=fread(bytes,1,sizeof(bytes),src)))assert(fwrite(bytes,1,n,dst)==n);
+ assert(!ferror(src));assert(!fclose(src)&&!fclose(dst));
+ puts("WIRE DUMP production USB status JSON + production relative writer: two accepted pairs and a stale GAP");
+}
 int main(void){
  _mkdir("test-sd");_mkdir("test-usb");tab5_services_config_t cfg={.command=command};assert(tab5_services_init(&cfg)==ESP_OK);pump_initial_media();
  test_client_t unauth={.owner=3,.rx="instrument level"};dispatch_tcp(&unauth);assert(strstr(output,"ERR auth"));
@@ -198,6 +231,7 @@ int main(void){
  queue_full=true;ui_callback(&ui,NULL);assert(!queued&&(rejected_actions&(1u<<TAB5_UI_REL_CAPTURE)));queue_full=false;
  assert(physical_record(true,0)&&queued&&!pending.protocol&&pending.ui.kind==TAB5_UI_START);run_owner();
  assert(physical_record(false,0)&&queued&&pending.ui.kind==TAB5_UI_STOP);run_owner();assert(ui_events==3);
+ dump_wire();
  puts("PASS additive SD/USB files/get and legacy selection; real services reservation; no hardware access");
  return 0;
 }

@@ -81,6 +81,8 @@ def main():
     }
     assert descriptor == {'magic': 0xABCD5432, 'version': '1.8.5-esp32',
                           'project': 'krenomer-esp32', 'idf_version': 'v5.5.2'}
+    elf_sha256 = sha((build/'krenomer-esp32.elf').read_bytes())
+    assert app[176:208].hex() == elf_sha256, 'Image does not belong to this production ELF'
     expected_header = {'chip': 18, 'revision_min': minimum, 'revision_max': maximum}
     assert image_header(app) == expected_header
     assert image_header((build/'bootloader/bootloader.bin').read_bytes()) == expected_header
@@ -104,6 +106,12 @@ def main():
     assert all(value == controls for value in callbacks.values()), callbacks
     if controls:
         assert re.search(r'\bU tab5_input_gpio_start$', symbols, re.M), 'GPIO startup call missing'
+    elf_symbols = subprocess.check_output([str(nm), '-a', str(build/'krenomer-esp32.elf')], text=True)
+    (out/'elf-symbols.txt').write_text(elf_symbols, encoding='utf-8')
+    linked_callbacks = {name: bool(re.search(r'\b'+name+r'$', elf_symbols, re.M)) for name in callbacks}
+    assert all(value == controls for value in linked_callbacks.values()), linked_callbacks
+    if controls:
+        assert re.search(r'\b[Tt] tab5_input_gpio_start$', elf_symbols, re.M), 'GPIO startup not linked'
 
     flash = json.loads((build/'flasher_args.json').read_text(encoding='utf-8'))['flash_files']
     assert set(flash) == set(meta['factory_parts']) == {'0x2000', '0x8000', '0xf000', '0x20000'}
@@ -177,8 +185,10 @@ def main():
         'build_directory': str(build), 'sdkconfig': str(sdk), 'sdkconfig_sha256': sha(sdk.read_bytes()),
         'descriptor': descriptor, 'app_header': image_header(app),
         'bootloader_header': image_header((build/'bootloader/bootloader.bin').read_bytes()),
-        'image_bytes': len(app), 'image_sha256': sha(app), 'main_object_sha256': sha(obj.read_bytes()),
-        'gpio_callbacks_present': callbacks, 'file_media_cap_in_image': True,
+        'image_bytes': len(app), 'image_sha256': sha(app), 'elf_sha256': elf_sha256,
+        'main_object_sha256': sha(obj.read_bytes()),
+        'gpio_callbacks_present': callbacks, 'gpio_callbacks_linked': linked_callbacks,
+        'file_media_cap_in_image': True,
         'factory_parts': meta['factory_parts'], 'parts_sha256': meta['parts_sha256'],
         'manifest': str(payload/'krenomer-esp32.json'),
         'manifest_sha256': sha((payload/'krenomer-esp32.json').read_bytes()),
