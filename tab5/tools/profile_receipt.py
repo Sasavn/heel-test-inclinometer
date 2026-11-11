@@ -18,10 +18,10 @@ import zipfile
 TAB5 = Path(__file__).resolve().parents[1]
 ROOT = TAB5.parent
 PROFILES = {
-    'default': ('build', False, 100, 199, 'Tab5-1.8.5-P4-rev1.zip'),
-    'controls': ('build-controls', True, 100, 199, 'Tab5-1.8.5-controls-P4-rev1.zip'),
-    'rev3': ('build-rev3', False, 300, 399, 'Tab5-1.8.5-P4-rev3.zip'),
-    'controls-rev3': ('build-controls-rev3', True, 300, 399, 'Tab5-1.8.5-controls-P4-rev3.zip'),
+    'default': ('build', False, 100, 199, 'Tab5-1.8.6-P4-rev1.zip'),
+    'controls': ('build-controls', True, 100, 199, 'Tab5-1.8.6-controls-P4-rev1.zip'),
+    'rev3': ('build-rev3', False, 300, 399, 'Tab5-1.8.6-P4-rev3.zip'),
+    'controls-rev3': ('build-controls-rev3', True, 300, 399, 'Tab5-1.8.6-controls-P4-rev3.zip'),
 }
 
 
@@ -50,7 +50,7 @@ def verify_sums(folder):
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('profile', choices=PROFILES)
-    p.add_argument('--out', type=Path, default=TAB5/'build-host/release-1.8.5')
+    p.add_argument('--out', type=Path, default=TAB5/'build-host/release-1.8.6')
     a = p.parse_args()
     build_name, controls, minimum, maximum, archive_name = PROFILES[a.profile]
     build = TAB5/build_name
@@ -79,7 +79,7 @@ def main():
         'project': app[80:112].split(b'\0')[0].decode('utf-8'),
         'idf_version': app[144:176].split(b'\0')[0].decode('utf-8'),
     }
-    assert descriptor == {'magic': 0xABCD5432, 'version': '1.8.5-esp32',
+    assert descriptor == {'magic': 0xABCD5432, 'version': '1.8.6-esp32',
                           'project': 'krenomer-esp32', 'idf_version': 'v5.5.2'}
     elf_sha256 = sha((build/'krenomer-esp32.elf').read_bytes())
     assert app[176:208].hex() == elf_sha256, 'Image does not belong to this production ELF'
@@ -141,7 +141,7 @@ def main():
         if path.is_file() and path.name != 'SHA256SUMS.txt'), encoding='ascii')
     verify_sums(payload)
     readme = (
-        f'M5Stack Tab5 — 1.8.5-esp32 — {a.profile}, ESP32-P4 rev{minimum}–{maximum}\n\n'
+        f'M5Stack Tab5 — 1.8.6-esp32 — {a.profile}, ESP32-P4 rev{minimum}–{maximum}\n\n'
         f'Профиль внешних GPIO: {"CONTROLS ВКЛЮЧЁН" if controls else "выключен"}.\n'
         'USB/TCP: instrument heel|level; relative roles/axes/zero/reset/status.\n'
         'Явный выбор SD/USB объявляется file_media_cap:true в обычном status.\n'
