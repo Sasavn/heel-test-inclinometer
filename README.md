@@ -1,6 +1,8 @@
-# Креномер / Угломер — универсальное приложение PC 1.9.0
+# Креномер / Угломер — универсальное приложение PC 1.9.1
 
 **[Справка угломера: обычный ноль, REL-ноль и порядок работы](docs/UGLOMER_HELP.md).**
+
+**[Полный протокол кренования в Word](pc/docs/INCLINING_PROTOCOL.md)** — паспорт, условия опыта, расчётная часть, акты и приложения; прежние Excel/PNG сохраняются в комплекте.
 
 Одно приложение **`krenomer.exe`** для двух платформ: **STM32F411** и
 **M5Stack Tab5 / ESP32-P4**. Подключённая платформа определяется автоматически
@@ -13,19 +15,19 @@
 
 *PC 1.9.0: программный рендер реального интерфейса на имитированных данных. Это не фотография прибора.*
 
-**[Скачать PC 1.9.0](https://github.com/Sasavn/heel-test-inclinometer/releases/tag/pc-v1.9.0)** ·
-[Windows x64](https://github.com/Sasavn/heel-test-inclinometer/releases/download/pc-v1.9.0/krenomer-pc-1.9.0-win-x64.exe) ·
-[Windows x86](https://github.com/Sasavn/heel-test-inclinometer/releases/download/pc-v1.9.0/krenomer-pc-1.9.0-win-x86.exe) ·
-[Все версии и SHA-256](docs/RELEASES.md#pc-190).
+**[Скачать PC 1.9.1](https://github.com/Sasavn/heel-test-inclinometer/releases/tag/pc-v1.9.1)** ·
+[Windows x64](https://github.com/Sasavn/heel-test-inclinometer/releases/download/pc-v1.9.1/krenomer-pc-1.9.1-win-x64.exe) ·
+[Windows x86](https://github.com/Sasavn/heel-test-inclinometer/releases/download/pc-v1.9.1/krenomer-pc-1.9.1-win-x86.exe) ·
+[Все версии и SHA-256](docs/RELEASES.md#pc-191).
 
 Для угломера нужны новая прошивка STM32 **1.6.1** или Tab5 **1.8.6**.
 Для офлайн-обработки кренования обновление прибора не требуется.
 Целевая ОС — Windows 7 SP1 и новее; проверены импорты Windows 7, x64/x86
-сборки и программные сценарии. [Результаты и границы проверки](pc/docs/VALIDATION_1.9.0.md).
+сборки и программные сценарии. [Результаты и границы проверки](pc/docs/VALIDATION_1.9.1.md).
 
 ## Выберите платформу прибора
 
-| Страница платформы | Подключение и прошивка | Рабочий прибор в PC 1.9.0 |
+| Страница платформы | Подключение и прошивка | Рабочий прибор в PC 1.9.1 |
 |---|---|---|
 | **[STM32F411](docs/PROJECT.md#stm32)** | USB CDC; отдельная прошивка [STM32 **1.6.1**](https://github.com/Sasavn/heel-test-inclinometer/releases/tag/stm32-v1.6.1) | **Креномер / Угломер** |
 | **[ESP32-P4 / M5Stack Tab5](docs/PROJECT.md#tab5)** | USB или TCP/Wi-Fi; отдельная прошивка [Tab5 **1.8.6**](https://github.com/Sasavn/heel-test-inclinometer/releases/tag/tab5-v1.8.6) | **Креномер / Угломер** |

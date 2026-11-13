@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "HeelData.hpp"
+#include "IncliningProtocolData.hpp"
 #include "Json.hpp"
 #include "TextUtil.hpp"
 
@@ -38,6 +39,7 @@ struct Sensor
 
 struct Project
 {
+    heel::formal::Data formalProtocol = heel::formal::DefaultData();
     int format = kFormat;
     std::string program; // кем сохранён («Регистратор крена — программа для ПК 1.7»)
     std::string saved;   // когда (местное время)
@@ -286,7 +288,7 @@ inline std::string ToJson(const Project& p, bool meta = true)
             first = false;
         }
     }
-    o += "]\n  }";
+    o += "]\n  },\n  \"formal_protocol\": " + heel::formal::ToJson(p.formalProtocol);
     if (meta)
         o += ",\n  \"result\": {\"h\": " + Num(p.h) + ", \"h_main\": " + Num(p.hMain) + "}";
     o += "\n}\n";
@@ -583,6 +585,12 @@ inline bool FromJson(std::string_view text, Project& p, std::string* err = nullp
             r.Flag(ex["rs_manual"][i]["use"], "experiment.rs_manual.use", use);
             o.rsManual[n] = use ? 1 : 0;
         }
+    if (v.Has("formal_protocol"))
+    {
+        std::string formalErr;
+        if (!heel::formal::FromJson(v["formal_protocol"], o.formalProtocol, &formalErr))
+            r.Bad("formal_protocol", formalErr.c_str());
+    }
     const json::Value& res = v["result"];
     r.Num(res["h"], "result.h", o.h, true);
     r.Num(res["h_main"], "result.h_main", o.hMain, true);

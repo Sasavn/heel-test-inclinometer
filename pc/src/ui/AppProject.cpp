@@ -105,6 +105,7 @@ proj::Project App::ProcProjectNow() const
         if (off)
             p.excluded[n] = true;
     p.rsManual = proc_.rsManual;
+    p.formalProtocol = proc_.formal;
     p.h = ProcCont() ? proc_.posSum.h : proc_.sum.h;
     p.hMain = proc_.rs.hMain;
     return p;
@@ -319,6 +320,7 @@ void App::ProcApplyProjectSettings(const proj::Project& p)
 
 void App::ProcApplyProjectExperiment(const proj::Project& p)
 {
+    proc_.formal = p.formalProtocol;
     if (p.mode == 1 && ProcCont() && proc_.files)
     {
         bool recChanged = false;

@@ -36,7 +36,7 @@ struct ImVec4;
 namespace ui
 {
 
-inline constexpr const char* kAppVersion = "1.9.0";
+inline constexpr const char* kAppVersion = "1.9.1";
 struct LevelUiState;
 
 enum class Page
@@ -169,6 +169,12 @@ public:
         ProcRefreshLogNames();
     }
     void ProcessSaveReport();
+    // Паспорт и ручные данные протокола принадлежат только текущему проекту опыта.
+    void ProcessShowFormalProtocol(bool on) { proc_.formalOpen = on; }
+    bool ProcessFormalProtocolOpen() const { return proc_.formalOpen; }
+    void ProcessFormalProtocolSection(int section) { proc_.formalSection = section < 0 ? 0 : section > 16 ? 16 : section; }
+    const heel::formal::Data& ProcessFormalProtocol() const { return proc_.formal; }
+    void ProcessSetFormalProtocol(const heel::formal::Data& data) { proc_.formal = data; proc_.projCheck = true; }
     void ProcessSetReportFolder(const std::string& folder) { proc_.reportParent = folder; }
     void ProcessSetReportName(const std::string& name)
     {
@@ -436,6 +442,7 @@ private:
     void ProcProjectMenus(bool open, bool save);                // содержимое меню проекта
     float ProcProjectButtons(float x, bool narrow, bool measure); // кнопки проекта в шапке; ширина
     void TickProject();
+    void ProcFormalProtocol(); // редактор всех полей, таблиц и вложений схемы
     // Расчёт по шагам (AppSteps.cpp): шаги, их вид, окно «Подробнее» карточки-показателя
     steps::Steps ProcSteps() const;
     void ProcStepsView(const steps::Steps& st, const std::vector<std::string>& ids);
@@ -696,6 +703,9 @@ private:
         std::shared_ptr<AskProject> ask;
         bool askSkip = false;             // «Создать новый»: прочитать папку без вопроса
         bool freshStart = false;          // новый опыт: чистые плечи, без восстановления прежних правок положений
+        heel::formal::Data formal = heel::formal::DefaultData();
+        bool formalOpen = false;
+        int formalSection = 0;
         int saveMenu = 0;                 // стенд: 1 — открыть меню «Сохранить отчёт ▼», -1 — закрыть
         int recMenu = 0;                  // стенд: 1 — открыть меню «Записи ▼», -1 — закрыть
         int tab = 0;                      // вкладка нижней карточки: 0 — положения / замеры, 1 — Правила РС, 2 — перемещения, 3 — журнал

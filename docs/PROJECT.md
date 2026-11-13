@@ -1,17 +1,17 @@
 # Креномер / Угломер: проект и платформы
 
-**PC 1.9.0** — одно приложение `krenomer.exe` для STM32F411 и M5Stack Tab5 /
+**PC 1.9.1** — одно приложение `krenomer.exe` для STM32F411 и M5Stack Tab5 /
 ESP32-P4. В каждой платформе используются две головки BWM427 по RS485/Modbus.
 Аппаратная платформа определяется автоматически после подключения. Рабочий
 прибор **«Креномер» / «Угломер»** выбирается независимо в «Настройках»;
 на подключённом устройстве действует режим, подтверждённый его статусом.
 
-[Скачать и проверить состав комплекта](RELEASES.md#pc-190) ·
+[Скачать и проверить состав комплекта](RELEASES.md#pc-191) ·
 [Программа PC и F1](../pc/README.md) · [Главная страница](../README.md).
-Комплект: [PC 1.9.0](https://github.com/Sasavn/heel-test-inclinometer/releases/tag/pc-v1.9.0),
+Комплект: [PC 1.9.1](https://github.com/Sasavn/heel-test-inclinometer/releases/tag/pc-v1.9.1),
 [STM32 1.6.1](https://github.com/Sasavn/heel-test-inclinometer/releases/tag/stm32-v1.6.1),
 [Tab5 1.8.6](https://github.com/Sasavn/heel-test-inclinometer/releases/tag/tab5-v1.8.6).
-[Сводка проверок](../pc/docs/VALIDATION_1.9.0.md).
+[Сводка проверок](../pc/docs/VALIDATION_1.9.1.md).
 
 <a id="stm32"></a>
 ## STM32F411

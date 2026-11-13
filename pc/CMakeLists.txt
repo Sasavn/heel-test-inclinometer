@@ -7,7 +7,7 @@ if(WIN32 AND VCPKG_TARGET_TRIPLET MATCHES "-static(-|$)")
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 endif()
 
-project(Krenomer VERSION 1.9.0 LANGUAGES CXX RC)
+project(Krenomer VERSION 1.9.1 LANGUAGES CXX RC)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -52,7 +52,7 @@ configure_file(src/app.rc.in "${CMAKE_CURRENT_BINARY_DIR}/app.rc" @ONLY)
 configure_file(src/app.manifest.in "${CMAKE_CURRENT_BINARY_DIR}/krenomer.manifest" @ONLY)
 
 # Ядро без интерфейса: связь, протокол, разбор (тесты линкуются с ним).
-add_library(krenomer_core STATIC src/comm/DeviceLink.cpp)
+add_library(krenomer_core STATIC src/comm/DeviceLink.cpp src/core/IncliningProtocolDocx.cpp)
 target_include_directories(krenomer_core PUBLIC src)
 if(WIN32)
     target_compile_definitions(krenomer_core PUBLIC ${KRENOMER_WIN_DEFS})
@@ -70,6 +70,7 @@ add_library(krenomer_ui STATIC
     src/ui/AppProcess.cpp
     src/ui/AppRules.cpp
     src/ui/AppProcDash.cpp
+    src/ui/AppFormalProtocol.cpp
     src/ui/AppProject.cpp
     src/ui/AppSteps.cpp
     src/ui/AppHelp.cpp
@@ -145,6 +146,17 @@ if(KRENOMER_BUILD_TESTS)
     if(WIN32)
         target_link_libraries(export_target_test PRIVATE advapi32)
     endif()
+
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/formal-protocol-core" "${CMAKE_CURRENT_BINARY_DIR}/formal-protocol-ui")
+    add_executable(inclining_protocol_test tests/inclining_protocol_test.cpp)
+    target_include_directories(inclining_protocol_test PRIVATE src tests)
+    target_link_libraries(inclining_protocol_test PRIVATE krenomer_core)
+    add_test(NAME inclining_protocol_test COMMAND inclining_protocol_test --out "${CMAKE_CURRENT_BINARY_DIR}/formal-protocol-core")
+
+    add_executable(formal_protocol_ui_test tests/formal_protocol_ui_test.cpp "${CMAKE_CURRENT_BINARY_DIR}/fonts.rc")
+    target_include_directories(formal_protocol_ui_test PRIVATE src tests)
+    target_link_libraries(formal_protocol_ui_test PRIVATE krenomer_ui)
+    add_test(NAME formal_protocol_ui_test COMMAND formal_protocol_ui_test --out "${CMAKE_CURRENT_BINARY_DIR}/formal-protocol-ui")
 
     add_executable(record_sync_test tests/record_sync_test.cpp)
     target_link_libraries(record_sync_test PRIVATE krenomer_ui)

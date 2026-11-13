@@ -161,36 +161,46 @@ void App::ProcHeader(float w)
                saving ? "Отчёт сохраняется" : cont ? "Нет положений" : "Нет замеров"))
         ProcessSaveReport();
     if (ImGui::IsItemHovered() && !saving && canSave)
-        ImGui::SetTooltip("Сохранить отчёт (Ctrl+R; полный — Ctrl+Shift+R)\n"
+        ImGui::SetTooltip("Сохранить комплект (Ctrl+R; дополнительный лист Excel — Ctrl+Shift+R)\n"
+                          "Word по образцу всегда полный: 9 разделов + А–Ж.\n"
                           "В новую отдельную папку опыта: %s (лист «Протокол» с графиками, «Графики», таблицы, «Проверки»%s),\n"
                           "картинки графиков — PNG рядом. Папку и краткий / полный отчёт можно выбрать стрелкой",
                           heel::kReportName, settings_.reportFull ? ", «Расчёт по шагам»" : "");
     ImGui::SameLine(0, S(2));
     const ImVec2 sm0 = ImGui::GetCursorScreenPos();
-    if (Button("▼##repmenu", BtnKind::Orange, ImVec2(arrowW, 0), saving || !canSave) || proc_.saveMenu > 0)
+    if (Button("▼##repmenu", BtnKind::Orange, ImVec2(arrowW, 0)) || proc_.saveMenu > 0)
     {
         ImGui::OpenPopup("##repmenu_pop");
         proc_.saveMenu = 0;
     }
     ImGui::SetNextWindowPos(ImVec2(sm0.x + arrowW, ImGui::GetItemRectMax().y + S(4)), ImGuiCond_Appearing, ImVec2(1, 0));
+    ImGui::SetNextWindowSizeConstraints(ImVec2(S(380), 0),
+                                        ImVec2(std::max(S(380), ImGui::GetMainViewport()->WorkSize.x - S(32)), FLT_MAX));
     if (ImGui::BeginPopup("##repmenu_pop"))
     {
-        if (ImGui::MenuItem("Краткий отчёт", "Ctrl+R", !settings_.reportFull))
+        if (ImGui::MenuItem("Данные протокола…"))
+            ProcessShowFormalProtocol(true);
+        ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + S(370));
+        ImGui::TextWrapped("Word по образцу всегда полный: 9 разделов + А–Ж. Незаполненные сведения помечены в черновике.");
+        ImGui::PopTextWrapPos();
+        ImGui::Separator();
+        ImGui::BeginDisabled(saving || !canSave);
+        if (ImGui::MenuItem("Краткий Excel + полный Word", "Ctrl+R", !settings_.reportFull))
         {
             settings_.reportFull = false;
             SaveSettingsSoon();
             ProcessSaveReport();
         }
         if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("«Протокол», «Графики», «Проверки», таблицы, сырые данные");
-        if (ImGui::MenuItem("Полный отчёт (+ «Расчёт по шагам»)", "Ctrl+Shift+R", settings_.reportFull))
+            ImGui::SetTooltip("Полный Word по образцу: 9 разделов + А–Ж. Excel: «Протокол», «Графики», «Проверки», таблицы, сырые данные.");
+        if (ImGui::MenuItem("Полный Excel + полный Word", "Ctrl+Shift+R", settings_.reportFull))
         {
             settings_.reportFull = true;
             SaveSettingsSoon();
             ProcessSaveReport();
         }
         if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("Краткий и ещё лист «Расчёт по шагам»: исходные данные → уровни положений → Δθ по приборам →\n"
+            ImGui::SetTooltip("Word всегда полный (9 разделов + А–Ж). В Excel добавится лист «Расчёт по шагам»:\n"
                               "h_i → h_k → 6.6.1 … 6.6.5 → поправки → итог; формулы, подстановка чисел, пункты Правил");
         ImGui::Separator();
         ImGui::SetNextItemWidth(S(270));
@@ -212,6 +222,7 @@ void App::ProcHeader(float w)
             ProcessSetReportFolder("");
         if (ImGui::MenuItem("Открыть папку последнего отчёта", nullptr, false, !proc_.reportDir.empty()))
             dialogs::OpenFolder(proc_.reportDir);
+        ImGui::EndDisabled();
         if (proc_.saveMenu < 0)
             ImGui::CloseCurrentPopup();
         ImGui::EndPopup();
@@ -479,6 +490,7 @@ void App::PageProcess()
     proc_.hoverCard = 0; // карточки этого кадра отметят себя (Ctrl+E — в следующем)
     ProcMethodWindow(); // окно своих методов — поверх страницы
     ProcKpiDetail();    // окно «Подробнее» карточки-показателя
+    ProcFormalProtocol();
     ProcAskProjectDialog(); // в папке есть проект — открыть его или начать новый
     if (!proc_.opened)
     {

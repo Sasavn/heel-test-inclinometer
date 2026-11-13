@@ -13,6 +13,7 @@
 // Файлы читаются и отчёт пишется в фоне (std::async) — окно не замирает; картинки графиков рисуются своим контекстом
 // ImGui без окна (Offscreen.hpp) в Tick, между кадрами. Расчёт — core/Heel.hpp (формулы) и core/HeelData.hpp.
 #include "App.hpp"
+#include "../core/IncliningProtocolDocx.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -676,6 +677,8 @@ void App::TickProcess()
         proc_.projPending.reset();
         if (r.folder != proc_.outDir || pend || proc_.freshStart) // другой опыт: плечи и снятые замеры — заново (или из проекта)
         {
+            proc_.formal = heel::formal::DefaultData();
+            proc_.formalSection = 0;
             proc_.reportParent.clear();
             proc_.reportDir.clear();
             proc_.reportName[0] = 0;
@@ -782,6 +785,7 @@ void App::TickProcess()
         if (!proc_.rs.r.m.empty())
             ctrlFrame = offscreen::Capture(kExportW, 720, kExportScale,
                                            [this](float w, float h) { ProcExportControl(w, h); });
+        const heel::formal::Data formalData = proc_.formal; // один снимок до async, как расчёт и графики
         const heel::RsCase rsCase = proc_.rs;
         heel::ReportInfo info;
         info.folder = Shown(proc_.outDir);
@@ -825,7 +829,7 @@ void App::TickProcess()
             std::string warn, err;
             // Each export owns a freshly reserved directory. Existing report
             // sets and source files are never reused, truncated or removed.
-            std::vector<std::string> names = {heel::kReportName};
+            std::vector<std::string> names = {heel::kReportName, heel::formal::kDocxName};
             if (ctrlFrame)
                 names.push_back(heel::kControlPlotName);
             for (int post = 0; post < heel::kMaxPosts; post++)
@@ -837,7 +841,8 @@ void App::TickProcess()
             }
             const auto unique = exporttarget::UniqueFileNames(names);
             const std::string& reportName = unique.front();
-            std::size_t nextName = 1;
+            const std::string& docxName = unique[1];
+            std::size_t nextName = 2;
             const std::string controlName = ctrlFrame ? unique[nextName++] : std::string{};
             std::string plotFiles[heel::kMaxPosts], posFiles[heel::kMaxPosts];
             for (int post = 0; post < heel::kMaxPosts; post++)
@@ -886,6 +891,8 @@ void App::TickProcess()
                 picture(posFrames[post], posFiles[post], "Положения крупно — пост «" + pn + "»",
                         false, false, "Положения");
             }
+            try
+            {
             const auto sheets = heel::BuildBook(s, *files, meas, cont, rec, pos, sum, rsCase, info, images, &warn,
                                                 full ? &stepsAll : nullptr);
             if (xlsx::Write(dir / text::PathFromUtf8(reportName), sheets, &err))
@@ -894,6 +901,36 @@ void App::TickProcess()
                 out.insert(out.begin(), "✗ " + reportName + " не сохранён: " + err);
             if (!warn.empty())
                 out.push_back(warn);
+            }
+            catch (const std::exception& e)
+            {
+                out.push_back(std::string("✗ Excel не сохранён: ") + e.what());
+            }
+            catch (...)
+            {
+                out.push_back("✗ Excel не сохранён (неизвестная ошибка)");
+            }
+            // DOCX входит в каждый комплект; ошибка одного документа не отменяет остальные файлы.
+            try
+            {
+                std::string docxErr;
+                if (heel::formal::WriteDocx(dir / text::PathFromUtf8(docxName), formalData, s, rsCase, info, images, &docxErr))
+                {
+                    out.push_back("✓ Протокол сохранён: " + docxName);
+                    out.push_back("Незаполненные сведения помечены в черновике; подписи и одобрения требуют проверки.");
+                }
+                else
+                    out.push_back("✗ Комплект сохранён не полностью: " + docxName + " не сохранён: " + docxErr);
+            }
+            catch (const std::exception& e)
+            {
+                out.push_back(std::string("✗ Комплект сохранён не полностью: DOCX не сохранён: ") + e.what());
+            }
+            catch (...)
+            {
+                out.push_back("✗ Комплект сохранён не полностью: DOCX не сохранён (неизвестная ошибка)");
+            }
+
             }
             catch (const std::bad_alloc&)
             {
