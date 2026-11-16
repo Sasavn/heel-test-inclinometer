@@ -18,7 +18,7 @@
 NUI_FONT_DECLARE(font_tab5_16);NUI_FONT_DECLARE(font_tab5_16m);NUI_FONT_DECLARE(font_tab5_20);NUI_FONT_DECLARE(font_tab5_20m);
 NUI_FONT_DECLARE(font_tab5_24);NUI_FONT_DECLARE(font_tab5_32);
 NUI_FONT_DECLARE(font_tab5_40);NUI_FONT_DECLARE(font_tab5_64);
-NUI_FONT_DECLARE(font_tab5_28);NUI_FONT_DECLARE(font_tab5_36);NUI_FONT_DECLARE(font_tab5_48);NUI_FONT_DECLARE(font_tab5_56);NUI_FONT_DECLARE(font_tab5_108);
+NUI_FONT_DECLARE(font_tab5_28);NUI_FONT_DECLARE(font_tab5_36);NUI_FONT_DECLARE(font_tab5_48);NUI_FONT_DECLARE(font_tab5_56);NUI_FONT_DECLARE(font_tab5_108);NUI_FONT_DECLARE(font_tab5_128);
 #define F16 (&font_tab5_16)
 #define F16M (&font_tab5_16m)
 #define F20 (&font_tab5_20)
@@ -32,6 +32,7 @@ NUI_FONT_DECLARE(font_tab5_28);NUI_FONT_DECLARE(font_tab5_36);NUI_FONT_DECLARE(f
 #define F48 (&font_tab5_48)
 #define F56 (&font_tab5_56)
 #define F108 (&font_tab5_108)
+#define F128 (&font_tab5_128)
 enum {BG,CARD,ALT,FRAME,TEXT,DIM,MUTED,NAV,NAVSEL,NAVTEXT,NAVMUTED,PRIMARY,ORANGE,RED,OUTLINE,GHOST,OK,WARN,ERR,INFO,NEUTRAL,LINE,STYLE_COUNT};
 enum {MEASURE,ROLL,GRAPH,RECORD,SETTINGS,NETWORK};
 enum {A_START=1,A_ZERO,A_RESET,A_APPLY,A_CANCEL,A_REVEAL,A_NET_APPLY,A_LIGHT,A_DARK,A_TIME,A_NUM_OK,A_MODAL_CANCEL,A_CONFIRM,A_DISCARD,A_STAY,A_LANG,A_TEXT_OK,A_TIME_OK,A_NOTICE_CLOSE,A_TIME_SYNC,A_TZ_SELECT,A_TZ_MINUS,A_TZ_PLUS,A_BACKLIGHT,A_RECORD_SYNC,A_DEVICE,A_MODE_HEEL,A_MODE_LEVEL,A_REL_SWAP,A_REL_AXES,A_REL_BOOT,A_REL_SAVE,A_REL_CAPTURE,A_REL_RESET,A_REL_UNIT,A_WS_HOLD,A_WS_CLEAR,A_WS_LIMITS,A_WS_X_MINUS,A_WS_X_PLUS,A_WS_Y_MINUS,A_WS_Y_PLUS,A_WS_FILTER,A_WS_ENABLE,A_WS_SAVE,A_HELP,A_HELP_PREVIOUS,A_HELP_NEXT};
@@ -94,8 +95,8 @@ static struct {
     nui_obj_t *touch_view,*touch_content;int *touch_scroll;
 } e;
 static struct {
-    nui_obj_t *entry,*page,*value[2],*source[2],*quality,*basis,*start,*capture,*reset,*unit;
-    nui_obj_t *roles,*axes,*boot,*save,*mode[2],*hint;
+    nui_obj_t *entry,*page,*value[2],*source[2],*raw[2][2],*axis[2],*status,*quality,*basis,*start,*capture,*reset,*unit;
+    nui_obj_t *roles,*axes,*boot,*save,*mode[2],*hint,*hero,*dot[2];
     tab5_relative_config_t draft;
     unsigned units;
 } dual;
@@ -276,13 +277,13 @@ static void close_modal(void){encoder_modal_forget();if(u.veil)nui_obj_delete(u.
 static void open_modal(int x,int y,int w,int h,int kind){close_modal();e.paint_dirty=true;e.saved_level=e.level;e.saved_index=e.index;e.level=ENC_MODAL;e.modal_index=kind==3?2:0;e.date_index=0;u.modal_kind=kind;u.veil=box(u.root,0,0,1280,720,BG);style_color(u.veil,NUI_STYLE_BG_COLOR,nui_color_hex(0x080E1E),0);nui_obj_set_style_bg_opa(u.veil,140,0);nui_obj_add_flag(u.veil,NUI_OBJ_FLAG_CLICKABLE);u.dialog=box(u.veil,x,y,w,h,CARD);nui_obj_set_style_radius(u.dialog,20,0);}
 /* Read-only operator help: no backend action, configuration or zero state. */
 static const struct {const char *title,*line[7];} help_pages[]={
-    {"Начало работы",{"1. Настройки > Прибор: назначьте опору и объект.","2. Совместите направления X/Y обеих головок.","Проверьте крепление; подтвердите оси в меню.","3. Сохраните роли / запуск; выберите Выравнивание.","4. Дождитесь свежих ответов обоих датчиков.","5. REL отсчёт нужен лишь для условного нуля.","Для записи проверьте носители и нажмите Старт."}},
-    {"Обычный «Ноль» креномера",{"«Ноль» запоминает сглаженные X/Y каждой","доступной головки как её собственное смещение.","Показание = сглаженный угол минус это смещение.","Это местный отсчёт, не заводская калибровка.","«Сброс нуля» убирает эти смещения обеих головок.","Обычный ноль не меняет разность или отсчёт REL.","Для выравнивания обнулять головки не требуется."}},
-    {"REL: объект минус опора",{"Выравнивание использует декодированные углы","до сглаживания и обычного нуля головок.","Живая разность D = угол объекта − угол опоры.","«REL отсчёт» запоминает текущую разность D0.","Результат REL = D − D0 по каждой оси X/Y.","Опора продолжает измеряться после захвата REL.","«Сброс REL» убирает D0, обычный ноль остаётся."}},
-    {"Пример для одной оси",{"Опора +2°, объект +3°: живая разность +1°.","Нажмите «REL отсчёт»: D0 = +1°, результат 0°.","Опора остаётся +2°, объект стал +3.2°:","живая разность +1.2°, результат REL +0.2°.","Ноль REL означает возврат к выбранной разности.","Он сам по себе не означает горизонтальность.","Две головки не определяют плоскостность детали."}},
-    {"После смены режима и перезапуска",{"Обычный ноль и отсчёт REL теряются при перезапуске.","Смена режима, ролей или осей сбрасывает REL.","После смены ролей снова проверьте оси и свежую пару.","Роли, оси и режим «При загрузке» сохраняются","кнопкой «Сохранить роли / запуск» в меню Прибор.","Выбор режима на экране действует до перезапуска.","Единицы Tab5 после перезапуска снова градусы."}},
-    {"Качество и единицы",{"При ошибке, пропуске или старой паре результат —.","Отсутствующие данные нельзя считать нулём.","Нужны ответы не старше 500 мс с разносом до 50 мс.","Это времена приёма, аппаратной синхронизации нет.","мм/м = 1000 * tan(угол); берётся итоговый угол.","Для мм/м при модуле угла от 89° — вне диапазона.","Ни обычный ноль, ни REL не выравнивают оси за вас."}},
-    {"Запись на Tab5",{"Проверьте SD и USB-A: готовность, место и ошибки.","На экране Старт пишет на доступные носители;","выбор SD/USB через ПК зависит от команды записи.","В выравнивании пишутся исходные D2/D3 и REL CSV.","Нажмите Стоп и дождитесь закрытия файлов.","При записи смена режима, ролей и REL заблокирована.","Обычный USB-C здесь служит связью с ПК, не флешкой."}},
+    {"Начало работы",{"1. Настройки > Прибор: назначьте опору и объект.","2. Совместите направления X/Y обеих головок.","Проверьте крепление; подтвердите оси в меню.","3. Сохраните роли / запуск; выберите Выравнивание.","4. Дождитесь свежих ответов обоих датчиков.","5. Ноль разности задаёт условное положение.","Для записи проверьте носители и нажмите Старт."}},
+    {"Обычный «Ноль» креномера",{"«Ноль» запоминает сглаженные X/Y каждой","доступной головки как её собственное смещение.","Показание = сглаженный угол минус это смещение.","Это местный отсчёт, не заводская калибровка.","«Сброс нуля» убирает эти смещения обеих головок.","Ноль головки не меняет ноль разности.","Для выравнивания обнулять головки не требуется."}},
+    {"Ноль разности: объект минус опора",{"Выравнивание использует декодированные углы","до сглаживания и обычного нуля головок.","Живая разность D = угол объекта − угол опоры.","«Обнулить разность» запоминает разность D0.","Показание = D − ноль разности по X/Y.","Опора измеряется и после обнуления разности.","«Сбросить ноль» убирает D0, не ноль головки."}},
+    {"Пример для одной оси",{"Опора +2°, объект +3°: живая разность +1°.","Обнулите разность: D0 = +1°, результат 0°.","Опора остаётся +2°, объект стал +3.2°:","живая разность +1.2°, показание +0.2°.","Ноль разности — возврат к выбранной разности.","Он сам по себе не означает горизонтальность.","Две головки не определяют плоскостность детали."}},
+    {"После смены режима и перезапуска",{"Нули головок и разности теряются при перезапуске.","Смена режима, ролей или осей сбрасывает ноль.","После смены ролей снова проверьте оси и свежую пару.","Роли, оси и режим «При загрузке» сохраняются","кнопкой «Сохранить роли / запуск» в меню Прибор.","Выбор режима на экране действует до перезапуска.","Единицы Tab5 после перезапуска снова градусы."}},
+    {"Качество и единицы",{"При ошибке, пропуске или старой паре результат —.","Отсутствующие данные нельзя считать нулём.","Нужны ответы не старше 500 мс с разносом до 50 мс.","Это времена приёма, аппаратной синхронизации нет.","мм/м = 1000 * tan(угол); берётся итоговый угол.","Для мм/м при модуле угла от 89° — вне диапазона.","Нули головок и разности не выравнивают оси."}},
+    {"Запись на Tab5",{"Проверьте SD и USB-A: готовность, место и ошибки.","На экране Старт пишет на доступные носители;","выбор SD/USB через ПК зависит от команды записи.","В выравнивании пишутся исходные D2/D3 и REL CSV.","Нажмите Стоп и дождитесь закрытия файлов.","При записи смена режима, ролей и нуля запрещена.","Обычный USB-C здесь служит связью с ПК, не флешкой."}},
     {"Наблюдение и программа ПК",{"Tab5: наблюдение, HOLD, min/max, тренд и допуски.","HOLD фиксирует экран; журнал продолжает запись.","Допуск — заданный предел, не точность датчика.","График креномера и качество пары есть на Tab5.","У ПК свои HOLD, графики, анализ и отчёт.","Отчёт ПК не является функцией прошивки Tab5.","Автоматической оценки плоскостности здесь нет."}},
 };
 static struct {nui_obj_t *entry,*level_entry,*title,*line[7],*previous,*next,*counter;unsigned index;} help;
@@ -473,60 +474,93 @@ static void dual_open(void){
     dual.axes=button(u.dialog,"",24,268,1032,60,OUTLINE,A_REL_AXES);
     dual.boot=button(u.dialog,"",24,344,1032,60,FRAME,A_REL_BOOT);
     dual.hint=label(u.dialog,"",24,416,1032,34,F24,MUTED);
-    label(u.dialog,"4 датчика / две пары: недоступны. Ноль REL не является калибровкой.",24,462,1032,34,F20,MUTED);
+    label(u.dialog,"4 датчика / две пары: недоступны. Ноль разности не является калибровкой.",24,462,1032,34,F20,MUTED);
     button(u.dialog,"Отмена",24,530,492,64,GHOST,A_MODAL_CANCEL);
     dual.save=button(u.dialog,"Сохранить роли / запуск",540,530,516,64,PRIMARY,A_REL_SAVE);
     dual_modal_refresh();
+}
+/* Delta is absent from the fixed text font subsets. Keep the symbol native,
+ * without new font resources or a change to measurement/relative state. */
+static void dual_delta_draw(nui_event_t *ev){
+    nui_area_t a;nui_obj_get_coords(nui_event_get_target(ev),&a);
+    nui_layer_t *layer=nui_event_get_layer(ev);
+    const nui_point_precise_t p[]={{a.x1+25,a.y1+42},{a.x1+35,a.y1+21},{a.x1+45,a.y1+42}};
+    for(unsigned k=0;k<3;k++){nui_draw_line_dsc_t d;nui_draw_line_dsc_init(&d);d.p1=p[k];d.p2=p[(k+1)%3];d.color=nui_color_hex(u.muted);d.width=3;d.opa=255;nui_draw_line(layer,&d);}
 }
 static void dual_build(void){
     dual.entry=button(u.pages[SETTINGS],"Прибор",0,96,540,72,OUTLINE,A_DEVICE);
     help.entry=button(u.pages[SETTINGS],"Справка",556,96,540,72,OUTLINE,A_HELP);
     dual.page=box(u.pages[MEASURE],0,0,1096,636,BG);
-    label(dual.page,"Выравнивание",0,0,580,58,F48,TEXT);
-    help.level_entry=button(dual.page,"Справка",600,0,188,58,OUTLINE,A_HELP);
-    dual.unit=button(dual.page,"Градусы",804,0,292,58,OUTLINE,A_REL_UNIT);
-    dual.basis=label(dual.page,"",0,70,1096,68,F24,MUTED);
+    nui_obj_t *hero=dual.hero=box(dual.page,0,0,1096,88,NAV);nui_obj_set_style_radius(hero,22,0);
+    nui_obj_set_style_bg_grad_dir(hero,NUI_GRAD_DIR_HOR,0);style_color(hero,NUI_STYLE_BG_GRAD_COLOR,nui_color_hex(u.navsel),0);
+    nui_obj_add_event_cb(hero,hero_draw,NUI_EVENT_DRAW_MAIN,NULL);
+    label(hero,"Угломер",24,8,360,62,F48,NAVTEXT);
+    label(hero,"Объект − Опора − Ноль разности",24,61,800,25,F20,NAVTEXT);
+    help.level_entry=button(hero,"Справка",400,12,160,48,OUTLINE,A_HELP);
+    dual.status=label(hero,"",580,19,268,36,F24,NAVTEXT);
+    dual.unit=button(hero,"Градусы",856,12,216,48,OUTLINE,A_REL_UNIT);
     for(unsigned i=0;i<2;i++){
-        nui_obj_t *c=box(dual.page,i*556,144,540,176,CARD);
-        label(c,i?"Разность Y":"Разность X",20,10,500,42,F32,MUTED);
-        dual.value[i]=label(c,"—",20,54,500,110,F64,TEXT);
-        dual.source[i]=label(dual.page,"",0,338+i*46,1096,42,F28,TEXT);
+        nui_obj_t *c=box(dual.page,i*556,100,540,194,CARD);nui_obj_set_style_radius(c,20,0);
+        nui_obj_add_event_cb(c,dual_delta_draw,NUI_EVENT_DRAW_MAIN,NULL);
+        dual.axis[i]=label(c,i?"Y · °":"X · °",49,14,467,43,F32,MUTED);
+        dual.value[i]=label(c,"—",24,60,492,124,F128,TEXT);
+        c=box(dual.page,i*556,306,540,120,CARD);nui_obj_set_style_radius(c,20,0);
+        nui_obj_t *dot=dual.dot[i]=box(c,24,19,16,16,ALT);nui_obj_set_style_radius(dot,8,0);style_color(dot,NUI_STYLE_BG_COLOR,nui_color_hex(u.sensor[i]),0);
+        dual.source[i]=label(c,"",54,11,280,40,F28,TEXT);
+        label(c,"исходные углы",334,15,182,30,F20,MUTED);
+        for(unsigned axis=0;axis<2;axis++){
+            label(c,axis?"Y":"X",axis?282:24,70,28,40,F28,MUTED);
+            dual.raw[i][axis]=label(c,"—",axis?314:56,56,208,62,F48,TEXT);
+        }
     }
-    dual.quality=label(dual.page,"",0,434,1096,82,F24,MUTED);
+    dual.basis=label(dual.page,"",0,442,556,34,F24,TEXT);
+    label(dual.page,"При обнулении текущее взаимное положение",0,478,556,26,F20,MUTED);
+    label(dual.page,"принимается за 0. Это не горизонт.",0,505,556,26,F20,MUTED);
+    dual.quality=label(dual.page,"",572,442,524,88,F20,MUTED);
     dual.start=button(dual.page,"Старт записи",0,538,360,94,ORANGE,A_START);
-    dual.capture=button(dual.page,"REL отсчёт",376,538,352,94,PRIMARY,A_REL_CAPTURE);
-    dual.reset=button(dual.page,"Сброс REL",744,538,352,94,OUTLINE,A_REL_RESET);
+    dual.capture=button(dual.page,"Обнулить разность",376,538,352,94,PRIMARY,A_REL_CAPTURE);
+    dual.reset=button(dual.page,"Сбросить ноль",744,538,352,94,OUTLINE,A_REL_RESET);
 }
 static void dual_refresh(void){
     if(!u.state.dual_mode_known){if(dual.entry){hide(dual.entry,true);hide(help.entry,true);hide(dual.page,true);nui_obj_set_y(u.settings_view,96);nui_obj_set_height(u.settings_view,540);}return;}
     if(!dual.entry)dual_build();
     hide(dual.entry,false);hide(help.entry,false);nui_obj_set_y(u.settings_view,184);nui_obj_set_height(u.settings_view,452);
-
     bool level=u.state.mode==TAB5_MODE_LEVEL;hide(dual.page,!level);
     if(u.modal_kind==6)dual_modal_refresh();
     if(!level)return;
     const tab5_relative_result_t *r=&u.state.relative;char b[384];
-    if(!r->offset_valid)text(dual.basis,"Живая разность: объект минус опора. Условный ноль, не горизонт.");
-    if(r->offset_valid){
-        if(r->ready&&isfinite(r->live[0])&&isfinite(r->live[1]))snprintf(b,sizeof(b),"REL: разность минус отсчёт; цель может быть непараллельной.\nЖивая X/Y %+.2f / %+.2f°; отсчёт %+.2f / %+.2f°",(double)r->live[0],(double)r->live[1],(double)r->offset[0],(double)r->offset[1]);
-        else if(isfinite(r->offset[0])&&isfinite(r->offset[1]))snprintf(b,sizeof(b),"REL: отсчёт сохранён %+.2f / %+.2f°. Живая пара недоступна.\nСохранённый отсчёт не заменяет потерянный опорный датчик.",(double)r->offset[0],(double)r->offset[1]);
-        else snprintf(b,sizeof(b),"REL: сохранённый отсчёт недоступен. Проверьте состояние пары.");
-        text(dual.basis,b);
-    }
+    style_color(dual.hero,NUI_STYLE_BG_GRAD_COLOR,nui_color_hex(u.navsel),0);
+    if(!r->offset_valid)text(dual.basis,"Ноль разности: не задан");
+    else if(isfinite(r->offset[0])&&isfinite(r->offset[1])){
+        snprintf(b,sizeof(b),"Ноль разности: X %+.2f° · Y %+.2f°",(double)r->offset[0],(double)r->offset[1]);text(dual.basis,b);
+    }else text(dual.basis,"Ноль разности: недоступен");
     for(unsigned i=0;i<2;i++){
-        float v=r->relative[i];
-        if(!r->ready||!isfinite(v))snprintf(b,sizeof(b),"—");
-        else if(dual.units==1){if(fabsf(v)>=89)snprintf(b,sizeof(b),"вне диапазона");else snprintf(b,sizeof(b),"%+.1f мм/м",1000.0*tan(v*3.141592653589793/180.0));}
+        style_color(dual.dot[i],NUI_STYLE_BG_COLOR,nui_color_hex(u.sensor[i]),0);
+        const float v=r->relative[i];bool numeric=r->ready&&isfinite(v);
+        if(!numeric)snprintf(b,sizeof(b),"—");
+        else if(dual.units==1){if(fabsf(v)>=89){snprintf(b,sizeof(b),"вне диапазона");numeric=false;}else snprintf(b,sizeof(b),"%+.1f",1000.0*tan(v*3.141592653589793/180.0));}
         else snprintf(b,sizeof(b),"%+.2f°",(double)v);
-        text(dual.value[i],b);style_color(dual.value[i],NUI_STYLE_TEXT_COLOR,nui_color_hex(r->ready?u.text:u.muted),0);
-        unsigned k=i?u.state.relative_config.object_index:u.state.relative_config.reference_index;
-        if(k>=2)k=i;
-        snprintf(b,sizeof(b),"%s · адрес %u: X %+.2f°   Y %+.2f° (исходные)",i?"Объект":"Опора",u.state.measurement.sensor[k].address,(double)r->source[i][0],(double)r->source[i][1]);if(!r->timestamp_us[i]||!isfinite(r->source[i][0])||!isfinite(r->source[i][1]))snprintf(b,sizeof(b),"%s · адрес %u: исходных данных нет",i?"Объект":"Опора",u.state.measurement.sensor[k].address);text(dual.source[i],b);
+        nui_point_t size;nui_text_get_size(&size,b,F128,0,0,NUI_COORD_MAX,NUI_TEXT_FLAG_NONE);
+        const nui_font_t *font=!numeric&&r->ready&&isfinite(v)?F32:size.x>492?F108:F128;
+        style_font(dual.value[i],font,0);text(dual.value[i],b);
+        style_color(dual.value[i],NUI_STYLE_TEXT_COLOR,nui_color_hex(r->ready?u.text:u.muted),0);
+        snprintf(b,sizeof(b),"%s · %s",i?"Y":"X",dual.units?"мм/м":"°");text(dual.axis[i],b);
+        unsigned k=i?u.state.relative_config.object_index:u.state.relative_config.reference_index;if(k>=2)k=i;
+        snprintf(b,sizeof(b),"%s · Д%u",i?"Объект":"Опора",u.state.measurement.sensor[k].address);text(dual.source[i],b);
+        for(unsigned axis=0;axis<2;axis++){
+            if(r->timestamp_us[i]&&isfinite(r->source[i][axis]))snprintf(b,sizeof(b),"%+.2f°",(double)r->source[i][axis]);
+            else snprintf(b,sizeof(b),"—");
+            nui_text_get_size(&size,b,F48,0,0,NUI_COORD_MAX,NUI_TEXT_FLAG_NONE);
+            style_font(dual.raw[i][axis],size.x>208?F36:F48,0);text(dual.raw[i][axis],b);
+        }
     }
     const bool pair_time_known=u.state.now_known&&r->timestamp_us[0]&&r->timestamp_us[1]&&r->age_us[0]!=UINT64_MAX&&r->age_us[1]!=UINT64_MAX;
-    const char *reason=!pair_time_known?"Время пары неизвестно":r->ready?"Пара пригодна":(r->quality&TAB5_PAIR_AXES)?"Подтвердите оси в меню Прибор":(r->quality&TAB5_PAIR_MISSING)?"Нет ответа датчика":(r->quality&TAB5_PAIR_STALE)?"Устаревшие ответы":(r->quality&TAB5_PAIR_SKEW)?"Рассинхрон пары":(r->quality&TAB5_PAIR_WARMUP)?"Ожидание свежей пары":(r->quality&TAB5_PAIR_RANGE)?"Вне диапазона":"Ошибка пары";
-    snprintf(b,sizeof(b),"%s · возраст %llu / %llu мс · разнос %llu мс\nПределы: 500 / 50 мс. Время приёма, не синхронный замер.",reason,(unsigned long long)(r->age_us[0]/1000),(unsigned long long)(r->age_us[1]/1000),(unsigned long long)(r->skew_us/1000));if(!pair_time_known)snprintf(b,sizeof(b),"%s · время пары неизвестно\nПределы: возраст 500 мс / разнос 50 мс.",reason);text(dual.quality,b);
-    caption(dual.unit,dual.units?"мм/м · tan Δ":"Градусы");caption(dual.start,u.state.recording?"Стоп записи":"Старт записи");role(dual.start,u.state.recording?RED:ORANGE);
+    const char *reason=!pair_time_known?"Время пары неизвестно":r->ready?"Пара пригодна":(r->quality&TAB5_PAIR_AXES)?"Подтвердите оси":(r->quality&TAB5_PAIR_MISSING)?"Нет ответа датчика":(r->quality&TAB5_PAIR_STALE)?"Устаревшие ответы":(r->quality&TAB5_PAIR_SKEW)?"Рассинхрон пары":(r->quality&TAB5_PAIR_WARMUP)?"Ожидание свежей пары":(r->quality&TAB5_PAIR_RANGE)?"Вне диапазона":"Ошибка пары";
+    text(dual.status,reason);
+    if(pair_time_known)snprintf(b,sizeof(b),"%s · возраст %llu / %llu мс\nРазнос %llu мс · пределы 500 / 50 мс\nВремя приёма; аппаратной синхронизации нет.",reason,(unsigned long long)(r->age_us[0]/1000),(unsigned long long)(r->age_us[1]/1000),(unsigned long long)(r->skew_us/1000));
+    else snprintf(b,sizeof(b),"%s\nПределы: возраст 500 мс / разнос 50 мс\nВремя приёма; аппаратной синхронизации нет.",reason);
+    text(dual.quality,b);
+    caption(dual.unit,dual.units?"мм/м":"Градусы");caption(dual.start,u.state.recording?"Стоп записи":"Старт записи");role(dual.start,u.state.recording?RED:ORANGE);
     enabled(dual.start,u.state.recording||(r->ready&&!dual_locked()));enabled(dual.capture,r->ready&&!dual_locked());enabled(dual.reset,r->offset_valid&&!dual_locked());
 }
 static bool workspace_level(void){return u.state.dual_mode_known&&u.state.mode==TAB5_MODE_LEVEL;}
@@ -590,7 +624,7 @@ static void workspace_refresh(void){
     for(unsigned i=0;i<3;i++)hide(ws.page[i],false);
     const tab5_workspace_view_t*v=&u.state.workspace;const tab5_relative_result_t*r=&u.state.relative;char b[512];
     if(u.page==ROLL){
-        const char *source=r->offset_valid?"REL: живая - отсчёт":"LIVE: объект - опора";
+        const char *source=r->offset_valid?"Ноль разности: вычитается":"LIVE: объект - опора";
         if(v->held)snprintf(b,sizeof(b),"%s · HOLD %llu мс · точка %llu мс\nЗаморожено; min/max с явного сброса.",source,(unsigned long long)(v->held_us/1000),(unsigned long long)(v->values_us/1000));
         else snprintf(b,sizeof(b),"%s · %s · пары %llu / разрывы %llu\nMin/max с явного сброса; время точки %llu мс",source,v->config.filter_enabled?(v->filter_warm?"EMA готов":"EMA прогрев"):"без EMA",(unsigned long long)v->live_pairs,(unsigned long long)v->live_gaps,(unsigned long long)(v->values_us/1000));
         text(ws.basis,b);
@@ -610,8 +644,8 @@ static void workspace_refresh(void){
         char filename[96],offset[96];const bool session_known=u.state.relative_log.session_known&&u.state.relative_log.session[0];
         if(session_known)snprintf(filename,sizeof(filename),"%.63s_REL.CSV",u.state.relative_log.session);else snprintf(filename,sizeof(filename),"сеанс не создан");
         if(u.state.relative_log.offset_valid&&isfinite(u.state.relative_log.offset[0])&&isfinite(u.state.relative_log.offset[1]))snprintf(offset,sizeof(offset),"%+.2f / %+.2f°",(double)u.state.relative_log.offset[0],(double)u.state.relative_log.offset[1]);else snprintf(offset,sizeof(offset),"не задан");
-        snprintf(b,sizeof(b),"REL: %s · исходные D2/D3 отдельно\nРоли: %u / %u · offset X/Y %s · gen %lu\nПотери с загрузки: router %lu / storage %lu",filename,u.state.relative_log.config.reference_index+2,u.state.relative_log.config.object_index+2,offset,(unsigned long)u.state.relative_log.generation,(unsigned long)u.state.relative_log.route_drops,(unsigned long)u.state.relative_log.storage_drops);
-        if(!session_known)snprintf(b,sizeof(b),"REL: сеанс не создан\nРоли и отсчёт файла появятся после попытки создания сеанса.");
+        snprintf(b,sizeof(b),"REL: %s · исходные D2/D3 отдельно\nРоли: %u / %u · ноль разности X/Y %s · gen %lu\nПотери с загрузки: router %lu / storage %lu",filename,u.state.relative_log.config.reference_index+2,u.state.relative_log.config.object_index+2,offset,(unsigned long)u.state.relative_log.generation,(unsigned long)u.state.relative_log.route_drops,(unsigned long)u.state.relative_log.storage_drops);
+        if(!session_known)snprintf(b,sizeof(b),"REL: сеанс не создан\nРоли и ноль разности появятся после попытки создания сеанса.");
         text(ws.log_meta,b);
         for(unsigned i=0;i<2;i++){if(!u.state.relative_log.known||!u.state.relative_log.medium[i].known)snprintf(b,sizeof(b),"%s: состояние журнала недоступно",i?"USB":"SD");else snprintf(b,sizeof(b),"%s: %s · строк REL %lu / разрывов %lu\nОчередь %lu / потери %lu · код ошибки %d",i?"USB":"SD",u.state.relative_log.medium[i].failed?"ошибка":u.state.relative_log.medium[i].opened?"открыт":u.state.relative_log.medium[i].closed_ok?"закрыт успешно":"не открыт",(unsigned long)u.state.relative_log.medium[i].rows,(unsigned long)u.state.relative_log.medium[i].gaps,(unsigned long)u.state.relative_log.medium[i].queued,(unsigned long)u.state.relative_log.medium[i].dropped,u.state.relative_log.medium[i].error);text(ws.log[i],b);}
         enabled(ws.stop,u.state.recording);caption(ws.stop,u.state.recording?"Стоп записи":"Запись остановлена");

@@ -1,0 +1,1352 @@
+{
+  "schema_version": 1,
+  "title": "Tab5 1.8.7 UI presentation gallery",
+  "resolution": [
+    1280,
+    720
+  ],
+  "source": "tab5/main/tab5_ui.c",
+  "source_hashes": {
+    "tab5/tests/test_presentation_ui.c": "b81a9d474447433a5fba1d0bb138a22ddd59f21e37d632f60536f08507336833",
+    "tab5/main/native/native_ui.c": "0b176d0cee199979ab4c6b2c78f24726a63ebeb3d6293535eba4f100367296b6",
+    "tab5/main/native/font_native_fallback14.c": "673ac2c4f7da55e63379a3153838291db35c39aa0a70efed3ebcafe101580bcc",
+    "tab5/main/tab5_measure.c": "825b0d240755c671ddcba98824c40b294b61f9a6f0c31c1d26b51373ceb0b0ca",
+    "tab5/main/tab5_ui_graph.c": "d598ce2e0b98ed1087d45680e4bd39c718ffaf54273d8572aa7209a7fa18977e",
+    "tab5/main/tab5_time.c": "b8411a6a0a3d97ed7f27d4ad3333a46473bb2f071123a84a621bc24ad4844940",
+    "tab5/main/tab5_plot.c": "800bb30dc1710f49c0febd3ed689088c591fda706a01d73d8403c7406f8d2a1a",
+    "tab5/main/tab5_level.c": "fe633422cb7183348212165aa9051305150a48abaf273ab0f89f28d552f15bb3",
+    "tab5/main/tab5_relative.c": "6b34b2323f22a18ad68c3f2b61c2b11a99f3f86032620332902e5dae78a47bba",
+    "tab5/main/tab5_workspace.c": "8bddcab4492d41eb950021804623af3ee630a0232328e1bb73d48e60a2fad81a",
+    "tab5/main/font_tab5_108.c": "9f47bfe54000fcf3fe58116021bb55cb19c53c925413dd6b253eccf3ce5d7534",
+    "tab5/main/font_tab5_128.c": "36cb0b683c5a0ba78136f19d1ebb085573f8876e580400cd6cafda0439e3c403",
+    "tab5/main/font_tab5_16.c": "04b40893246e902b783df884c9c56843c73c13df28ee652334a820f455c9c31c",
+    "tab5/main/font_tab5_16m.c": "9d17ba4a5f654ecf0bae07116c66017e9b7500f73b84fa7e524cdec58a056205",
+    "tab5/main/font_tab5_20.c": "6ccfb9e61afcd0a314f028e5414d23517979130d7496785fd398147990f0e7bf",
+    "tab5/main/font_tab5_20m.c": "871fa01f2ea8105c726c51e3de6a0764ebc87d0d33a720ea8d477cdd0538435c",
+    "tab5/main/font_tab5_24.c": "95262932de22282ceedc5802dd739f3158075d9dbb8508a0961431943703fd83",
+    "tab5/main/font_tab5_28.c": "7a71638fffc5c1217ec03aa64e405f8ecfb62f67da1f49bba895ca139e307ae7",
+    "tab5/main/font_tab5_32.c": "512db05fb4651c1592c92e3de9c9dce716f35a09d3e4c6da50e42517ec44f27f",
+    "tab5/main/font_tab5_36.c": "1dfe58abbd945c54d0301d6e2a626bfcf1f09ebef222a7758fb2e760b3495e25",
+    "tab5/main/font_tab5_40.c": "8960d644c9c294ada550f9cef342b5da996a7ce4551494b6f39ba942d6499e6f",
+    "tab5/main/font_tab5_48.c": "3fbd0fe0292bae5d719483611c5b8d2b81dbcb41a2e9707101fd84e60b440dc1",
+    "tab5/main/font_tab5_56.c": "6d4b043d6d1e3c8e42733797a73e44e633f5ee8267c6861118e89ca4ce22e4bb",
+    "tab5/main/font_tab5_64.c": "5bcfa4442db7a49469c9cbe939693598c010417e9ddcbdefb7b471d2b23f1c92",
+    "tab5/main/tab5_ui.c": "52d9c86b61a96348d66e4a7355430cc10fa251fe86f1d67e21397b1453aa12d2",
+    "tab5/main/CMakeLists.txt": "de444b0ae3f2f34c054730fdd5de4185c45b2700e370b5e8d1c5309e7d3d12cb",
+    "tab5/tools/gen_fonts.py": "cd6061f1c7381ab25633593dfd817b74e8a859bae16ba81dea5966c6a1a70d89",
+    "tab5/tests/render_presentation.py": "74cc22ac358bf695f462375c486c957f7efcecfe52617332f1a454415db8641f",
+    "tab5/main/native/native_gradient.h": "ee8cbf08df2166c6bfd3a8bca8306fa8310b0c2b06a5a0b0a8f1cde280e8262c",
+    "tab5/main/native/native_ui.h": "f47f8fb2d0a2f9a990378494465da65d1459d04dc153bc954d7ad2bf231805e5",
+    "tab5/main/tab5_backlight.h": "db59e7aa885687eb30fd924630039d79c43fad9eaef7fdb35b49fb974249bead",
+    "tab5/main/tab5_board.h": "4699d6a5ffd246ca82f43507a1cc155a1e88dfde441da709ec526abbfd9c1a44",
+    "tab5/main/tab5_draw_profile.h": "e79cb15c7e5ff35a9ceaa98a67cf7c6e5853faaf5c2a86e1d5f5e7cf06263d8e",
+    "tab5/main/tab5_level.h": "d16d87af8183e9524d47e3b6a59f958ca97f5cbda3e2edeab058132ea0a936dd",
+    "tab5/main/tab5_measure.h": "2cff8bbdcb05190b028ce8bf88009a2a70504177c96e522a3bab18c8c02c55e2",
+    "tab5/main/tab5_native_port.h": "8517e99ffdde6b4ef9c0b1309039af2485318cd565dc7c3c1e3b71c112147121",
+    "tab5/main/tab5_panel.h": "27dd0473b6534a4410413fabc73854b9d710555b911166329c80d114932dd3ed",
+    "tab5/main/tab5_plot.h": "7af016634422093bd370d99a8ace094163dad55abb1f75e858a6ab9d31c38313",
+    "tab5/main/tab5_relative.h": "a0c93308b867b084f62b8eabdcf324838b25df347f9affd57755ca9e2240cb90",
+    "tab5/main/tab5_resources.h": "acfa3f66363cb1815a9cbecb991212423c86ad90a47f250f8d3d5ab6e65a254d",
+    "tab5/main/tab5_retry_backoff.h": "815326da4dfddcf07402102804869013e3c9053d008727a53e13af43ae6180f9",
+    "tab5/main/tab5_services.h": "9478b69c986e6aab501f54fe0348ed165880e37a7b41b0a3a5aa7523c5eb3b99",
+    "tab5/main/tab5_time.h": "1dc48e12699c22e6b023aa11ac4fd5c315485a6fb86c4f1e3a46293292250d97",
+    "tab5/main/tab5_time_sync.h": "bb6ea3b6e5ce4aadd8d65ef747ba6275197dba6e38a1c3586293ad70ac96de92",
+    "tab5/main/tab5_ui.h": "a715e77fb782c4acc1719733df4f250b57b44c7875471d0b6913ae72929cf652",
+    "tab5/main/tab5_ui_graph.h": "da27b8e3d73095147e2f8f2e277f3adeb149f451533fbe49acd884b01a49bdbc",
+    "tab5/main/tab5_workspace.h": "4df6e0bd34fc702e10c41081c88be9e2dc996f9240041b5f353ff727e07679b6"
+  },
+  "fixture": "tab5/tests/test_presentation_ui.c",
+  "runner": "tab5/tests/render_presentation.py",
+  "fixtures_only": true,
+  "hardware_verified": false,
+  "native_window": false,
+  "demo_metrics": "CPU, RAM, media, time, network and angles are synthetic fixture state, not device measurements",
+  "network_data": "DEMO SSIDs, documentation-only 192.0.2.0/24 addresses, masked synthetic keys",
+  "fixture_firmware_label": "1.8.7-esp32; a UI fixture string, not binary verification",
+  "counts": {
+    "main": 44,
+    "help": 16,
+    "dialog": 10,
+    "validation": 8
+  },
+  "inventory": {
+    "heel": [
+      "angles",
+      "rolling",
+      "chart",
+      "recording",
+      "settings",
+      "network"
+    ],
+    "level": [
+      "alignment",
+      "observation",
+      "quality",
+      "journal",
+      "settings",
+      "network"
+    ],
+    "settings_scroll_sections": [
+      "polling",
+      "rolling",
+      "rolling_more",
+      "device/theme/time",
+      "display/firmware/backlight/PC synchronization"
+    ],
+    "network_scroll_sections": [
+      "access point",
+      "station"
+    ],
+    "help_topics": 8
+  },
+  "frames": [
+    {
+      "file": "main/demo_heel_angles_dark.png",
+      "mode": "heel",
+      "page": "angles",
+      "theme": "dark",
+      "group": "main",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "dba62a01dddf209acb9a8ee35d3973130ac16ea3763fb3ddb3bcf84b2ac69407"
+    },
+    {
+      "file": "main/demo_heel_rolling_dark.png",
+      "mode": "heel",
+      "page": "rolling",
+      "theme": "dark",
+      "group": "main",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "bcfd4f24ebcb5cb9ae60717f6b5cabcff7e2339e39b67d90747da3d2c642f3b2"
+    },
+    {
+      "file": "main/demo_heel_chart_dark.png",
+      "mode": "heel",
+      "page": "chart",
+      "theme": "dark",
+      "group": "main",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "5004c5692beeb53ee97e66bb8dd2d713eb6a8fba2f2f0278663a4c34fb9f183a"
+    },
+    {
+      "file": "main/demo_heel_recording_dark.png",
+      "mode": "heel",
+      "page": "recording",
+      "theme": "dark",
+      "group": "main",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "6f76f3907675ed0830d7ca01d7de0d08ee1c4a6abd955cdabc74465798d9628a"
+    },
+    {
+      "file": "main/demo_heel_settings_dark.png",
+      "mode": "heel",
+      "page": "settings",
+      "theme": "dark",
+      "group": "main",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "6a6a6774e8de6f0a79a06bffc65fd236e9a7af00e4907908f0d96b28d8bd746e"
+    },
+    {
+      "file": "main/demo_heel_settings_rolling_dark.png",
+      "mode": "heel",
+      "page": "settings_rolling",
+      "theme": "dark",
+      "group": "main",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "13bf3097b41b5bc1cdeca383b9db811a3803163676e360feea2dca12806afbc3"
+    },
+    {
+      "file": "main/demo_heel_settings_rolling_more_dark.png",
+      "mode": "heel",
+      "page": "settings_rolling_more",
+      "theme": "dark",
+      "group": "main",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "f7a0213753f89c6dd6d6b6f484d50ddac5cec8645c8bb424999fa8a619d29223"
+    },
+    {
+      "file": "main/demo_heel_settings_device_dark.png",
+      "mode": "heel",
+      "page": "settings_device",
+      "theme": "dark",
+      "group": "main",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "74566e996a2bfd64d88621f18474cb8b401e029e36262a4d58cb4240fe99e1a6"
+    },
+    {
+      "file": "main/demo_heel_settings_bottom_dark.png",
+      "mode": "heel",
+      "page": "settings_bottom",
+      "theme": "dark",
+      "group": "main",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "13c534115644803af0a82ee4f653d3cefcc9dc2ee17561cca8b1c5572af03be5"
+    },
+    {
+      "file": "main/demo_heel_network_dark.png",
+      "mode": "heel",
+      "page": "network",
+      "theme": "dark",
+      "group": "main",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "91e24e74f081f2ba32896b6344be824cd5f3db1c28f59b8a9c4848645f6bccb3"
+    },
+    {
+      "file": "main/demo_heel_network_bottom_dark.png",
+      "mode": "heel",
+      "page": "network_bottom",
+      "theme": "dark",
+      "group": "main",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "71d7b71cfee11daa92e316b7d7c58d2dd97dc720bd08941e00b0308f37117918"
+    },
+    {
+      "file": "main/demo_level_alignment_dark.png",
+      "mode": "level",
+      "page": "alignment",
+      "theme": "dark",
+      "group": "main",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "4345f2cbf9fd00b921f535a9eeca3376a3eb4d00d4400fb8d41a4f5dc646bd78"
+    },
+    {
+      "file": "main/demo_level_observation_dark.png",
+      "mode": "level",
+      "page": "observation",
+      "theme": "dark",
+      "group": "main",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "dac52f990627f194fa271e01b33609e6c33d4f2327522725697f08f37caee26e"
+    },
+    {
+      "file": "main/demo_level_quality_dark.png",
+      "mode": "level",
+      "page": "quality",
+      "theme": "dark",
+      "group": "main",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "21fef1141f9027743fcd7a136d98f12c0bbf8b8c0c66a07a7d8c329aeab0d314"
+    },
+    {
+      "file": "main/demo_level_journal_dark.png",
+      "mode": "level",
+      "page": "journal",
+      "theme": "dark",
+      "group": "main",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "93d7d2573d34751244a1cebd5baf3dfede97b56152c2ab24e0f12c42d5319172"
+    },
+    {
+      "file": "main/demo_level_settings_dark.png",
+      "mode": "level",
+      "page": "settings",
+      "theme": "dark",
+      "group": "main",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "64397d21384a88c106495a8c7edc3020c88ab6117ab9385936e8b552284f01fb"
+    },
+    {
+      "file": "main/demo_level_settings_rolling_dark.png",
+      "mode": "level",
+      "page": "settings_rolling",
+      "theme": "dark",
+      "group": "main",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "9d98cb51adbf42cbab9137adae541fbe910361fbc10dc30b1b8dfea8d366d928"
+    },
+    {
+      "file": "main/demo_level_settings_rolling_more_dark.png",
+      "mode": "level",
+      "page": "settings_rolling_more",
+      "theme": "dark",
+      "group": "main",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "167e2a4e44df98a7401bd011bdaa87bac035a2887d2388bd76b62e3629516096"
+    },
+    {
+      "file": "main/demo_level_settings_device_dark.png",
+      "mode": "level",
+      "page": "settings_device",
+      "theme": "dark",
+      "group": "main",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "e40646899421cc35f66b52a8110efbed024db4abad892142b38ed7252ee5c73d"
+    },
+    {
+      "file": "main/demo_level_settings_bottom_dark.png",
+      "mode": "level",
+      "page": "settings_bottom",
+      "theme": "dark",
+      "group": "main",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "520c32c9cfc5363c3df5576a5691ecc06c53e0f26e1e42824f2632b0850f230b"
+    },
+    {
+      "file": "main/demo_level_network_dark.png",
+      "mode": "level",
+      "page": "network",
+      "theme": "dark",
+      "group": "main",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "5e5f89cd35edd15d888b122813724951ff6f58b85dab3671fed211ccb9928f59"
+    },
+    {
+      "file": "main/demo_level_network_bottom_dark.png",
+      "mode": "level",
+      "page": "network_bottom",
+      "theme": "dark",
+      "group": "main",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "13abab9cc2473fe748048ac02e0237e2eb1b22b7e430e262588bebe138f1d20f"
+    },
+    {
+      "file": "dialog/demo_shared_instrument_roles_dark.png",
+      "mode": "shared",
+      "page": "instrument_roles",
+      "theme": "dark",
+      "group": "dialog",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "a0826138a065c25790810d2ad5be324f620331abd96b1116fcdd2bc886430695"
+    },
+    {
+      "file": "dialog/demo_level_observation_options_dark.png",
+      "mode": "level",
+      "page": "observation_options",
+      "theme": "dark",
+      "group": "dialog",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "fe628532ac646698198a86187c003c56386f92ec497d55e35d278e84d1698e49"
+    },
+    {
+      "file": "dialog/demo_shared_date_time_dark.png",
+      "mode": "shared",
+      "page": "date_time",
+      "theme": "dark",
+      "group": "dialog",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "475aa61ca8f9dbec4b9fa7d4be86f1e0cbffd1ad6fc73858d7c924ba571b7528"
+    },
+    {
+      "file": "dialog/demo_shared_numeric_keyboard_dark.png",
+      "mode": "shared",
+      "page": "numeric_keyboard",
+      "theme": "dark",
+      "group": "dialog",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "c329d17c9f529aeaf894d1779c1936fe5949891788d663f221779451a36b11f3"
+    },
+    {
+      "file": "dialog/demo_shared_network_keyboard_dark.png",
+      "mode": "shared",
+      "page": "network_keyboard",
+      "theme": "dark",
+      "group": "dialog",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "ffa07fae5a9d9b70d469688dd67916d99ab4d7b37a5c91b34d70567bc2d1330e"
+    },
+    {
+      "file": "help/demo_shared_help_01_dark.png",
+      "mode": "shared",
+      "page": "help_01",
+      "theme": "dark",
+      "group": "help",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "80a2b5b01098d0c559acfcfd5db141fb91c3e5ae88c4958b23c670965ef0e0d0"
+    },
+    {
+      "file": "help/demo_shared_help_02_dark.png",
+      "mode": "shared",
+      "page": "help_02",
+      "theme": "dark",
+      "group": "help",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "6b6262c7103fd6713903d1fd2a3b59378c8aed83bcabf5eecbf98be6922c16b5"
+    },
+    {
+      "file": "help/demo_shared_help_03_dark.png",
+      "mode": "shared",
+      "page": "help_03",
+      "theme": "dark",
+      "group": "help",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "45aae86682668bfcdfa0e052ae3e70dac693c19901843226bda95407dca348db"
+    },
+    {
+      "file": "help/demo_shared_help_04_dark.png",
+      "mode": "shared",
+      "page": "help_04",
+      "theme": "dark",
+      "group": "help",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "4242a1c38a726bda1f188bdf6b70321fa788e37d0ca287fe7b39468283a81be0"
+    },
+    {
+      "file": "help/demo_shared_help_05_dark.png",
+      "mode": "shared",
+      "page": "help_05",
+      "theme": "dark",
+      "group": "help",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "e7d5a697445f1ac89262a6745f9b4bc522cf9ec3170bc599a91312275bbd214f"
+    },
+    {
+      "file": "help/demo_shared_help_06_dark.png",
+      "mode": "shared",
+      "page": "help_06",
+      "theme": "dark",
+      "group": "help",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "02e6c934ab44f98abd01dc2e6f08cc5230009466a94f4d167b29dc48453082e7"
+    },
+    {
+      "file": "help/demo_shared_help_07_dark.png",
+      "mode": "shared",
+      "page": "help_07",
+      "theme": "dark",
+      "group": "help",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "a555ae1316e3ae23913c7b3e9a55523a9791350b76a8153669cd070bf77ee551"
+    },
+    {
+      "file": "help/demo_shared_help_08_dark.png",
+      "mode": "shared",
+      "page": "help_08",
+      "theme": "dark",
+      "group": "help",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "6c72c0acfb3fb7fb13568a40edd601d13ac3c3ef0d7989123d5369869b28874e"
+    },
+    {
+      "file": "validation/demo_level_full_angles_dark.png",
+      "mode": "level",
+      "page": "full_angles",
+      "theme": "dark",
+      "group": "validation",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "5390561968d3e26f832ea7d73ff96b54d6b52139d39320a96a11bb2f4bd43379"
+    },
+    {
+      "file": "validation/demo_level_range_message_dark.png",
+      "mode": "level",
+      "page": "range_message",
+      "theme": "dark",
+      "group": "validation",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "6bdd73e1e27a72eb035e6f50156728107a4daa0ae7ec4e2e90fb050173ada900"
+    },
+    {
+      "file": "validation/demo_level_slope_limit_dark.png",
+      "mode": "level",
+      "page": "slope_limit",
+      "theme": "dark",
+      "group": "validation",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "ebf201968a911498d38ae45b11ebf3ad9e1aad802afe240e9c78cc94c9b5cf0b"
+    },
+    {
+      "file": "validation/demo_level_stale_pair_dark.png",
+      "mode": "level",
+      "page": "stale_pair",
+      "theme": "dark",
+      "group": "validation",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "f0ab4a16106f0c77285231032efb2745689e2f9376e5c5feea0518f9bb25b2af"
+    },
+    {
+      "file": "main/demo_heel_angles_light.png",
+      "mode": "heel",
+      "page": "angles",
+      "theme": "light",
+      "group": "main",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "4e76560f6cf70461e96d8c7308c1a9ebeb8676e6765fffeee66af4873bfc46a6"
+    },
+    {
+      "file": "main/demo_heel_rolling_light.png",
+      "mode": "heel",
+      "page": "rolling",
+      "theme": "light",
+      "group": "main",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "ea9fca76b359508ec0e371c22e780d50b760ac7ac3f6fad213e52cce0d634bfc"
+    },
+    {
+      "file": "main/demo_heel_chart_light.png",
+      "mode": "heel",
+      "page": "chart",
+      "theme": "light",
+      "group": "main",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "d025795fa7739173405555139994466cd14b08051665c9d76a76dd19933a6f51"
+    },
+    {
+      "file": "main/demo_heel_recording_light.png",
+      "mode": "heel",
+      "page": "recording",
+      "theme": "light",
+      "group": "main",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "3bee2406d39f5a717110fa72837833cc24eb66fdfe953df9d76245e4791f1604"
+    },
+    {
+      "file": "main/demo_heel_settings_light.png",
+      "mode": "heel",
+      "page": "settings",
+      "theme": "light",
+      "group": "main",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "c821afd1a465d2c490a876eb3b1450c486dff007a2fffe8b1dc78807d06c46be"
+    },
+    {
+      "file": "main/demo_heel_settings_rolling_light.png",
+      "mode": "heel",
+      "page": "settings_rolling",
+      "theme": "light",
+      "group": "main",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "43aeb60ff174a8ee585a07e2fd672b04184dfdababecac001a146b4f1e57aff8"
+    },
+    {
+      "file": "main/demo_heel_settings_rolling_more_light.png",
+      "mode": "heel",
+      "page": "settings_rolling_more",
+      "theme": "light",
+      "group": "main",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "4137d808977d4aa2d914e388e6aa9a60ca0d29819757f94f4fb3e9cd8296d9c9"
+    },
+    {
+      "file": "main/demo_heel_settings_device_light.png",
+      "mode": "heel",
+      "page": "settings_device",
+      "theme": "light",
+      "group": "main",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "5204b986a79e99ef023a83c5c3d6ff07b6e988a03f1a7c8e0e17e096bf0e8aa9"
+    },
+    {
+      "file": "main/demo_heel_settings_bottom_light.png",
+      "mode": "heel",
+      "page": "settings_bottom",
+      "theme": "light",
+      "group": "main",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "401a1bf8ad57e73b98a410fd9c2f1a035d85cb0a21e991394fcc179964874442"
+    },
+    {
+      "file": "main/demo_heel_network_light.png",
+      "mode": "heel",
+      "page": "network",
+      "theme": "light",
+      "group": "main",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "9f0d0e364f44586208b2c86cbdbc625b2204290e98d22b5478a674d5e137557f"
+    },
+    {
+      "file": "main/demo_heel_network_bottom_light.png",
+      "mode": "heel",
+      "page": "network_bottom",
+      "theme": "light",
+      "group": "main",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "efb77c3b6ee56b488caabad1d19d0ac5c2df46554560db4f153a3d5069e21c11"
+    },
+    {
+      "file": "main/demo_level_alignment_light.png",
+      "mode": "level",
+      "page": "alignment",
+      "theme": "light",
+      "group": "main",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "7ea02a8e09089622a8d01619786a0c9754428f2b360b17f123ef22d23565a368"
+    },
+    {
+      "file": "main/demo_level_observation_light.png",
+      "mode": "level",
+      "page": "observation",
+      "theme": "light",
+      "group": "main",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "8b9411ea0642e267ff1d41eb38c5cc3b8fab59bdd676d7b80dd3de6157e29583"
+    },
+    {
+      "file": "main/demo_level_quality_light.png",
+      "mode": "level",
+      "page": "quality",
+      "theme": "light",
+      "group": "main",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "aad15bed77dad52d6fc126844c22f73feb3c5edc4e42c393ffcb2d59a95b5b6c"
+    },
+    {
+      "file": "main/demo_level_journal_light.png",
+      "mode": "level",
+      "page": "journal",
+      "theme": "light",
+      "group": "main",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "9830be642fbd9075cf9f4e2b5569bb9465130b842ba62c5a05d8ef9ee1755904"
+    },
+    {
+      "file": "main/demo_level_settings_light.png",
+      "mode": "level",
+      "page": "settings",
+      "theme": "light",
+      "group": "main",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "66a9a8c4b06e6fc5e3820ba3a7eddf09562905e6216e6bbbf32f4e3aaa08e544"
+    },
+    {
+      "file": "main/demo_level_settings_rolling_light.png",
+      "mode": "level",
+      "page": "settings_rolling",
+      "theme": "light",
+      "group": "main",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "3e6ae99a78e0939d130a43cdb98a4a4c1d26e888dea8ca979f023e89e14495d7"
+    },
+    {
+      "file": "main/demo_level_settings_rolling_more_light.png",
+      "mode": "level",
+      "page": "settings_rolling_more",
+      "theme": "light",
+      "group": "main",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "d109d614ffadae180f827ae1a8b927e72a0f43df92554f5c088530e26b2c0260"
+    },
+    {
+      "file": "main/demo_level_settings_device_light.png",
+      "mode": "level",
+      "page": "settings_device",
+      "theme": "light",
+      "group": "main",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "98261030c39eab77c154e690bd13cba960a82336f7efae1294d0830b09cb93cc"
+    },
+    {
+      "file": "main/demo_level_settings_bottom_light.png",
+      "mode": "level",
+      "page": "settings_bottom",
+      "theme": "light",
+      "group": "main",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "6086271a8ba5f2fd2444b3be627eed2ae97ba286dca7535c23aa17c1e831e522"
+    },
+    {
+      "file": "main/demo_level_network_light.png",
+      "mode": "level",
+      "page": "network",
+      "theme": "light",
+      "group": "main",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "f3a377eed57d69db3d052794e509ff25d49b12e471c3dad7e0ae24c8bf5d547c"
+    },
+    {
+      "file": "main/demo_level_network_bottom_light.png",
+      "mode": "level",
+      "page": "network_bottom",
+      "theme": "light",
+      "group": "main",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "7aa947cea92f389bd2745b87f2bf4934273408b297c619801a23eee76413b98c"
+    },
+    {
+      "file": "dialog/demo_shared_instrument_roles_light.png",
+      "mode": "shared",
+      "page": "instrument_roles",
+      "theme": "light",
+      "group": "dialog",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "dcbe5d84e5e9b2ad59f32ccfae265b2936a135156b219748811faf59a14228f3"
+    },
+    {
+      "file": "dialog/demo_level_observation_options_light.png",
+      "mode": "level",
+      "page": "observation_options",
+      "theme": "light",
+      "group": "dialog",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "b294e22541d958902e14268448875d8eb2f7bc8a6e8bb9f8f1a066e78dac052b"
+    },
+    {
+      "file": "dialog/demo_shared_date_time_light.png",
+      "mode": "shared",
+      "page": "date_time",
+      "theme": "light",
+      "group": "dialog",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "5b2d518be57c6b4747b93192e6ec63e0f2d482920afca8edfc5138d888252e94"
+    },
+    {
+      "file": "dialog/demo_shared_numeric_keyboard_light.png",
+      "mode": "shared",
+      "page": "numeric_keyboard",
+      "theme": "light",
+      "group": "dialog",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "c9f58ea38d1b3adad7d9978559e4c71c6e2335eca5a55f6eae088bbbda5b26d1"
+    },
+    {
+      "file": "dialog/demo_shared_network_keyboard_light.png",
+      "mode": "shared",
+      "page": "network_keyboard",
+      "theme": "light",
+      "group": "dialog",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "69dd05a060d61cca307d7b200b7c53f7324a85873177e2cc61b79512fef309c2"
+    },
+    {
+      "file": "help/demo_shared_help_01_light.png",
+      "mode": "shared",
+      "page": "help_01",
+      "theme": "light",
+      "group": "help",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "6c45622419d00692df98d61cd2a1617d8b0a96d7e3644bc5d9b19651de5c4847"
+    },
+    {
+      "file": "help/demo_shared_help_02_light.png",
+      "mode": "shared",
+      "page": "help_02",
+      "theme": "light",
+      "group": "help",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "c77a3562b2551486b672b5c08181c185bea397f1972d7801bf22dac517ce9b27"
+    },
+    {
+      "file": "help/demo_shared_help_03_light.png",
+      "mode": "shared",
+      "page": "help_03",
+      "theme": "light",
+      "group": "help",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "7413d2662404de710f355de5b15598121be88a1c85e8cf83214e415b7db1412b"
+    },
+    {
+      "file": "help/demo_shared_help_04_light.png",
+      "mode": "shared",
+      "page": "help_04",
+      "theme": "light",
+      "group": "help",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "749bc3c2cf877a250b04b5b0adbff10fc8ebb3ba9061526a38356a7179a6f3d5"
+    },
+    {
+      "file": "help/demo_shared_help_05_light.png",
+      "mode": "shared",
+      "page": "help_05",
+      "theme": "light",
+      "group": "help",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "b8f291d70d0feb9d63cbd52423eeedea92f69baca1789699ec6931e5bb20fa36"
+    },
+    {
+      "file": "help/demo_shared_help_06_light.png",
+      "mode": "shared",
+      "page": "help_06",
+      "theme": "light",
+      "group": "help",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "6a3eff991fd2c70ae0fcb1aa310133107395005c55f5b2fd93527a319493ec41"
+    },
+    {
+      "file": "help/demo_shared_help_07_light.png",
+      "mode": "shared",
+      "page": "help_07",
+      "theme": "light",
+      "group": "help",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "bfa6e44620970d808e7430d77ba87a96287bd7524f29bbe5b2bd990a6ccab28a"
+    },
+    {
+      "file": "help/demo_shared_help_08_light.png",
+      "mode": "shared",
+      "page": "help_08",
+      "theme": "light",
+      "group": "help",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "531d32c2e10b64ce467a04ca38774fd92abf90debdb0237058c0b8c08845046b"
+    },
+    {
+      "file": "validation/demo_level_full_angles_light.png",
+      "mode": "level",
+      "page": "full_angles",
+      "theme": "light",
+      "group": "validation",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "10aafe7b4721622fa6cdfc259ec57bfe09727dc4f683a5adbd6553eae8289afd"
+    },
+    {
+      "file": "validation/demo_level_range_message_light.png",
+      "mode": "level",
+      "page": "range_message",
+      "theme": "light",
+      "group": "validation",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "6c2b892aae8708778c18921d947f6284d113adc81ef6487ffda0666b6bd082c0"
+    },
+    {
+      "file": "validation/demo_level_slope_limit_light.png",
+      "mode": "level",
+      "page": "slope_limit",
+      "theme": "light",
+      "group": "validation",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "d6e135f4b28a9a3c1d008d43c9358f5dcf38d5ba63fbe424ad62275ad1ae4f46"
+    },
+    {
+      "file": "validation/demo_level_stale_pair_light.png",
+      "mode": "level",
+      "page": "stale_pair",
+      "theme": "light",
+      "group": "validation",
+      "demo": true,
+      "hardware_verified": false,
+      "data_source": "tab5/tests/test_presentation_ui.c: synthetic host fixture; real relative/workspace engines",
+      "renderer": "production native RGB565 tab5_ui.c",
+      "size": [
+        1280,
+        720
+      ],
+      "sha256": "653c9dc45b8921a87192c3a4c7c5fc263ff1de9a05cb88909f2a49f3b7ac1bd9"
+    }
+  ]
+}

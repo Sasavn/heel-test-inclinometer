@@ -31,8 +31,9 @@ FONTS += [('28', 28, 'Roboto-Medium.ttf', 'DejaVuSans-Bold.ttf', TEXT),
           ('36', 36, 'Roboto-Bold.ttf', 'DejaVuSans-Bold.ttf', TEXT),
           ('48', 48, 'Roboto-Bold.ttf', 'DejaVuSans-Bold.ttf', TEXT),
           ('56', 56, 'Roboto-Bold.ttf', 'DejaVuSans-Bold.ttf', TEXT),
-          ('108', 108, 'Roboto-Bold.ttf', 'DejaVuSans-Bold.ttf', LARGE_NUM)]
-LARGE = {'28', '36', '48', '56', '108'}
+          ('108', 108, 'Roboto-Bold.ttf', 'DejaVuSans-Bold.ttf', LARGE_NUM),
+          ('128', 128, 'Roboto-Bold.ttf', 'DejaVuSans-Bold.ttf', LARGE_NUM)]
+LARGE = {'28', '36', '48', '56', '108', '128'}
 
 def ranges(codes):
     return ','.join(hex(c) for c in sorted(codes))

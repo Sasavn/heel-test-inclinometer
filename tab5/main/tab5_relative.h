@@ -30,8 +30,9 @@ typedef struct {
     uint32_t generation;
     /* Single-owner publication state, never persisted. Copies used for a new
      * recorder epoch MUST call pair_reset before consuming ordered events. */
-    bool pair_known;
+    bool pair_known, pair_fault;
     uint64_t pair_used[2]; /* Role order, including rejected/failed replies. */
+    uint64_t fault_errors[2]; /* Physical heads: distinguish a new failure from a repeated health read. */
     tab5_relative_result_t pair;
 } tab5_relative_t;
 

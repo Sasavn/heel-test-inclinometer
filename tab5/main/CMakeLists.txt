@@ -3,7 +3,7 @@ idf_component_register(SRCS
     "tab5_ui_graph.c" "tab5_plot.c" "tab5_level.c" "tab5_relative.c" "tab5_workspace.c" "tab5_backlight.c" "native/font_native_fallback14.c"
     "font_tab5_16.c" "font_tab5_16m.c" "font_tab5_20.c" "font_tab5_20m.c"
     "font_tab5_24.c" "font_tab5_32.c" "font_tab5_40.c" "font_tab5_64.c"
-    "font_tab5_28.c" "font_tab5_36.c" "font_tab5_48.c" "font_tab5_56.c" "font_tab5_108.c"
+    "font_tab5_28.c" "font_tab5_36.c" "font_tab5_48.c" "font_tab5_56.c" "font_tab5_108.c" "font_tab5_128.c"
     INCLUDE_DIRS "."
     REQUIRES nvs_flash esp_timer app_update json esp_driver_uart esp_driver_gpio
              esp_driver_usb_serial_jtag esp_driver_i2c esp_wifi esp_netif

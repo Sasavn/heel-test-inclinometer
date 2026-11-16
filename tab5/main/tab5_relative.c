@@ -62,7 +62,8 @@ void tab5_relative_evaluate(const tab5_relative_t *s,const tab5_measure_snapshot
 }
 void tab5_relative_pair_reset(tab5_relative_t *s) {
     if(!s)return;
-    s->pair_known=false;memset(&s->pair,0,sizeof(s->pair));
+    s->pair_known=s->pair_fault=false;memset(&s->pair,0,sizeof(s->pair));
+    memset(s->fault_errors,0,sizeof(s->fault_errors));
     s->pair_used[0]=s->floor_good[s->config.reference_index<TAB5_SENSOR_COUNT?s->config.reference_index:0];
     s->pair_used[1]=s->floor_good[s->config.object_index<TAB5_SENSOR_COUNT?s->config.object_index:1];
 }
@@ -80,11 +81,29 @@ static void pair_update(tab5_relative_t *s,const tab5_measure_snapshot_t *sample
                 (raw.sequence[1]&&raw.timestamp_us[1]>now);
     bool fault=(raw.quality&(TAB5_PAIR_MISSING|TAB5_PAIR_ERROR|TAB5_PAIR_AXES|TAB5_PAIR_RANGE))||future;
     bool both=raw.sequence[0]>s->pair_used[0]&&raw.sequence[1]>s->pair_used[1];
+    /* A cached failed head can accompany several newer healthy replies.
+     * Only a NEW fault moves the recovery floor; re-observing the same fault
+     * must not consume the healthy head needed for the next complete pair. */
+    bool new_fault=fault&&!s->pair_fault;
+    unsigned index[2]={s->config.reference_index,s->config.object_index};
+    for(unsigned role=0;role<2;role++){
+        unsigned i=index[role];const tab5_measure_sensor_t *p=&sample->sensor[i];
+        bool bad=!p->valid||!p->good||p->address!=i+2||p->fail_streak||
+            p->last_error!=TAB5_MEASURE_OK||p->timestamp_us>now||
+            !isfinite(p->decoded_x)||!isfinite(p->decoded_y)||
+            fabsf(p->decoded_x)>90||fabsf(p->decoded_y)>90;
+        if(fault&&(p->errors!=s->fault_errors[i]||(bad&&p->good>s->pair_used[role])))new_fault=true;
+    }
     if(fault||(feed&&both)){
         /* A completed BAD pair is a publication too. Never hide it behind an
          * older green pair. Actual faults consume the recovery boundary now. */
-        s->pair=raw;s->pair_known=true;
-        for(unsigned i=0;i<2;i++)if(raw.sequence[i]>s->pair_used[i])s->pair_used[i]=raw.sequence[i];
+        bool recovering=s->pair_fault;
+        s->pair=raw;s->pair_known=true;s->pair_fault=fault||(recovering&&!raw.ready);
+        /* During recovery an out-of-skew partial cycle is still BAD, but must
+         * not consume the head that can complete the next coherent pair. */
+        if(new_fault||(!fault&&(!recovering||raw.ready)))
+            for(unsigned i=0;i<2;i++)if(raw.sequence[i]>s->pair_used[i])s->pair_used[i]=raw.sequence[i];
+        for(unsigned i=0;i<2;i++)s->fault_errors[i]=sample->sensor[i].errors;
     }
     if(!s->pair_known){
         *out=raw;out->quality|=TAB5_PAIR_WARMUP;out->ready=false;
