@@ -16,6 +16,8 @@
 #include "App.hpp"
 #include "Fonts.hpp"
 #include "Theme.hpp"
+#include "UiLoopPacer.hpp"
+#include "WindowsEventWait.hpp"
 #include "../core/TextUtil.hpp"
 
 #ifdef _WIN32
@@ -158,15 +160,41 @@ void RunUi(bool startDemo)
         return;
     }
 
+    // Pace rendering independently of the presentation interval.
+    // Pace frames independently; service file/firmware/recording work even when
+    // there is no redraw or input. GLFW waits dispatch window/input callbacks.
+#ifdef _WIN32
+    ui::WindowsEventWait eventWait;
+#endif
+    ui::UiLoopPacer pacer(ui::UiLoopPacer::Clock::now());
     while (!glfwWindowShouldClose(window))
     {
         glfwPollEvents();
-        app.Tick();
-        if (glfwGetWindowAttrib(window, GLFW_ICONIFIED) != 0)
+        if (glfwWindowShouldClose(window))
+            break;
+        const bool iconified = glfwGetWindowAttrib(window, GLFW_ICONIFIED) != 0;
+        auto now = ui::UiLoopPacer::Clock::now();
+        if (pacer.ServiceDue(now))
         {
-            ImGui_ImplGlfw_Sleep(30); // свёрнуто: не рисуем, но скачивание и перепрошивка идут
+            pacer.ServiceStarted(now);
+            app.Tick();
+        }
+        now = ui::UiLoopPacer::Clock::now();
+        if (!pacer.FrameDue(now, iconified))
+        {
+            const double wait = pacer.WaitSeconds(now, iconified);
+            if (wait > 0.0)
+            {
+#ifdef _WIN32
+                eventWait.Wait(wait);
+                glfwPollEvents(); // callbacks run on this UI thread after every wake
+#else
+                glfwWaitEventsTimeout(wait);
+#endif
+            }
             continue;
         }
+        pacer.FrameStarted(now);
         if (app.ThemeChanged())
         {
             ui::ApplyTheme(app.DarkTheme(), scale);
