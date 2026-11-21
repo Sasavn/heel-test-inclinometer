@@ -96,10 +96,64 @@ static void real_startup(void){
   tab5_relative_observe(&state,&core.state,1033333+n*100000,&pair);
  }
 }
+
+static void cycle_boundary(uint16_t frequency_hz)
+{
+    static tab5_measure_core_t core;
+    tab5_measure_config_t config;
+    tab5_measure_config_default(&config);
+    config.frequency_hz = frequency_hz;
+    tab5_measure_core_init(&core, &config, 0);
+    reset();
+
+    const uint16_t reference[2] = {10025, 10000};
+    const uint16_t object[2] = {10125, 10000};
+    const uint64_t period = 1000000 / frequency_hz;
+    const uint64_t separation = 32000;
+    uint64_t start = 1000000;
+
+    C(tab5_measure_cycle_due(&core, start));
+    C(tab5_measure_core_sample(&core, 0, reference, start));
+    tab5_relative_boundary(&state, &core.state);
+    C(tab5_measure_core_sample(&core, 1, object, start + separation));
+    tab5_relative_observe(&state, &core.state, start + separation, &pair);
+    C(!pair.ready);
+
+    start += period;
+    C(tab5_measure_cycle_due(&core, start));
+    C(tab5_measure_core_sample(&core, 0, reference, start));
+    tab5_relative_observe(&state, &core.state, start, &pair);
+    /* The adjacent replies are 68 ms apart at 10 Hz and only 8 ms at 25 Hz. */
+    C(!pair.ready && (pair.quality & TAB5_PAIR_WARMUP));
+    C(tab5_measure_core_sample(&core, 1, object, start + separation));
+    tab5_relative_observe(&state, &core.state, start + separation, &pair);
+    C(pair.ready && pair.skew_us == separation && pair.live[0] == 1);
+    C(pair.sequence[0] == 2 && pair.sequence[1] == 2);
+
+    start += period;
+    C(tab5_measure_cycle_due(&core, start));
+    C(tab5_measure_core_sample(&core, 0, reference, start));
+    tab5_relative_observe(&state, &core.state, start, &pair);
+    /* Skip D3's event in this cycle. A later D3 must not use the pending D2. */
+    start += period;
+    C(tab5_measure_cycle_due(&core, start));
+    C(tab5_measure_core_sample(&core, 1, object, start + separation));
+    tab5_relative_observe(&state, &core.state, start + separation, &pair);
+    C(pair.ready && pair.sequence[0] == 2 && pair.sequence[1] == 2);
+
+    start += period;
+    C(tab5_measure_cycle_due(&core, start));
+    C(tab5_measure_core_sample(&core, 0, reference, start));
+    tab5_relative_observe(&state, &core.state, start, &pair);
+    C(tab5_measure_core_sample(&core, 1, object, start + 50001));
+    tab5_relative_observe(&state, &core.state, start + 50001, &pair);
+    C(!pair.ready && pair.quality == TAB5_PAIR_SKEW && pair.skew_us == 50001);
+}
 #endif
 int main(void){video();
 #ifndef OLD_PAIR
  expiry_and_faults();boundaries();real_startup();
+ cycle_boundary(10);cycle_boundary(25);
 #endif
  printf("PASS coherent publication %u checks: original basis, exact bounds, faults/recovery, completed bad pair, boundaries, history dedup\n",checks);return 0;
 }

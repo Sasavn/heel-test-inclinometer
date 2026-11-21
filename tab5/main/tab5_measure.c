@@ -112,6 +112,7 @@ bool tab5_measure_core_sample(tab5_measure_core_t *c,unsigned i,const uint16_t r
     }
     f->initialized=true; s->raw_x=raw[0];s->raw_y=raw[1];s->decoded_x=v[0];s->decoded_y=v[1];
     s->filtered_x=out[0];s->filtered_y=out[1];s->x=out[0]-s->zero_x;s->y=out[1]-s->zero_y;
+    s->poll_cycle=c->state.cycles;
     s->timestamp_us=now;s->valid=true;s->fail_streak=0;s->good++;s->last_error=TAB5_MEASURE_OK;
     roll(c,i,now);stable(c);return true;
 }

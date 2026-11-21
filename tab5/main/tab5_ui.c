@@ -99,6 +99,9 @@ static struct {
     nui_obj_t *roles,*axes,*boot,*save,*mode[2],*hint,*hero,*dot[2];
     tab5_relative_config_t draft;
     unsigned units;
+    uint64_t quality_at_us;
+    uint32_t quality_flags;
+    bool quality_shown,quality_time_known;
 } dual;
 static struct {
     nui_obj_t *page[3],*obs[2],*stats[2],*hold,*clear,*limits,*basis,*live,*trend;
@@ -522,12 +525,12 @@ static void dual_build(void){
     dual.reset=button(dual.page,"Сбросить ноль",744,538,352,94,OUTLINE,A_REL_RESET);
 }
 static void dual_refresh(void){
-    if(!u.state.dual_mode_known){if(dual.entry){hide(dual.entry,true);hide(help.entry,true);hide(dual.page,true);nui_obj_set_y(u.settings_view,96);nui_obj_set_height(u.settings_view,540);}return;}
+    if(!u.state.dual_mode_known){dual.quality_shown=false;if(dual.entry){hide(dual.entry,true);hide(help.entry,true);hide(dual.page,true);nui_obj_set_y(u.settings_view,96);nui_obj_set_height(u.settings_view,540);}return;}
     if(!dual.entry)dual_build();
     hide(dual.entry,false);hide(help.entry,false);nui_obj_set_y(u.settings_view,184);nui_obj_set_height(u.settings_view,452);
     bool level=u.state.mode==TAB5_MODE_LEVEL;hide(dual.page,!level);
     if(u.modal_kind==6)dual_modal_refresh();
-    if(!level)return;
+    if(!level){dual.quality_shown=false;return;}
     const tab5_relative_result_t *r=&u.state.relative;char b[384];
     style_color(dual.hero,NUI_STYLE_BG_GRAD_COLOR,nui_color_hex(u.navsel),0);
     if(!r->offset_valid)text(dual.basis,"Ноль разности: не задан");
@@ -557,9 +560,20 @@ static void dual_refresh(void){
     const bool pair_time_known=u.state.now_known&&r->timestamp_us[0]&&r->timestamp_us[1]&&r->age_us[0]!=UINT64_MAX&&r->age_us[1]!=UINT64_MAX;
     const char *reason=!pair_time_known?"Время пары неизвестно":r->ready?"Пара пригодна":(r->quality&TAB5_PAIR_AXES)?"Подтвердите оси":(r->quality&TAB5_PAIR_MISSING)?"Нет ответа датчика":(r->quality&TAB5_PAIR_STALE)?"Устаревшие ответы":(r->quality&TAB5_PAIR_SKEW)?"Рассинхрон пары":(r->quality&TAB5_PAIR_WARMUP)?"Ожидание свежей пары":(r->quality&TAB5_PAIR_RANGE)?"Вне диапазона":"Ошибка пары";
     text(dual.status,reason);
-    if(pair_time_known)snprintf(b,sizeof(b),"%s · возраст %llu / %llu мс\nРазнос %llu мс · пределы 500 / 50 мс\nВремя приёма; аппаратной синхронизации нет.",reason,(unsigned long long)(r->age_us[0]/1000),(unsigned long long)(r->age_us[1]/1000),(unsigned long long)(r->skew_us/1000));
-    else snprintf(b,sizeof(b),"%s\nПределы: возраст 500 мс / разнос 50 мс\nВремя приёма; аппаратной синхронизации нет.",reason);
-    text(dual.quality,b);
+    /* Limit churn from the numerical age. Show a quality transition at once. */
+    const uint64_t now=u.state.now_us;
+    if(u.page!=MEASURE)dual.quality_shown=false;
+    else if(!dual.quality_shown||dual.quality_flags!=r->quality||
+            dual.quality_time_known!=pair_time_known||now<dual.quality_at_us||
+            now-dual.quality_at_us>=1000000){
+        if(pair_time_known)snprintf(b,sizeof(b),"%s · возраст %llu / %llu мс\nРазнос %llu мс · пределы 500 / 50 мс\nВремя приёма; аппаратной синхронизации нет.",reason,(unsigned long long)(r->age_us[0]/1000),(unsigned long long)(r->age_us[1]/1000),(unsigned long long)(r->skew_us/1000));
+        else snprintf(b,sizeof(b),"%s\nПределы: возраст 500 мс / разнос 50 мс\nВремя приёма; аппаратной синхронизации нет.",reason);
+        text(dual.quality,b);
+        dual.quality_shown=true;
+        dual.quality_at_us=now;
+        dual.quality_flags=r->quality;
+        dual.quality_time_known=pair_time_known;
+    }
     caption(dual.unit,dual.units?"мм/м":"Градусы");caption(dual.start,u.state.recording?"Стоп записи":"Старт записи");role(dual.start,u.state.recording?RED:ORANGE);
     enabled(dual.start,u.state.recording||(r->ready&&!dual_locked()));enabled(dual.capture,r->ready&&!dual_locked());enabled(dual.reset,r->offset_valid&&!dual_locked());
 }

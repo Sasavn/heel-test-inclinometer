@@ -44,8 +44,9 @@ void tab5_relative_boundary(tab5_relative_t *state,const tab5_measure_snapshot_t
 void tab5_relative_evaluate(const tab5_relative_t *state,const tab5_measure_snapshot_t *sample,
                             uint64_t now_us,tab5_relative_result_t *out);
 /* Pure validator above also audits candidates. Feed observe from ordered RX;
- * runtime readers use read below. Publish only both-new pairs, retain original
- * RX provenance on partial updates, invalidate actual faults. Serialize owner. */
+ * runtime readers use read below. Publish only both-new replies from one poll
+ * cycle, retain original RX provenance on partial updates and invalidate
+ * actual faults. Serialize owner. */
 void tab5_relative_pair_reset(tab5_relative_t *state);
 void tab5_relative_observe(tab5_relative_t *state,const tab5_measure_snapshot_t *sample,
                            uint64_t now_us,tab5_relative_result_t *out);

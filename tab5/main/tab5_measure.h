@@ -28,6 +28,8 @@ typedef struct {
     float zero_x, zero_y, roll_x, roll_y;
     uint8_t roll_fill_s;
     uint64_t timestamp_us, good, errors;
+    /* Poll cycle of the last successful reply, preserved on a failed reply. */
+    uint64_t poll_cycle;
     tab5_measure_error_t last_error;
 } tab5_measure_sensor_t;
 typedef struct {

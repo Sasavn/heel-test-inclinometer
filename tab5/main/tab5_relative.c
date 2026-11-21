@@ -81,6 +81,9 @@ static void pair_update(tab5_relative_t *s,const tab5_measure_snapshot_t *sample
                 (raw.sequence[1]&&raw.timestamp_us[1]>now);
     bool fault=(raw.quality&(TAB5_PAIR_MISSING|TAB5_PAIR_ERROR|TAB5_PAIR_AXES|TAB5_PAIR_RANGE))||future;
     bool both=raw.sequence[0]>s->pair_used[0]&&raw.sequence[1]>s->pair_used[1];
+    /* A mode boundary can fall between D2 and D3. A mismatch is an incomplete
+     * cycle even when both replies are newer and their timestamps are close. */
+    bool same_cycle=sample->sensor[0].poll_cycle==sample->sensor[1].poll_cycle;
     /* A cached failed head can accompany several newer healthy replies.
      * Only a NEW fault moves the recovery floor; re-observing the same fault
      * must not consume the healthy head needed for the next complete pair. */
@@ -94,7 +97,7 @@ static void pair_update(tab5_relative_t *s,const tab5_measure_snapshot_t *sample
             fabsf(p->decoded_x)>90||fabsf(p->decoded_y)>90;
         if(fault&&(p->errors!=s->fault_errors[i]||(bad&&p->good>s->pair_used[role])))new_fault=true;
     }
-    if(fault||(feed&&both)){
+    if(fault||(feed&&both&&same_cycle)){
         /* A completed BAD pair is a publication too. Never hide it behind an
          * older green pair. Actual faults consume the recovery boundary now. */
         bool recovering=s->pair_fault;
