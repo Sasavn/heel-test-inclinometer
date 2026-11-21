@@ -280,7 +280,7 @@ static void close_modal(void){encoder_modal_forget();if(u.veil)nui_obj_delete(u.
 static void open_modal(int x,int y,int w,int h,int kind){close_modal();e.paint_dirty=true;e.saved_level=e.level;e.saved_index=e.index;e.level=ENC_MODAL;e.modal_index=kind==3?2:0;e.date_index=0;u.modal_kind=kind;u.veil=box(u.root,0,0,1280,720,BG);style_color(u.veil,NUI_STYLE_BG_COLOR,nui_color_hex(0x080E1E),0);nui_obj_set_style_bg_opa(u.veil,140,0);nui_obj_add_flag(u.veil,NUI_OBJ_FLAG_CLICKABLE);u.dialog=box(u.veil,x,y,w,h,CARD);nui_obj_set_style_radius(u.dialog,20,0);}
 /* Read-only operator help: no backend action, configuration or zero state. */
 static const struct {const char *title,*line[7];} help_pages[]={
-    {"Начало работы",{"1. Настройки > Прибор: назначьте опору и объект.","2. Совместите направления X/Y обеих головок.","Проверьте крепление; подтвердите оси в меню.","3. Сохраните роли / запуск; выберите Выравнивание.","4. Дождитесь свежих ответов обоих датчиков.","5. Ноль разности задаёт условное положение.","Для записи проверьте носители и нажмите Старт."}},
+    {"Начало работы",{"1. Настройки > Прибор: назначьте опору и объект.","2. Совместите направления X/Y обеих головок.","Проверьте крепление; подтвердите оси в меню.","3. Сохраните роли / запуск; выберите Замеры углов.","4. Дождитесь свежих ответов обоих датчиков.","5. Ноль разности задаёт условное положение.","Для записи проверьте носители и нажмите Старт."}},
     {"Обычный «Ноль» креномера",{"«Ноль» запоминает сглаженные X/Y каждой","доступной головки как её собственное смещение.","Показание = сглаженный угол минус это смещение.","Это местный отсчёт, не заводская калибровка.","«Сброс нуля» убирает эти смещения обеих головок.","Ноль головки не меняет ноль разности.","Для выравнивания обнулять головки не требуется."}},
     {"Ноль разности: объект минус опора",{"Выравнивание использует декодированные углы","до сглаживания и обычного нуля головок.","Живая разность D = угол объекта − угол опоры.","«Обнулить разность» запоминает разность D0.","Показание = D − ноль разности по X/Y.","Опора измеряется и после обнуления разности.","«Сбросить ноль» убирает D0, не ноль головки."}},
     {"Пример для одной оси",{"Опора +2°, объект +3°: живая разность +1°.","Обнулите разность: D0 = +1°, результат 0°.","Опора остаётся +2°, объект стал +3.2°:","живая разность +1.2°, показание +0.2°.","Ноль разности — возврат к выбранной разности.","Он сам по себе не означает горизонтальность.","Две головки не определяют плоскостность детали."}},
@@ -631,8 +631,9 @@ static void workspace_build(void){
 }
 static void workspace_refresh(void){
     bool level=workspace_level();
-    const char *names[]={"Углы","Качка","График","Запись"},*rel[]={"Выравнивание","Наблюдение","Качество пары","Журнал"};
-    for(unsigned i=0;i<4;i++)for(unsigned c=0;c<nui_obj_get_child_count(u.nav[i]);c++){nui_obj_t*o=nui_obj_get_child(u.nav[i],c);if(nui_obj_check_type(o,&nui_label_class)){text(o,level?rel[i]:names[i]);style_font(o,level?F16:F24,0);}}
+    const char *names[]={"Углы","Качка","График","Запись"},*rel[]={"Замеры\nуглов","Наблюдение","Качество\nпары","Журнал"};
+    for(unsigned i=0;i<4;i++)for(unsigned c=0;c<nui_obj_get_child_count(u.nav[i]);c++){nui_obj_t*o=nui_obj_get_child(u.nav[i],c);if(nui_obj_check_type(o,&nui_label_class)){text(o,level?rel[i]:names[i]);style_font(o,F24,0);nui_obj_set_pos(o,0,level?62:76);nui_obj_set_size(o,152,level?58:36);}}
+    for(unsigned i=0;i<4;i++){nui_obj_set_pos(u.selected[i],level?8:0,level?4:18);nui_obj_set_size(u.selected[i],level?136:7,level?6:84);}
     if(!level){for(unsigned i=0;i<3;i++)if(ws.page[i])hide(ws.page[i],true);return;}
     if(!ws.page[0])workspace_build();
     for(unsigned i=0;i<3;i++)hide(ws.page[i],false);
