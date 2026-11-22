@@ -287,7 +287,7 @@ static const struct {const char *title,*line[7];} help_pages[]={
     {"После смены режима и перезапуска",{"Нули головок и разности теряются при перезапуске.","Смена режима, ролей или осей сбрасывает ноль.","После смены ролей снова проверьте оси и свежую пару.","Роли, оси и режим «При загрузке» сохраняются","кнопкой «Сохранить роли / запуск» в меню Прибор.","Выбор режима на экране действует до перезапуска.","Единицы Tab5 после перезапуска снова градусы."}},
     {"Качество и единицы",{"При ошибке, пропуске или старой паре результат —.","Отсутствующие данные нельзя считать нулём.","Нужны ответы не старше 500 мс с разносом до 50 мс.","Это времена приёма, аппаратной синхронизации нет.","мм/м = 1000 * tan(угол); берётся итоговый угол.","Для мм/м при модуле угла от 89° — вне диапазона.","Нули головок и разности не выравнивают оси."}},
     {"Запись на Tab5",{"Проверьте SD и USB-A: готовность, место и ошибки.","На экране Старт пишет на доступные носители;","выбор SD/USB через ПК зависит от команды записи.","В выравнивании пишутся исходные D2/D3 и REL CSV.","Нажмите Стоп и дождитесь закрытия файлов.","При записи смена режима, ролей и нуля запрещена.","Обычный USB-C здесь служит связью с ПК, не флешкой."}},
-    {"Наблюдение и программа ПК",{"Tab5: наблюдение, HOLD, min/max, тренд и допуски.","HOLD фиксирует экран; журнал продолжает запись.","Допуск — заданный предел, не точность датчика.","График креномера и качество пары есть на Tab5.","У ПК свои HOLD, графики, анализ и отчёт.","Отчёт ПК не является функцией прошивки Tab5.","Автоматической оценки плоскостности здесь нет."}},
+    {"Наблюдение и программа ПК",{"Tab5: наблюдение, фиксация, min/max и допуски.","Фиксация сохраняет отсчёты; запись продолжается.","Допуск — заданный предел, не точность датчика.","График креномера и качество пары есть на Tab5.","У ПК свои HOLD, графики, анализ и отчёт.","Отчёт ПК не является функцией прошивки Tab5.","Автоматической оценки плоскостности здесь нет."}},
 };
 static struct {nui_obj_t *entry,*level_entry,*title,*line[7],*previous,*next,*counter;unsigned index;} help;
 static void help_refresh(void){
@@ -501,7 +501,7 @@ static void dual_build(void){
     label(hero,"Объект − Опора − Ноль разности",24,61,800,25,F20,NAVTEXT);
     help.level_entry=button(hero,"Справка",400,12,160,48,OUTLINE,A_HELP);
     dual.status=label(hero,"",580,19,268,36,F24,NAVTEXT);
-    dual.unit=button(hero,"Градусы",856,12,216,48,OUTLINE,A_REL_UNIT);
+    dual.unit=button(hero,"мм/м",856,12,216,48,OUTLINE,A_REL_UNIT);
     for(unsigned i=0;i<2;i++){
         nui_obj_t *c=box(dual.page,i*556,100,540,194,CARD);nui_obj_set_style_radius(c,20,0);
         nui_obj_add_event_cb(c,dual_delta_draw,NUI_EVENT_DRAW_MAIN,NULL);
@@ -574,7 +574,7 @@ static void dual_refresh(void){
         dual.quality_flags=r->quality;
         dual.quality_time_known=pair_time_known;
     }
-    caption(dual.unit,dual.units?"мм/м":"Градусы");caption(dual.start,u.state.recording?"Стоп записи":"Старт записи");role(dual.start,u.state.recording?RED:ORANGE);
+    caption(dual.unit,dual.units?"Градусы":"мм/м");caption(dual.start,u.state.recording?"Стоп записи":"Старт записи");role(dual.start,u.state.recording?RED:ORANGE);
     enabled(dual.start,u.state.recording||(r->ready&&!dual_locked()));enabled(dual.capture,r->ready&&!dual_locked());enabled(dual.reset,r->offset_valid&&!dual_locked());
 }
 static bool workspace_level(void){return u.state.dual_mode_known&&u.state.mode==TAB5_MODE_LEVEL;}
@@ -618,7 +618,7 @@ static void workspace_trend(nui_event_t *ev){
 static void workspace_build(void){
     for(unsigned i=0;i<3;i++)ws.page[i]=box(u.pages[ROLL+i],0,0,1096,636,BG);
     nui_obj_t *p=ws.page[0];label(p,"Наблюдение",0,0,680,58,F48,TEXT);
-    ws.hold=button(p,"HOLD",790,0,306,60,OUTLINE,A_WS_HOLD);ws.basis=label(p,"",0,72,1096,62,F24,MUTED);
+    ws.hold=button(p,"Зафиксировать",790,0,306,60,OUTLINE,A_WS_HOLD);ws.basis=label(p,"",0,72,1096,62,F24,MUTED);
     for(unsigned i=0;i<2;i++){nui_obj_t*c=box(p,i*556,144,540,140,CARD);label(c,i?"Y относительный":"X относительный",16,8,508,38,F28,MUTED);ws.obs[i]=label(c,"—",16,42,508,68,F56,TEXT);ws.stats[i]=label(p,"",i*556,292,540,44,F24,TEXT);}
     ws.trend=box(p,0,344,1096,142,CARD);nui_obj_add_event_cb(ws.trend,workspace_trend,NUI_EVENT_DRAW_MAIN,NULL);
     ws.live=label(p,"",0,492,1096,56,F24,MUTED);ws.clear=button(p,"Сброс наблюдения",0,564,520,72,OUTLINE,A_WS_CLEAR);ws.limits=button(p,"Фильтр / допуски",540,564,556,72,PRIMARY,A_WS_LIMITS);
@@ -640,7 +640,7 @@ static void workspace_refresh(void){
     const tab5_workspace_view_t*v=&u.state.workspace;const tab5_relative_result_t*r=&u.state.relative;char b[512];
     if(u.page==ROLL){
         const char *source=r->offset_valid?"Ноль разности: вычитается":"LIVE: объект - опора";
-        if(v->held)snprintf(b,sizeof(b),"%s · HOLD %llu мс · точка %llu мс\nЗаморожено; min/max с явного сброса.",source,(unsigned long long)(v->held_us/1000),(unsigned long long)(v->values_us/1000));
+        if(v->held)snprintf(b,sizeof(b),"%s · Фиксация %llu мс · точка %llu мс\nЗаморожено; min/max с явного сброса.",source,(unsigned long long)(v->held_us/1000),(unsigned long long)(v->values_us/1000));
         else snprintf(b,sizeof(b),"%s · %s · пары %llu / разрывы %llu\nMin/max с явного сброса; время точки %llu мс",source,v->config.filter_enabled?(v->filter_warm?"EMA готов":"EMA прогрев"):"без EMA",(unsigned long long)v->live_pairs,(unsigned long long)v->live_gaps,(unsigned long long)(v->values_us/1000));
         text(ws.basis,b);
         for(unsigned i=0;i<2;i++){if(v->known&&v->values_valid&&isfinite(v->value[i]))snprintf(b,sizeof(b),"%+.2f°",(double)v->value[i]);else snprintf(b,sizeof(b),"—");text(ws.obs[i],b);if(v->stats_valid&&isfinite(v->minimum[i])&&isfinite(v->maximum[i]))snprintf(b,sizeof(b),"min %+.2f° max %+.2f° (сброс)",(double)v->minimum[i],(double)v->maximum[i]);else snprintf(b,sizeof(b),"min / max: —");text(ws.stats[i],b);}
@@ -648,14 +648,14 @@ static void workspace_refresh(void){
         if(r->timestamp_us[0]&&r->timestamp_us[1]&&r->age_us[0]!=UINT64_MAX&&r->age_us[1]!=UINT64_MAX)snprintf(b,sizeof(b),"LIVE: %s 0x%02lx · возраст %llu/%llu мс · X %s / Y %s\nX жёлтый / Y синий · время приёма %.1f с · разрывы без соединения",r->ready?"OK":"отказ",(unsigned long)r->quality,(unsigned long long)(r->age_us[0]/1000),(unsigned long long)(r->age_us[1]/1000),!(r->ready&&v->limit_known)?"—":v->within_limit[0]?"в допуске":"вне",!(r->ready&&v->limit_known)?"—":v->within_limit[1]?"в допуске":"вне",span/1e6);
         else snprintf(b,sizeof(b),"LIVE: недоступна 0x%02lx · возраст — / —\nX жёлтый / Y синий · время приёма %.1f с · разрывы без соединения",(unsigned long)r->quality,span/1e6);
         text(ws.live,b);
-        caption(ws.hold,v->held?"Снять HOLD":"HOLD");enabled(ws.hold,!dual_locked()&&(v->held||(r->ready&&v->values_valid)));enabled(ws.clear,!dual_locked());enabled(ws.limits,!dual_locked()&&v->known);
+        caption(ws.hold,v->held?"Снять фиксацию":"Зафиксировать");enabled(ws.hold,!dual_locked()&&(v->held||(r->ready&&v->values_valid)));enabled(ws.clear,!dual_locked());enabled(ws.limits,!dual_locked()&&v->known);
         if(!ws.seen||ws.revision!=v->revision||ws.generation!=v->generation||ws.light!=u.light||ws.held!=v->held){nui_obj_invalidate(ws.trend);ws.revision=v->revision;ws.generation=v->generation;ws.light=u.light;ws.held=v->held;ws.seen=true;}
     }else if(u.page==GRAPH){
         snprintf(b,sizeof(b),"%s · quality 0x%02lx\nРазнос приёма: %s",r->ready?"Пара пригодна":"Результат недоступен",(unsigned long)r->quality,r->timestamp_us[0]&&r->timestamp_us[1]?"см. времена ниже":"—");if(r->timestamp_us[0]&&r->timestamp_us[1])snprintf(b,sizeof(b),"%s · quality 0x%02lx · разнос %llu мс",r->ready?"Пара пригодна":"Результат недоступен",(unsigned long)r->quality,(unsigned long long)(r->skew_us/1000));text(ws.pair_status,b);
         for(unsigned i=0;i<2;i++){unsigned k=i?u.state.relative_config.object_index:u.state.relative_config.reference_index;if(k>1)k=i;const tab5_measure_sensor_t*m=&u.state.measurement.sensor[k];if(r->sequence[i]&&r->timestamp_us[i]&&r->age_us[i]!=UINT64_MAX)snprintf(b,sizeof(b),"%s · адрес %u · возраст %llu мс · приём %llu мс\nОтветов %llu / ошибок %llu · последняя ошибка %u · подряд %u",i?"Объект":"Опора",m->address,(unsigned long long)(r->age_us[i]/1000),(unsigned long long)(r->timestamp_us[i]/1000),(unsigned long long)m->good,(unsigned long long)m->errors,m->last_error,m->fail_streak);else snprintf(b,sizeof(b),"%s · адрес %u · время/возраст —\nОтветов %llu / ошибок %llu · последняя ошибка %u",i?"Объект":"Опора",m->address,(unsigned long long)m->good,(unsigned long long)m->errors,m->last_error);text(ws.pair[i],b);}
         text(ws.pair_note,"Пределы: возраст 500 мс / разнос 50 мс. Это время приёма, не выборки.\nquality: 01 нет ответа; 02 stale; 04 skew; 08 оси; 10 прогрев; 20 диапазон; 40 ошибка.\nОшибка: 0 OK / 1 timeout / 2 CRC / 3 frame / 4 exception / 5 IO.\nВремя измерения внутри датчика и гистограмма ошибок недоступны.");
     }else if(u.page==RECORD){
-        text(ws.log_state,u.state.relative_log.closing?"Закрываются файлы; дождитесь подтверждения":u.state.recording?"Запись идёт · HOLD не останавливает журнал":"Запись остановлена");
+        text(ws.log_state,u.state.relative_log.closing?"Закрываются файлы; дождитесь подтверждения":u.state.recording?"Запись идёт · фиксация не останавливает журнал":"Запись остановлена");
         char filename[96],offset[96];const bool session_known=u.state.relative_log.session_known&&u.state.relative_log.session[0];
         if(session_known)snprintf(filename,sizeof(filename),"%.63s_REL.CSV",u.state.relative_log.session);else snprintf(filename,sizeof(filename),"сеанс не создан");
         if(u.state.relative_log.offset_valid&&isfinite(u.state.relative_log.offset[0])&&isfinite(u.state.relative_log.offset[1]))snprintf(offset,sizeof(offset),"%+.2f / %+.2f°",(double)u.state.relative_log.offset[0],(double)u.state.relative_log.offset[1]);else snprintf(offset,sizeof(offset),"не задан");
@@ -1305,7 +1305,7 @@ void tab5_ui_init(tab5_ui_action_cb_t cb,void *user){
     u.status_bar=box(u.root,152,0,1128,56,NAV);
     u.rail_time=label(u.status_bar,"—",16,12,300,40,F28,NAVTEXT);u.status_rec=chip(u.status_bar,"СТОП",324,8,146,NAVSEL);nui_obj_set_height(u.status_rec,40);style_font(u.status_rec,F28,0);
     u.rail_resources[0]=label(u.status_bar,"ЦП —",682,12,144,40,F28,NAVTEXT);
-    u.rail_resources[1]=label(u.status_bar,"ОЗУ —",486,4,108,26,F20,NAVTEXT);u.rail_resources[2]=label(u.status_bar,"PS —",486,29,108,24,F20,NAVTEXT);
+    u.rail_resources[1]=label(u.status_bar,"ОЗУ —",486,4,108,26,F20,NAVTEXT);u.rail_resources[2]=label(u.status_bar,"Доп. ОЗУ —",486,29,160,24,F20,NAVTEXT);
     u.rail_power=label(u.status_bar,"—",840,12,150,40,F28,NAVTEXT);u.status_media=label(u.status_bar,"SD USB",994,15,130,36,F20,NAVTEXT);
     for(unsigned i=0;i<6;i++)u.pages[i]=box(u.root,168,68,1096,636,TEXT);
     build_measure();build_roll();build_graph();build_record();build_settings();build_network();
@@ -1452,7 +1452,7 @@ void tab5_ui_update(const tab5_ui_state_t *s){
     text(u.rail_resources[0],b);
     const uint32_t used[]={state->ram_used_bytes,state->psram_used_bytes};
     const uint32_t total[]={state->ram_total_bytes,state->psram_total_bytes};
-    const char *resource_names[]={"ОЗУ","PS"};
+    const char *resource_names[]={"ОЗУ","Доп. ОЗУ"};
     for(unsigned i=0;i<2;i++){
         if(state->resources_known&&total[i]){
             unsigned pct=used[i]>=total[i]?100u:(unsigned)((uint64_t)used[i]*100/total[i]);
