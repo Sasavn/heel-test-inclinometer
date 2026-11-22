@@ -510,16 +510,16 @@ static void dual_build(void){
         c=box(dual.page,i*556,306,540,120,CARD);nui_obj_set_style_radius(c,20,0);
         nui_obj_t *dot=dual.dot[i]=box(c,24,19,16,16,ALT);nui_obj_set_style_radius(dot,8,0);style_color(dot,NUI_STYLE_BG_COLOR,nui_color_hex(u.sensor[i]),0);
         dual.source[i]=label(c,"",54,11,280,40,F28,TEXT);
-        label(c,"исходные углы",334,15,182,30,F20,MUTED);
+        label(c,"исходные углы",334,15,182,30,F24,TEXT);
         for(unsigned axis=0;axis<2;axis++){
             label(c,axis?"Y":"X",axis?282:24,70,28,40,F28,MUTED);
             dual.raw[i][axis]=label(c,"—",axis?314:56,56,208,62,F48,TEXT);
         }
     }
     dual.basis=label(dual.page,"",0,442,556,34,F24,TEXT);
-    label(dual.page,"При обнулении текущее взаимное положение",0,478,556,26,F20,MUTED);
-    label(dual.page,"принимается за 0. Это не горизонт.",0,505,556,26,F20,MUTED);
-    dual.quality=label(dual.page,"",572,442,524,88,F20,MUTED);
+    label(dual.page,"При обнулении текущее взаимное положение",0,478,556,26,F20,TEXT);
+    label(dual.page,"принимается за 0. Это не горизонт.",0,505,556,26,F20,TEXT);
+    dual.quality=label(dual.page,"",572,442,524,88,F20,TEXT);
     dual.start=button(dual.page,"Старт записи",0,538,360,94,ORANGE,A_START);
     dual.capture=button(dual.page,"Обнулить разность",376,538,352,94,PRIMARY,A_REL_CAPTURE);
     dual.reset=button(dual.page,"Сбросить ноль",744,538,352,94,OUTLINE,A_REL_RESET);
@@ -1305,8 +1305,8 @@ void tab5_ui_init(tab5_ui_action_cb_t cb,void *user){
     u.status_bar=box(u.root,152,0,1128,56,NAV);
     u.rail_time=label(u.status_bar,"—",16,12,300,40,F28,NAVTEXT);u.status_rec=chip(u.status_bar,"СТОП",324,8,146,NAVSEL);nui_obj_set_height(u.status_rec,40);style_font(u.status_rec,F28,0);
     u.rail_resources[0]=label(u.status_bar,"ЦП —",682,12,144,40,F28,NAVTEXT);
-    u.rail_resources[1]=label(u.status_bar,"ОЗУ —",486,4,108,26,F16,NAVMUTED);u.rail_resources[2]=label(u.status_bar,"PS —",486,29,108,24,F16,NAVMUTED);
-    u.rail_power=label(u.status_bar,"—",840,12,150,40,F28,NAVTEXT);u.status_media=label(u.status_bar,"SD USB",994,15,130,36,F20,NAVMUTED);
+    u.rail_resources[1]=label(u.status_bar,"ОЗУ —",486,4,108,26,F20,NAVTEXT);u.rail_resources[2]=label(u.status_bar,"PS —",486,29,108,24,F20,NAVTEXT);
+    u.rail_power=label(u.status_bar,"—",840,12,150,40,F28,NAVTEXT);u.status_media=label(u.status_bar,"SD USB",994,15,130,36,F20,NAVTEXT);
     for(unsigned i=0;i<6;i++)u.pages[i]=box(u.root,168,68,1096,636,TEXT);
     build_measure();build_roll();build_graph();build_record();build_settings();build_network();
     /* Production default: parent-matte cache, with renderer OOM fallback. */
